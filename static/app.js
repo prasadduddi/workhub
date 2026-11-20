@@ -1049,10 +1049,17 @@ const Tree = {
       const live = Term.tabs.some(t => t.entry.id === e.id && !t.closed) || Remote.entry?.id === e.id && Remote.sid || SQL.tabs.some(t => t.entry.id === e.id);
       const port = isFTP(e) ? (e.port || 21) : sshPort(e), def = isFTP(e) ? 21 : 22;
       const target = `${isFTP(e) ? e.protocol || 'ftp' : ''}${isFTP(e) ? '://' : ''}${e.username ? e.username + '@' : ''}${e.host}${port !== def ? ':' + port : ''}`;
-      const dbt = canDB(e) && SQL.tabs.find(t => t.entry.id === e.id);
+      // Database connections expand like SQL Developer: ▸ connects, ▾ shows the objects.
+      const isDb = canDB(e), dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
+      const dbOpen = isDb && SQL.expanded.has(e.id);
       out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc(target)}">
-        <span class="tw"></span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
-      if (dbt) out += SQL.treeHTML(dbt, depth + 1);
+        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+      if (dbOpen) {
+        const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
+        if (dbt) out += SQL.treeHTML(dbt, depth + 1);
+        else if (SQL.connecting.has(e.id)) out += `<div class="tnode muted" ${pad}>connecting…</div>`;
+        else if (SQL.connErr[e.id]) out += `<div class="tnode dberr" ${pad} title="${esc(SQL.connErr[e.id])}">⚠ ${esc(SQL.connErr[e.id])}</div><div class="tnode link" ${pad} data-dbexp="${e.id}" data-retry="1">↻ Try again</div>`;
+      }
     }
     return out;
   },
@@ -1080,6 +1087,8 @@ const Tree = {
         $$('.tnode.folder', host).forEach(f => this.collapsed.add(f.dataset.key));
         return this.saveCollapsed();
       }
+      const exp = ev.target.closest('[data-dbexp]');
+      if (exp) return SQL.toggleConn(byId(exp.dataset.dbexp), !!exp.dataset.retry);
       const n = ev.target.closest('.tnode');
       if (!n) return;
       if (n.dataset.dbk) return SQL.treeClick(n);
@@ -1658,22 +1667,33 @@ function textTable(r, limit = 50) {
 
 const SQL = {
   tabs: [], active: null, running: false,
+  expanded: new Set(), connecting: new Set(), connErr: {},
 
-  async open(e) {
+  // ▸ on a connection: connect if needed and show its objects; ▾ collapses.
+  async toggleConn(e, retry) {
+    if (!e) return;
+    if (SQL.expanded.has(e.id) && !retry) { SQL.expanded.delete(e.id); return Tree.render(); }
+    SQL.expanded.add(e.id); delete SQL.connErr[e.id];
+    Tree.render();
+    if (!SQL.tabs.some(t => t.entry.id === e.id)) await SQL.open(e, { stay: true });
+  },
+
+  async open(e, opts = {}) {
     show('sql');
+    this.expanded.add(e.id); // the object tree opens under the connection
     const open = this.tabs.find(t => t.entry.id === e.id);
-    if (open) return this.activate(open);
+    if (open) { Tree.render(); return this.activate(open); }
     let creds = {};
-    if (!e.username || !e.password) { creds = await askCreds(e); if (!creds) return; }
+    if (!e.username || !e.password) { creds = await askCreds(e); if (!creds) { this.expanded.delete(e.id); Tree.render(); return; } }
     const kind = dbKindOf(e);
     const ex = e.extra || {};
     let database = '';
     if (!(ex.service || ex.service_name || ex.database || ex.db_name || ex.dbname || ex.sid || (kind === 'postgres' && /\/\w/.test((e.url || '').replace(/^.*?\/\/[^/]*/, ''))))) {
       database = prompt(kind === 'oracle' ? `Oracle service name for ${e.host} (e.g. ORCLPDB1):` : `PostgreSQL database on ${e.host}:`, kind === 'oracle' ? '' : 'postgres');
-      if (database === null) return;
+      if (database === null) { this.expanded.delete(e.id); Tree.render(); return; }
     }
-    $('#sqlEmpty').innerHTML = `Connecting to ${esc(e.host)}…`;
-    $('#sqlEmpty').hidden = false;
+    if (!this.active) { $('#sqlEmpty').innerHTML = `Connecting to ${esc(e.host)}…`; $('#sqlEmpty').hidden = false; }
+    this.connecting.add(e.id); delete this.connErr[e.id]; Tree.render();
     try {
       const r = await api('POST', '/api/db/open', { id: e.id, ...creds, database: database.trim() });
       const t = { sid: r.sid, entry: e, kind: r.kind, info: r, sql: this.loadSQL(e), result: null, out: '', inTx: false, objects: null };
@@ -1681,11 +1701,14 @@ const SQL = {
       this.activate(t);
       this.say(t, `<span class="ok">Connected: ${esc(r.user || '')}  ${esc(r.version || '')}</span>\n`);
       this.loadObjects(t, '');
-      Tree.render();
     } catch (err) {
-      $('#sqlEmpty').innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
+      this.connErr[e.id] = err.message;
+      if (!this.active) $('#sqlEmpty').innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
       toast(err.message, true);
       poll();
+    } finally {
+      this.connecting.delete(e.id);
+      Tree.render();
     }
   },
 
@@ -1719,6 +1742,7 @@ const SQL = {
     if (t.inTx && !confirm(`${t.entry.name} has uncommitted changes. Close and roll them back?`)) return;
     api('POST', '/api/db/close', { sid: t.sid }).catch(() => {});
     this.tabs = this.tabs.filter(x => x !== t);
+    this.expanded.delete(t.entry.id);
     if (this.active === t) { this.active = null; this.activate(this.tabs.at(-1) || null); } else this.renderTabs();
     Tree.render();
   },
