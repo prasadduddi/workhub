@@ -148,6 +148,24 @@ func (a *App) handleDeleteEntry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
+func (a *App) handleBulk(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		IDs   []string `json:"ids"`
+		Op    string   `json:"op"`
+		Value string   `json:"value"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	n, err := a.store.Bulk(in.IDs, in.Op, in.Value)
+	if err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	writeJSON(w, map[string]int{"changed": n})
+}
+
 func (a *App) handleHide(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Hidden bool `json:"hidden"`

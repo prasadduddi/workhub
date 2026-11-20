@@ -386,7 +386,7 @@ function matches(e, q) {
 
 // View options the chat can set on top of the toolbar filters.
 const emptyView = () => ({ projects: [], notProjects: [], envs: [], notEnvs: [], types: [], status: '', pinned: false,
-  withPassword: null, withUrl: null, text: '', recentDays: 0, sort: '', sortDir: 1, hideCols: [] });
+  withPassword: null, withUrl: null, internal: null, text: '', recentDays: 0, sort: '', sortDir: 1, hideCols: [] });
 S.view = (() => { try { return { ...emptyView(), ...JSON.parse(localStorage.getItem('dashView') || '{}') }; } catch { return emptyView(); } })();
 function saveView() { try { localStorage.setItem('dashView', JSON.stringify(S.view)); } catch { /* ignore */ } }
 
@@ -404,7 +404,8 @@ function viewMatch(e, v = S.view) {
     && (!v.status || (e.status || 'none') === v.status) && (!v.pinned || e.favorite)
     && (v.withPassword == null || !!e.has_password === v.withPassword) && (v.withUrl == null || !!e.url === v.withUrl)
     && (!v.text || matches(e, v.text.toLowerCase()))
-    && (!v.recentDays || (e.last_used && Date.now() - new Date(e.last_used) < v.recentDays * 864e5));
+    && (!v.recentDays || (e.last_used && Date.now() - new Date(e.last_used) < v.recentDays * 864e5))
+    && (v.internal == null || isInternal(e) === v.internal);
 }
 const SORT_KEY = {
   name: e => (e.name || '').toLowerCase(), host: e => (e.host || e.url || '').toLowerCase(), project: e => (e.project || '').toLowerCase(),
@@ -436,6 +437,7 @@ function renderViewChips() {
   if (v.pinned) chips.push(['pinned', () => (v.pinned = false)]);
   if (v.withPassword != null) chips.push([v.withPassword ? 'with password' : 'no password', () => (v.withPassword = null)]);
   if (v.withUrl != null) chips.push([v.withUrl ? 'with URL' : 'no URL', () => (v.withUrl = null)]);
+  if (v.internal != null) chips.push([v.internal ? 'internal' : 'external', () => (v.internal = null)]);
   if (v.text) chips.push([`"${v.text}"`, () => (v.text = '')]);
   if (v.recentDays) chips.push([`used in ${v.recentDays}d`, () => (v.recentDays = 0)]);
   if (v.sort) chips.push([`sort: ${v.sort}${v.sortDir < 0 ? ' ↓' : ''}`, () => (v.sort = '')]);
@@ -1242,6 +1244,10 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
     const intent = this.intent(text);
     this.lastText = text;
     if (intent === 'cmdhelp') return this.say(HELP.replace(/\n/g, '<br>'));
+    if (intent === 'yes' && pendingBulk) {
+      try { return this.say(await confirmBulk()); } catch (err) { return this.say('Could not change them: ' + esc(err.message)); }
+    }
+    if (intent === 'no' && pendingBulk) { pendingBulk = null; return this.say('OK, nothing changed.'); }
     if (intent === 'yes') {
       const open = this.cards.filter(c => !c.done);
       if (open.length === 1) return this.confirm(open[0], open[0].action || 'terminal');

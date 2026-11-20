@@ -77,3 +77,31 @@ func TestBookmarkDuplicates(t *testing.T) {
 		t.Fatalf("added %d, want 2 (one per real link)", a)
 	}
 }
+
+// Two customers' workspaces import the same browser links; removing one in
+// workspace A leaves workspace B untouched.
+func TestRemovalIsPerWorkspace(t *testing.T) {
+	list := []Bookmark{{Name: "YouTube", URL: "https://www.youtube.com/", Source: "chrome"}, {Name: "Wiki", URL: "https://wiki.corp.local/", Source: "chrome"}}
+	a, _ := OpenStore(t.TempDir())
+	b, _ := OpenStore(t.TempDir())
+	a.SyncBookmarks(list)
+	b.SyncBookmarks(list)
+	for _, e := range a.st.Entries {
+		if e.Name == "YouTube" {
+			a.DeleteEntry(e.ID)
+		}
+	}
+	a.SyncBookmarks(list)
+	b.SyncBookmarks(list)
+	visible := func(s *Store) (n int) {
+		for _, e := range s.st.Entries {
+			if !e.Hidden {
+				n++
+			}
+		}
+		return
+	}
+	if visible(a) != 1 || visible(b) != 2 {
+		t.Fatalf("workspace A shows %d, B shows %d; want 1 and 2", visible(a), visible(b))
+	}
+}

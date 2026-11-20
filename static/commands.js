@@ -86,19 +86,55 @@ const CMD = (() => {
     let s = ' ' + text.toLowerCase().replace(/[!?.]+$/g, '').replace(/\s+/g, ' ') + ' ';
     const acts = [];
     const A = (type, v = {}) => acts.push({ type, ...v });
+    const orig = re => { const mm = text.match(re); return mm ? mm[mm.length - 1].trim().replace(/^["'“‘]|["'”’.!?]$/g, '') : ''; };
 
     // ---- whole-sentence commands ----
     if (/^\s*(undo|go back|back|revert|undo that)\s*$/.test(s)) return [{ type: 'undo' }];
     if (/^\s*(reset|clear|clear all|clear filters?|remove (all )?filters?|show (me )?(all|everything)|start over|default view|everything)\s*$/.test(s)) return [{ type: 'reset' }];
     if (/^\s*(help|\?|what can (you|i) (do|say)|commands|examples)\s*$/.test(s)) return [{ type: 'help' }];
     let m;
-    const orig = re => { const mm = text.match(re); return mm ? mm[mm.length - 1].trim().replace(/^["'“‘]|["'”’.!?]$/g, '') : ''; };
     if ((m = s.match(/\bsave (this |the |current )?(view|filters?|layout|setup)?\s*(as|called|named)\s+(.+?)\s*$/))) return [{ type: 'saveView', name: quoted(text) || orig(/\b(?:as|called|named)\s+(.+?)\s*$/i) || m[4].trim() }];
-    if ((m = s.match(/\b(delete|remove|forget) (the )?(saved )?view\s+(.+?)\s*$/))) return [{ type: 'deleteView', name: m[4].trim() }];
+    if ((m = s.match(/\b(delete|remove|forget) (the )?(saved )?view\s+(.+?)\s*$/))) return [{ type: 'deleteView', name: orig(/\bview\s+(.+?)\s*$/i) || m[4].trim() }];
     if (/\b(list|show|what are) (my |the )?(saved )?views\b/.test(s)) return [{ type: 'listViews' }];
     if ((m = s.match(/\b(open|load|apply|use|switch to|show) (my |the )?(saved )?view\s+(.+?)\s*$/))) return [{ type: 'loadView', name: m[4].trim() }];
     const sv = (ctx.views || []).find(v => s.trim() === v.toLowerCase() || s.trim() === 'open ' + v.toLowerCase() || s.trim() === 'show ' + v.toLowerCase());
     if (sv) return [{ type: 'loadView', name: sv }];
+
+    // Bulk actions on matching items — always confirmed before anything changes.
+    if (!/\bcolumns?\b|\bfilters?\b/.test(s)) {
+      const KIND = /\b(links?|bookmarks?|urls?|websites?|sites?|servers?|hosts?|connections?|entries|items?)\b/g;
+      const target = rest => {
+        const r = ' ' + rest.replace(/\b(all|every|each|of|the|my|those|these|them|that|this|ones?|stuff|any)\b/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+        const bookmarks = /\b(links?|bookmarks?|urls?|websites?|sites?)\b/.test(rest);
+        const core = r.replace(KIND, ' ');
+        const current = /\b(these|those|them|this|that|shown|visible|on screen|current)\b/.test(rest) && !core.trim();
+        if (current) return { current, patch: {}, bookmarks };
+        const patch = filterPatch(' ' + core + ' ', ctx);
+        // Words that aren't an environment, type, status, project or server
+        // narrow the selection by text ("youtube").
+        const known = [...Object.values(ENVS), ...Object.values(TYPES), ...Object.values(STATUS)].flat();
+        let left = ' ' + core.toLowerCase() + ' ';
+        for (const w of [...known, ...(patch.projects || []), ...(patch.notProjects || []), patch.text || ''].map(x => x.toLowerCase()).filter(Boolean).sort((a, b) => b.length - a.length))
+          left = left.replace(new RegExp(`(^|[^a-z0-9])${esc(w)}(?=$|[^a-z0-9])`, 'g'), ' ');
+        left = left.replace(/\b(internal|external|public|private|company|pinned|starred|from|in|with|and|without|no|not|except|but|called|named|containing)\b/g, ' ').replace(/\s+/g, ' ').trim();
+        if (left && !patch.text) patch.text = left;
+        return { current, patch, bookmarks };
+      };
+      if ((m = s.match(/^\s*(delete|remove|get rid of|clear out|clean up|trash|bin|drop|erase|purge)\b\s*(.*)$/)))
+        return [{ type: 'bulk', op: 'hide', ...target(m[2]) }];
+      if ((m = s.match(/^\s*(restore|unhide|undelete|bring back|recover)\b\s*(.*)$/)))
+        return [{ type: 'bulk', op: 'unhide', ...target(m[2]) }];
+      if ((m = s.match(/^\s*(unpin|unstar|unfavou?rite)\b\s*(.*)$/))) return [{ type: 'bulk', op: 'unpin', ...target(m[2]) }];
+      if ((m = s.match(/^\s*(pin|star|favou?rite)\b\s*(.*)$/))) return [{ type: 'bulk', op: 'pin', ...target(m[2]) }];
+      if ((m = s.match(/^\s*(move|put|file|assign)\s+(.+?)\s+(to|into|under)\s+(the\s+)?(project|folder\s+)?\s*(.+?)\s*$/))) {
+        const typed = orig(/\s(?:to|into|under)\s+(?:the\s+)?(?:project\s+|folder\s+)?(.+?)\s*$/i) || m[6];
+        return [{ type: 'bulk', op: 'project', value: findNames(' ' + typed.toLowerCase() + ' ', ctx.projects || [])[0] || typed, ...target(m[2]) }];
+      }
+      if ((m = s.match(/^\s*(mark|set|tag|label)\s+(.+?)\s+(as|to)\s+(\S+)( env(ironment)?)?\s*$/))) {
+        const env = findKey(' ' + m[4] + ' ', ENVS).filter(e => e !== 'NONE')[0];
+        if (env) return [{ type: 'bulk', op: 'env', value: env, ...target(m[2]) }];
+      }
+    }
 
     // Questions about one server: password / user / host.
     if ((m = s.match(/\b(password|pwd|pass|login|username|user name|user|credentials?|details|host ?name|ip|url|link)\s+(for|of|on|to)\s+(.+?)\s*$/))) {
@@ -252,6 +288,8 @@ const CMD = (() => {
       if (st.length) f.status = st[0];
     }
     if (/\b(pinned|starred|favou?rites?|stars?)\b/.test(rest)) f.pinned = true;
+    if (/\b(external|public)\b/.test(rest)) f.internal = false;
+    else if (/\b(internal|private|company|work|intranet)\b/.test(rest)) f.internal = true;
     if (/\b(with|having|has|that have) (a )?(password|passwords|credentials|logins?)\b/.test(s)) f.withPassword = true;
     if (/\b(without|no|missing) (a )?(password|passwords|credentials|logins?)\b/.test(s)) f.withPassword = false;
     if (/\b(with|having|has) (a )?(url|urls|link|links)\b/.test(s)) f.withUrl = true;
@@ -274,6 +312,17 @@ const Views = {
   put(all) { try { localStorage.setItem('savedViews', JSON.stringify(all)); } catch { /* ignore */ } },
 };
 const viewHistory = [];
+let pendingBulk = null; // waiting for "yes"
+
+async function confirmBulk() {
+  const p = pendingBulk;
+  pendingBulk = null;
+  if (!p) return null;
+  const r = await api('POST', '/api/entries/bulk', { ids: p.ids, op: p.op, value: p.value });
+  await poll();
+  const done = { hide: 'Removed', unhide: 'Restored', pin: 'Pinned', unpin: 'Unpinned', project: `Moved to "${esc(p.value)}":`, env: `Marked ${p.value}:` }[p.op];
+  return `${done} ${r.changed} item${r.changed === 1 ? '' : 's'}.` + (p.op === 'hide' ? ' (Say "restore …" to bring any back.)' : '');
+}
 function snapshot() {
   return { view: JSON.parse(JSON.stringify(S.view)), groupBy: S.groupBy, layout: S.layout, bm: Bookmarks.mode, cardW: +$('#cardWidth').value,
     search: $('#search').value, fProject: $('#fProject').value, fEnv: $('#fEnv').value };
@@ -318,6 +367,7 @@ function describeView(list) {
 const HELP = `Things you can say (in your own words — I understand synonyms and typos):
 <b>Filter</b>  "show prod servers in payments" · "only UAT oracle databases" · "hide dev" · "broken links" · "servers without passwords" · "used this week" · "pinned only" · "anything called refund"
 <b>Arrange</b>  "as a table" · "group by environment" · "sort by last used" · "newest first" · "wider cards" · "hide password column" · "show only host user password columns"
+<b>Change</b>  "delete all youtube links" · "delete these" · "restore youtube links" · "pin these" · "move all jenkins links to DevOps" · "mark ora-uat as UAT" — I always ask before changing anything
 <b>Remember</b>  "save this view as Prod overview" · "open Prod overview" · "list my views" · "undo" · "reset"
 <b>Ask</b>  "how many prod servers" · "password for app-prod-01" · "user for jenkins"
 <b>Pages</b>  "go to filezilla" · "hide the sidebar" · "hide the tree" · "dark mode" · "bigger font in putty" · "font 16"
@@ -388,6 +438,25 @@ async function runCommand(text) {
         const list = S.entries.filter(e => viewMatch(e, v));
         const hosts = new Set(list.map(e => e.host).filter(Boolean)).size;
         said.push(`${list.length} matching item${list.length === 1 ? '' : 's'} (${hosts} distinct host${hosts === 1 ? '' : 's'}).`); break;
+      }
+      case 'bulk': {
+        const pool = a.op === 'unhide' ? S.allEntries.filter(e => e.hidden) : S.entries;
+        const page = currentPage();
+        let list;
+        if (a.current) list = page === 'bookmarks' ? Bookmarks.list() : filtered();
+        else {
+          const v = { ...emptyView(), ...a.patch };
+          list = pool.filter(e => viewMatch(e, v) && (!a.bookmarks || /^https?:/i.test(e.url || '')));
+        }
+        if (a.op === 'unhide') list = list.filter(e => e.hidden);
+        if (!list.length) { said.push(a.op === 'unhide' ? 'No removed items match that.' : 'Nothing matches that, so nothing was changed.'); break; }
+        const verb = { hide: 'Remove', unhide: 'Restore', pin: 'Pin', unpin: 'Unpin', project: `Move to project "${esc(a.value)}"`, env: `Mark as ${a.value}` }[a.op];
+        pendingBulk = { ids: list.map(e => e.id), op: a.op, value: a.value || '', verb, count: list.length };
+        const names = list.slice(0, 8).map(e => esc(e.name || e.host || e.url)).join(', ') + (list.length > 8 ? ` and ${list.length - 8} more` : '');
+        said.push(`${verb} these ${list.length} item${list.length === 1 ? '' : 's'}: ${names}?<br>Say <b>yes</b> to confirm or <b>no</b> to cancel.` +
+          (list.length > 50 ? `<br><b style="color:var(--danger)">That is a lot (${list.length}) — check this is what you meant.</b>` : '') +
+          (a.op === 'hide' ? '<br><span class="muted tiny">Removed items are kept hidden (never re-imported) and can be brought back with "restore …".</span>' : ''));
+        break;
       }
       case 'theme': Theme.set(a.mode); said.push(`Theme: ${a.mode}.`); break;
       case 'sidebar': if (document.body.classList.contains('side-collapsed') === a.show) toggleSide(); said.push(a.show ? 'Sidebar shown.' : 'Sidebar hidden — say "show sidebar" or press Ctrl+B to bring it back.'); break;

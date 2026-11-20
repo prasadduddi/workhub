@@ -360,6 +360,45 @@ func (s *Store) SaveEntry(in EntryInput) (EntryView, error) {
 	return view(e), nil
 }
 
+// Bulk changes several entries at once (chat "delete all youtube links").
+// Removing hides, so it can be undone and browser bookmarks aren't re-imported.
+func (s *Store) Bulk(ids []string, op, value string) (int, error) {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n, now := 0, time.Now()
+	for _, e := range s.st.Entries {
+		if !want[e.ID] {
+			continue
+		}
+		switch op {
+		case "hide":
+			e.Hidden = true
+		case "unhide":
+			e.Hidden = false
+		case "pin":
+			e.Favorite = true
+		case "unpin":
+			e.Favorite = false
+		case "project":
+			e.Project = orDefault(strings.TrimSpace(value), "General")
+		case "env":
+			e.Env = strings.ToUpper(strings.TrimSpace(value))
+		default:
+			return 0, fmt.Errorf("unknown bulk action %q", op)
+		}
+		e.Updated = now
+		n++
+	}
+	if n > 0 {
+		s.changed()
+	}
+	return n, nil
+}
+
 // SetHidden hides or restores an entry. Hidden entries stay in the data so
 // browser bookmarks the user removed are known and never imported again.
 func (s *Store) SetHidden(id string, hidden bool) {
