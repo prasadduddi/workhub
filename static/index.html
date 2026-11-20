@@ -54,6 +54,7 @@
       <label class="cardw muted tiny" title="Card width (Cards view)">▭ <input type="range" id="cardWidth" min="240" max="700" step="10"></label>
       <button id="newEntry" class="primary">+ New</button>
     </header>
+    <div id="viewChips" class="vchips"></div>
     <div id="stats" class="stats"></div>
     <div id="board"></div>
   </section>
@@ -69,7 +70,10 @@
       <label class="switch small" title="Read Edge and Chrome bookmarks on this PC each time this page opens"><input type="checkbox" id="bmSync"><span></span> Sync Edge/Chrome</label>
       <button id="bmSyncNow" title="Re-read browser bookmarks now">↻</button>
       <button id="bmCheck" title="Check which links answer (green = reachable, red = not)">Check links</button>
+      <label class="switch small" title="Hide public websites (Google, GitHub, Stack Overflow…)"><input type="checkbox" id="bmInternal"><span></span> Internal only</label>
+      <label class="switch small" title="Show bookmarks you removed, to restore them"><input type="checkbox" id="bmHidden"><span></span> Show hidden</label>
     </header>
+    <div id="bmChips" class="vchips"></div>
     <div id="bmBoard"></div>
   </section>
 
@@ -301,5 +305,6 @@
 <script src="vendor/addon-fit.js"></script>
 <script src="vendor/cm.js"></script>
 <script src="app.js"></script>
+<script src="commands.js"></script>
 </body>
 </html>

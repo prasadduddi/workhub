@@ -248,6 +248,18 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .obj-cols div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .obj-cols div:hover { color: var(--accent); }
 
+.ext-group summary { cursor: pointer; list-style: none; }
+.ext-group summary::-webkit-details-marker { display: none; }
+.ext-group summary h3::before { content: "▸ "; color: var(--muted); }
+.ext-group[open] summary h3::before { content: "▾ "; }
+
+/* chat-applied view filters */
+.vchips { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 10px; }
+.vchips:empty { display: none; }
+.vchip { font-size: 12px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border-radius: 12px; padding: 2px 10px; cursor: pointer; }
+.vchip:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.vchip.clear { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+
 /* outlook monitoring */
 .mailbox { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; }
 .mailbox summary { cursor: pointer; font-weight: 600; }

@@ -33,25 +33,47 @@ func TestSyncBookmarks(t *testing.T) {
 	if a, r := s.SyncBookmarks(list); a != 4 || r != 0 {
 		t.Fatalf("first sync added %d removed %d", a, r)
 	}
-	// User adds a login to one bookmark; then both are deleted in the browser.
-	for _, e := range s.st.Entries {
-		if e.Name == "Grafana" {
-			e.Username = "viewer"
+	// Bookmarks deleted in the browser stay in WorkHub (import only).
+	if a, r := s.SyncBookmarks(list[:1]); a != 0 || r != 0 || len(s.st.Entries) != 4 {
+		t.Fatalf("after browser deletions: added %d removed %d, %d entries", a, r, len(s.st.Entries))
+	}
+}
+
+// Deleting a browser bookmark in WorkHub keeps it deleted across syncs.
+func TestDeletedBookmarkStaysDeleted(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	list := []Bookmark{{Name: "Wiki", URL: "https://wiki.corp.local/", Folder: "Edge › Favorites bar", Source: "edge"}}
+	s.SyncBookmarks(list)
+	s.DeleteEntry(s.st.Entries[0].ID)
+	if len(s.st.Entries) != 1 || !s.st.Entries[0].Hidden {
+		t.Fatal("deleting a browser bookmark should hide it, not remove it")
+	}
+	if a, _ := s.SyncBookmarks(list); a != 0 || len(s.st.Entries) != 1 || !s.st.Entries[0].Hidden {
+		t.Fatalf("hidden bookmark came back (added %d)", a)
+	}
+	s.SetHidden(s.st.Entries[0].ID, false)
+	if s.st.Entries[0].Hidden {
+		t.Fatal("restore failed")
+	}
+}
+
+func TestBookmarkDuplicates(t *testing.T) {
+	same := []string{"https://wiki.corp.local/display/OPS/", "http://www.wiki.corp.local/display/OPS#top", "https://wiki.corp.local:443/display/OPS?utm_source=mail"}
+	for _, u := range same[1:] {
+		if normURL(u) != normURL(same[0]) {
+			t.Errorf("%s ≠ %s (%s vs %s)", u, same[0], normURL(u), normURL(same[0]))
 		}
 	}
-	// Browser now only has Tomcat and Grafana: Jira and Old wiki go.
-	if a, r := s.SyncBookmarks(list[:2]); a != 0 || r != 2 {
-		t.Fatalf("second sync added %d removed %d, want 0, 2", a, r)
+	if normURL("https://wiki.corp.local/display/OPS?page=2") == normURL(same[0]) {
+		t.Error("real query parameters must keep links apart")
 	}
-	names := map[string]bool{}
-	for _, e := range s.st.Entries {
-		names[e.Name] = true
+	s, _ := OpenStore(t.TempDir())
+	list := []Bookmark{
+		{Name: "Runbook", URL: same[0], Source: "edge"},
+		{Name: "Runbook (chrome)", URL: same[1], Source: "chrome"},
+		{Name: "Other", URL: "https://jenkins.corp.local/", Source: "chrome"},
 	}
-	if !names["Tomcat UAT"] || !names["Grafana"] || names["Jira"] || names["Old wiki"] {
-		t.Fatalf("after browser deletions: %v", names)
-	}
-	// Grafana deleted in the browser but kept because it has a login now.
-	if _, r := s.SyncBookmarks(list[:1]); r != 0 {
-		t.Fatalf("entry with a login was removed")
+	if a, _ := s.SyncBookmarks(list); a != 2 {
+		t.Fatalf("added %d, want 2 (one per real link)", a)
 	}
 }

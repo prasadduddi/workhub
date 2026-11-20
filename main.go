@@ -365,6 +365,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/entries/{id}/secret", a.handleSecret)
 	mux.HandleFunc("POST /api/projects/rename", a.handleRenameProject)
 	mux.HandleFunc("POST /api/entries/{id}/opened", a.handleOpened)
+	mux.HandleFunc("POST /api/entries/{id}/hide", a.handleHide)
 	mux.HandleFunc("POST /api/bookmarks/sync", a.handleSyncBookmarks)
 
 	mux.HandleFunc("POST /api/ingest", a.handleIngest)

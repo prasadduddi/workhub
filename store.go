@@ -41,6 +41,7 @@ type Entry struct {
 	OpenCount     int               `json:"open_count,omitempty"`
 	Folder        string            `json:"folder,omitempty"` // browser bookmark folder, e.g. "Edge › Favorites bar › Infra"
 	Source        string            `json:"source,omitempty"` // "edge"/"chrome" when it came from browser bookmarks
+	Hidden        bool              `json:"hidden,omitempty"` // removed by the user but kept so it isn't imported again
 	Status        string            `json:"status,omitempty"` // last connection/link check: "ok" or "fail"
 	StatusAt      time.Time         `json:"status_at,omitzero"`
 	StatusMsg     string            `json:"status_msg,omitempty"`
@@ -83,9 +84,10 @@ type State struct {
 	Clips    []*Clip      `json:"clips"`
 	Notes    []*Note      `json:"notes"`
 	Recent   []RecentFile `json:"recent"`
-	LocalDir string       `json:"local_dir,omitempty"` // last folder in This PC
-	MailFrom time.Time    `json:"mail_since,omitzero"` // newest mail already checked
-	MailIDs  []string     `json:"mail_seen,omitempty"` // EntryIDs already captured
+	LocalDir string       `json:"local_dir,omitempty"`         // last folder in This PC
+	MailFrom time.Time    `json:"mail_since,omitzero"`         // newest mail already checked
+	MailIDs  []string     `json:"mail_seen,omitempty"`         // EntryIDs already captured
+	Ignored  []string     `json:"ignored_bookmarks,omitempty"` // browser bookmark URLs deleted in WorkHub
 	Settings Settings     `json:"settings"`
 }
 
@@ -358,11 +360,31 @@ func (s *Store) SaveEntry(in EntryInput) (EntryView, error) {
 	return view(e), nil
 }
 
+// SetHidden hides or restores an entry. Hidden entries stay in the data so
+// browser bookmarks the user removed are known and never imported again.
+func (s *Store) SetHidden(id string, hidden bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.st.Entries {
+		if e.ID == id && e.Hidden != hidden {
+			e.Hidden = hidden
+			e.Updated = time.Now()
+			s.changed()
+		}
+	}
+}
+
 func (s *Store) DeleteEntry(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, e := range s.st.Entries {
 		if e.ID == id {
+			if e.Source != "" && e.URL != "" { // from Edge/Chrome: hide instead, so it isn't imported again
+				e.Hidden = true
+				e.Updated = time.Now()
+				s.changed()
+				return
+			}
 			s.st.Entries = append(s.st.Entries[:i], s.st.Entries[i+1:]...)
 			s.changed()
 			return
@@ -423,24 +445,42 @@ func (s *Store) Opened(id string) {
 	}
 }
 
-// SyncBookmarks mirrors the browsers' bookmarks: new ones are added, renamed
-// or moved ones updated, and ones deleted in the browser removed (unless the
-// user added a login or notes to them). Links the user saved in WorkHub are
-// never removed; they just get the folder if the browser has them too.
+// SyncBookmarks imports the browsers' bookmarks: new ones are added and
+// renamed or moved ones updated. It never removes anything (the browser is
+// only read), skips links already in WorkHub (see normURL) and links the user
+// deleted in WorkHub.
 func (s *Store) SyncBookmarks(list []Bookmark) (added, removed int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	norm := func(u string) string { return strings.TrimRight(strings.ToLower(u), "/") }
+	norm := normURL
 	byURL := map[string]*Entry{}
+	// Merge duplicate browser copies already stored (keep the first).
+	kept0 := s.st.Entries[:0]
 	for _, e := range s.st.Entries {
 		if e.URL != "" {
-			byURL[norm(e.URL)] = e
+			k := norm(e.URL)
+			if prev := byURL[k]; prev != nil && e.Source != "" && e.Password == "" && e.Username == "" && e.Notes == "" {
+				prev.OpenCount += e.OpenCount
+				continue
+			}
+			if byURL[k] == nil {
+				byURL[k] = e
+			}
 		}
+		kept0 = append(kept0, e)
 	}
+	s.st.Entries = kept0
 	seen := map[string]bool{}
+	ignored := map[string]bool{}
+	for _, u := range s.st.Ignored {
+		ignored[normURL(u)] = true
+	}
 	now, changed := time.Now(), false
 	for _, b := range list {
 		k := norm(b.URL)
+		if ignored[k] {
+			continue
+		}
 		if seen[k] {
 			continue // same link in two folders: keep the first
 		}
@@ -468,16 +508,6 @@ func (s *Store) SyncBookmarks(list []Bookmark) (added, removed int) {
 		added++
 		changed = true
 	}
-	kept := s.st.Entries[:0]
-	for _, e := range s.st.Entries {
-		if e.Source != "" && !seen[norm(e.URL)] && e.Password == "" && e.Username == "" && e.Notes == "" {
-			removed++
-			changed = true
-			continue
-		}
-		kept = append(kept, e)
-	}
-	s.st.Entries = kept
 	if changed {
 		s.changed()
 	}

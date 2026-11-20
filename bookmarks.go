@@ -4,11 +4,38 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 )
+
+// normURL gives one key for links that are really the same page: ignores
+// http/https, "www.", default ports, a trailing slash, the #fragment and
+// tracking parameters.
+func normURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return strings.TrimRight(strings.ToLower(strings.TrimSpace(raw)), "/")
+	}
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	if p := u.Port(); p != "" && p != "80" && p != "443" {
+		host += ":" + p
+	}
+	q := u.Query()
+	for k := range q {
+		lk := strings.ToLower(k)
+		if strings.HasPrefix(lk, "utm_") || lk == "fbclid" || lk == "gclid" || lk == "mc_cid" || lk == "mc_eid" {
+			q.Del(k)
+		}
+	}
+	key := host + strings.TrimRight(u.EscapedPath(), "/")
+	if enc := q.Encode(); enc != "" {
+		key += "?" + enc
+	}
+	return key
+}
 
 type Bookmark struct {
 	Name, URL, Folder, Source string

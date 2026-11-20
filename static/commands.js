@@ -1,0 +1,512 @@
+'use strict';
+// Plain-English commands for the Ask panel, fully offline.
+//
+// parseCommand(text, ctx) is pure: it turns a sentence into a list of actions
+// using synonyms and fuzzy matching against the user's own projects, servers,
+// repositories and saved views (passed in ctx). runCommand() applies them.
+
+const CMD = (() => {
+  const ENVS = {
+    PROD: ['prod', 'prd', 'production', 'live', 'prods'], UAT: ['uat', 'acceptance'], TEST: ['test', 'tst', 'qa', 'sit', 'testing'],
+    STAGE: ['stage', 'stg', 'staging', 'preprod', 'pre-prod', 'preproduction'], DEV: ['dev', 'development', 'develop', 'sandbox', 'sbx'],
+    DR: ['dr', 'disaster'], NONE: ['no env', 'no environment', 'without env', 'without environment', 'unknown env'],
+  };
+  const TYPES = {
+    ssh: ['ssh', 'putty', 'unix', 'linux', 'shell servers'], ftp: ['ftp', 'ftps'], sftp: ['sftp', 'scp'], files: ['file servers', 'filezilla'],
+    db: ['database', 'databases', 'db', 'dbs', 'sql'], oracle: ['oracle', 'ora'], postgres: ['postgres', 'postgresql', 'pg', 'psql'],
+    web: ['url', 'urls', 'link', 'links', 'website', 'websites', 'web', 'site', 'sites', 'bookmark', 'bookmarks'],
+    rdp: ['rdp', 'remote desktop', 'windows servers'], smb: ['share', 'shares', 'smb', 'file share'], ldap: ['ldap'],
+    credential: ['credential only', 'logins only', 'credentials only'],
+  };
+  const STATUS = {
+    fail: ['failed', 'failing', 'fail', 'broken', 'down', 'not working', "don't work", 'dont work', 'unreachable', 'red', 'dead', 'errors', 'error', 'bad'],
+    ok: ['working', 'work', 'up', 'reachable', 'green', 'ok', 'healthy', 'good', 'successful'],
+    none: ['untested', 'not tested', 'never tested', 'not tried', 'never tried', 'grey', 'gray', 'unchecked', 'unknown status'],
+  };
+  const PAGES = {
+    dashboard: ['dashboard', 'home', 'overview', 'main page', 'start'], bookmarks: ['bookmarks', 'bookmark page', 'favourites page', 'links page'],
+    inbox: ['captured', 'capture', 'captures', 'inbox', 'clips', 'capture history', 'clipboard history', 'outlook'],
+    terminal: ['putty', 'terminal', 'terminals', 'ssh page', 'console'], files: ['filezilla', 'file manager', 'files', 'sftp page', 'ftp page', 'transfers'],
+    sql: ['sql', 'sql page', 'query window', 'database page', 'db page', 'sql developer'], git: ['git', 'repos', 'repositories', 'source control'],
+    notes: ['notepad', 'notepad++', 'notes', 'editor', 'note'],
+  };
+  const SORTS = {
+    name: ['name', 'names', 'alphabet', 'alphabetical', 'a-z', 'a to z'], host: ['host', 'hostname', 'server', 'ip', 'address'],
+    project: ['project', 'folder'], env: ['env', 'environment'], used: ['last used', 'recently used', 'recent', 'usage', 'used'],
+    added: ['newest', 'latest', 'added', 'created', 'date added', 'new'], updated: ['updated', 'modified', 'changed'],
+    status: ['status', 'health', 'broken first', 'failed first'], opens: ['most opened', 'popular', 'popularity', 'opens', 'clicks', 'most used'],
+  };
+  const GROUPS = { project: ['project', 'projects', 'folder', 'client'], env: ['env', 'environment', 'environments', 'stage'],
+    protocol: ['type', 'types', 'protocol', 'kind'], status: ['status', 'health'], host: ['host', 'server', 'machine'], none: ['nothing', 'none', 'no group', 'no grouping'] };
+  const COLS = { env: ['env', 'environment', 'status'], name: ['name'], host: ['host', 'server', 'ip'], port: ['port'], type: ['type', 'protocol'],
+    url: ['url', 'link', 'links'], user: ['user', 'username', 'login'], password: ['password', 'passwords', 'pwd'], actions: ['actions', 'buttons'] };
+  const COL_LABEL = { env: 'Env', name: 'Name', host: 'Host', port: 'Port', type: 'Type', url: 'URL', user: 'User', password: 'Password', actions: 'actions' };
+  const LANGS = { text: ['text', 'plain', 'plain text'], log: ['log', 'logs'], sql: ['sql'], plsql: ['plsql', 'pl/sql', 'oracle'], pgsql: ['pgsql', 'postgres'],
+    shell: ['shell', 'bash', 'ksh', 'sh'], powershell: ['powershell', 'ps1'], batch: ['batch', 'bat', 'cmd'], python: ['python', 'py'], java: ['java'],
+    csharp: ['c#', 'csharp'], groovy: ['groovy', 'gradle'], js: ['javascript', 'js'], json: ['json'], xml: ['xml'], html: ['html'], css: ['css'],
+    yaml: ['yaml', 'yml'], ini: ['ini', 'properties', 'conf', 'config'], md: ['markdown', 'md'], docker: ['dockerfile', 'docker'], diff: ['diff', 'patch'] };
+  const FILLER = /\b(please|pls|plz|can you|could you|would you|i want to|i want|i'd like to|i would like to|i need to|i need|let me|kindly|just|me|the|a|an|my|all|of|to see|to|for me|now|thanks|thank you)\b/g;
+
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const has = (s, words) => words.some(w => new RegExp(`(^|[^a-z0-9])${esc(w)}($|[^a-z0-9])`).test(s));
+  const findKey = (s, dict) => Object.keys(dict).filter(k => has(s, dict[k]));
+
+  function lev(a, b) {
+    if (Math.abs(a.length - b.length) > 2) return 9;
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length];
+  }
+  // Finds names (projects, servers…) mentioned in s: exact phrase, else a close spelling of a word.
+  function findNames(s, names, strict = false) {
+    const out = [];
+    const words = s.split(/[^a-z0-9._-]+/).filter(w => w.length >= 3);
+    for (const n of names) {
+      const ln = n.toLowerCase();
+      if (!ln) continue;
+      const parts = ln.split(/[\/\s]+/).filter(Boolean);
+      if (has(s, [ln]) || (!strict && parts.length > 1 && has(s, [parts.at(-1)]) && parts.at(-1).length >= 4)) { out.push(n); continue; }
+      if (strict) {
+        // Servers: also the short host name ("app-prod-01" for app-prod-01.corp.local).
+        const short = ln.split('.')[0];
+        if (ln.includes('.') && short.length >= 4 && /[\d-]/.test(short) && has(s, [short])) out.push(n);
+        continue;
+      }
+      if (ln.length >= 4 && words.some(w => { const d = lev(w, ln); return d === 1 || (ln.length >= 7 && d === 2); })) out.push(n);
+    }
+    return out;
+  }
+  const num = s => { const m = s.match(/\b(\d{1,6})\b/); return m ? +m[1] : null; };
+  const quoted = s => (s.match(/["“'‘]([^"”'’]+)["”'’]/) || [])[1];
+
+  function parse(raw, ctx) {
+    const text = raw.trim();
+    let s = ' ' + text.toLowerCase().replace(/[!?.]+$/g, '').replace(/\s+/g, ' ') + ' ';
+    const acts = [];
+    const A = (type, v = {}) => acts.push({ type, ...v });
+
+    // ---- whole-sentence commands ----
+    if (/^\s*(undo|go back|back|revert|undo that)\s*$/.test(s)) return [{ type: 'undo' }];
+    if (/^\s*(reset|clear|clear all|clear filters?|remove (all )?filters?|show (me )?(all|everything)|start over|default view|everything)\s*$/.test(s)) return [{ type: 'reset' }];
+    if (/^\s*(help|\?|what can (you|i) (do|say)|commands|examples)\s*$/.test(s)) return [{ type: 'help' }];
+    let m;
+    const orig = re => { const mm = text.match(re); return mm ? mm[mm.length - 1].trim().replace(/^["'“‘]|["'”’.!?]$/g, '') : ''; };
+    if ((m = s.match(/\bsave (this |the |current )?(view|filters?|layout|setup)?\s*(as|called|named)\s+(.+?)\s*$/))) return [{ type: 'saveView', name: quoted(text) || orig(/\b(?:as|called|named)\s+(.+?)\s*$/i) || m[4].trim() }];
+    if ((m = s.match(/\b(delete|remove|forget) (the )?(saved )?view\s+(.+?)\s*$/))) return [{ type: 'deleteView', name: m[4].trim() }];
+    if (/\b(list|show|what are) (my |the )?(saved )?views\b/.test(s)) return [{ type: 'listViews' }];
+    if ((m = s.match(/\b(open|load|apply|use|switch to|show) (my |the )?(saved )?view\s+(.+?)\s*$/))) return [{ type: 'loadView', name: m[4].trim() }];
+    const sv = (ctx.views || []).find(v => s.trim() === v.toLowerCase() || s.trim() === 'open ' + v.toLowerCase() || s.trim() === 'show ' + v.toLowerCase());
+    if (sv) return [{ type: 'loadView', name: sv }];
+
+    // Questions about one server: password / user / host.
+    if ((m = s.match(/\b(password|pwd|pass|login|username|user name|user|credentials?|details|host ?name|ip|url|link)\s+(for|of|on|to)\s+(.+?)\s*$/))) {
+      const what = /pass|pwd/.test(m[1]) ? 'password' : /user|login/.test(m[1]) ? 'username' : /cred|detail/.test(m[1]) ? 'details' : /url|link/.test(m[1]) ? 'url' : 'host';
+      return [{ type: 'lookup', what, target: m[3].trim() }];
+    }
+    if ((m = s.match(/^\s*(how many|count|number of)\b(.*)$/))) return [{ type: 'count', filter: filterPatch(' ' + m[2] + ' ', ctx) }];
+
+    // ---- appearance ----
+    if (/\b(dark) (mode|theme)\b|\b(make it|go|switch to|use) dark\b/.test(s)) A('theme', { mode: 'dark' });
+    else if (/\b(light) (mode|theme)\b|\b(make it|go|switch to|use) light\b/.test(s)) A('theme', { mode: 'light' });
+    else if (/\b(auto|automatic|system) (mode|theme)\b/.test(s)) A('theme', { mode: 'auto' });
+
+    if (/\b(hide|collapse|close|minimi[sz]e|shrink) (the )?(side ?bar|left (menu|panel|bar)|menu|navigation|nav)\b/.test(s)) A('sidebar', { show: false });
+    if (/\b(show|expand|open|restore) (the )?(side ?bar|left (menu|panel|bar)|menu|navigation|nav)\b/.test(s)) A('sidebar', { show: true });
+    if (/\b(hide|collapse|close) (the )?(server |connection )?(tree|server list|servers list|connections( list)?)\b/.test(s)) A('tree', { show: false });
+    if (/\b(show|expand|open|restore) (the )?(server |connection )?(tree|server list|servers list|connections( list)?)\b/.test(s)) A('tree', { show: true });
+
+    // text size: "bigger font in putty", "font 16", "zoom out the editor"
+    const bigger = /\b(bigger|larger|increase|zoom in|enlarge|grow|more readable)\b/.test(s), smaller = /\b(smaller|decrease|zoom out|reduce|tiny|less)\b/.test(s);
+    const fontWord = /\b(font|text|letters?|writing|zoom|size)\b/.test(s);
+    const size = (s.match(/\b(?:font|text|size)\s*(?:size\s*)?(?:to\s*)?(\d{1,2})\b/) || [])[1];
+    if ((fontWord && (bigger || smaller)) || size) {
+      const target = /putty|terminal|ssh|console|shell|cmd|powershell/.test(s) ? 'term' : /sql|query|result/.test(s) ? 'sql' : /notepad|editor|note|file/.test(s) ? 'editor' : 'current';
+      A('font', { target, size: size ? +size : null, delta: size ? 0 : (bigger ? 2 : -2) });
+    }
+
+    // ---- dashboard layout ----
+    if (/\b(as|in|use|switch to|show)( a)? (table|list|rows|grid view|spreadsheet)\b|\btable (view|layout|mode)\b/.test(s)) A('layout', { v: 'table' });
+    if (/\b(as|in|use|switch to|show)( as)? cards?\b|\bcards? (view|layout|mode)\b|\btiles\b/.test(s)) A('layout', { v: 'cards' });
+    if (/\b(wider|bigger|larger) cards?\b|\bcards? (wider|bigger|larger)\b/.test(s)) A('cardWidth', { delta: 80 });
+    if (/\b(narrower|smaller|compact) cards?\b|\bcards? (narrower|smaller)\b|\bmore cards per row\b/.test(s)) A('cardWidth', { delta: -80 });
+
+    if ((m = s.match(/\b(group|grouped|organi[sz]e|organi[sz]ed|arrange|arranged|categori[sz]e|split)\s+(them |it |everything |servers |bookmarks |links )?by\s+([a-z ]+?)(?=\s(and|then|sorted|sort|as|with|in|only)\b|\s*$)/))) {
+      const g = findKey(' ' + m[3] + ' ', GROUPS)[0];
+      const bg = /\b(app|application|apps|category|categories|smart|folder|folders|site|sites|domain)\b/.exec(m[3]);
+      if (/bookmark|link/.test(s) || ctx.page === 'bookmarks') A('bmGroup', { v: bg ? { app: 'app', application: 'app', apps: 'app', category: 'smart', categories: 'smart', smart: 'smart', folder: 'folder', folders: 'folder', site: 'site', sites: 'site', domain: 'site' }[bg[1]] : (g === 'env' ? 'env' : 'smart') });
+      else if (g) A('group', { v: g });
+    }
+    if (!acts.some(a => a.type === 'bmGroup') && (m = s.match(/\b(bookmarks?|links?|favou?rites)\s+(by|per)\s+(folder|folders|app|apps|application|category|categories|site|sites|domain|env|environment)\b/))) {
+      A('bmGroup', { v: { folder: 'folder', folders: 'folder', app: 'app', apps: 'app', application: 'app', category: 'smart', categories: 'smart', site: 'site', sites: 'site', domain: 'site', env: 'env', environment: 'env' }[m[3]] });
+    }
+    if (/\bungroup(ed)?\b|\bno grouping\b|\bdon'?t group\b/.test(s)) A('group', { v: 'none' });
+
+    if ((m = s.match(/\b(sort|sorted|order|ordered|arrange)\s+(them |it |files |by |on )*(by |on )?([a-z -]+?)(?=\s(and|then|as|with|grouped|group|only)\b|\s*$)/)) || /\b(newest|latest|oldest|biggest|largest|smallest) first\b/.test(s)) {
+      const phrase = m ? ' ' + m[4] + ' ' : s;
+      const desc = /\b(desc|descending|newest|latest|reverse|biggest|largest|most|z-a|z to a|high to low)\b/.test(s), asc = /\b(asc|ascending|oldest|smallest|least|a-z|a to z|low to high)\b/.test(s);
+      if (ctx.page === 'files' || /\bfiles?\b/.test(s)) {
+        const k = /size|big|large|small/.test(phrase + s) ? 'size' : /type|kind|ext/.test(phrase) ? 'type' : /name|alpha/.test(phrase) ? 'name' : 'mtime';
+        A('fileSort', { key: k, dir: asc ? 1 : desc ? -1 : (k === 'name' || k === 'type' ? 1 : -1) });
+      } else {
+        let k = findKey(phrase, SORTS)[0] || (/\bnewest|latest\b/.test(s) ? 'added' : /\boldest\b/.test(s) ? 'added' : '');
+        if (k) A('sort', { key: k, dir: /\boldest\b/.test(s) && k === 'added' ? -1 : asc ? 1 : desc && !['added', 'updated', 'used', 'opens'].includes(k) ? -1 : 1 });
+      }
+    }
+    if (/\b(unsort|no sort(ing)?|default order)\b/.test(s)) A('sort', { key: '', dir: 1 });
+
+    // table columns: "hide password column", "show only host user password columns"
+    if (/\bcolumns?\b/.test(s)) {
+      const cols = findKey(s.replace(/\bcolumns?\b/g, ' '), COLS).map(c => COL_LABEL[c]);
+      if (/\b(only|just)\b/.test(s) && /\bshow\b/.test(s) && cols.length) A('cols', { only: cols });
+      else if (/\b(hide|remove|without|drop)\b/.test(s) && cols.length) A('cols', { hide: cols });
+      else if (/\b(show|add|unhide|bring back)\b/.test(s)) A('cols', { show: cols.length ? cols : 'all' });
+    }
+
+    // ---- per-page actions ----
+    if (/\b(check|test|verify|ping) (the |all |my )?(links|bookmarks|urls|sites)\b/.test(s)) A('checkLinks');
+    if (/\b(sync|refresh|reload|update) (the |my )?(browser )?(bookmarks|favou?rites)\b/.test(s)) A('syncBookmarks');
+    if ((m = s.match(/\b(go to|open|cd|jump to|switch to|show) (my |the )?(downloads|desktop|documents|home|onedrive)( folder)?\b/))) A('localPlace', { place: m[3] });
+    if ((m = text.match(/(?:go to|open|cd|browse)\s+(?:folder\s+)?("?)([A-Za-z]:\\[^"]*|\/[^\s"]+|~[^\s"]*)\1/i))) A('localPath', { path: m[2] });
+    if ((m = s.match(/\bmax(imum)? ?rows?\s*(to |=|of )?(\d+)\b|\b(\d+) rows max\b/))) A('sqlMax', { n: +(m[3] || m[4]) });
+    if (/\bauto ?-?commit (on|enabled?|true)\b|\b(enable|turn on|switch on) auto ?-?commit\b/.test(s)) A('sqlAuto', { on: true });
+    if (/\bauto ?-?commit (off|disabled?|false)\b|\b(disable|turn off|switch off) auto ?-?commit\b/.test(s)) A('sqlAuto', { on: false });
+    if (/\b(run|execute) (the )?(whole |entire |full )?(script|all statements|everything)\b/.test(s)) A('sqlRun', { all: true });
+    else if (/\b(run|execute) (it|this|the query|query|the statement|statement|sql)\b/.test(s)) A('sqlRun', { all: false });
+    if (/\b(hide|close) (the )?(tables|objects) (panel|list)\b/.test(s)) A('sqlTables', { show: false });
+    if (/\b(show|open) (the )?(tables|objects) (panel|list)\b/.test(s)) A('sqlTables', { show: true });
+    if (/\b(new|create|add|start) (a )?(blank )?note\b/.test(s)) A('newNote');
+    if (/\b(word ?wrap|wrap( lines)?|line wrap)( on| enabled)?\b/.test(s) && !/\b(off|no|disable|unwrap)\b/.test(s)) A('wrap', { on: true });
+    if (/\b(word ?wrap|wrap|line wrap) (off|disabled)\b|\b(no|disable|turn off) (word ?wrap|wrap)\b|\bunwrap\b/.test(s)) A('wrap', { on: false });
+    if ((m = s.match(/\b(language|syntax|highlight(ing)?|mode)\s+(to |as |=)?([a-z+#/]+)\b/))) {
+      const l = findKey(' ' + m[4] + ' ', LANGS)[0]; if (l) A('lang', { v: l });
+    }
+    if ((m = s.match(/\b(open|start|launch|new)\s+(a\s+)?(command prompt|cmd|powershell|pwsh|git bash|terminal on this pc|local (shell|terminal)|zsh|bash)\b/))) A('shell', { which: m[3] });
+    if (/\b(stop|pause|turn off|disable) (watching|monitoring|capturing)( the)? clipboard\b|\bclipboard (watch(ing)? )?off\b/.test(s)) A('watch', { on: false });
+    if (/\b(start|resume|turn on|enable) (watching|monitoring|capturing)( the)? clipboard\b|\bclipboard (watch(ing)? )?on\b|\bwatch (the )?clipboard\b/.test(s)) A('watch', { on: true });
+    if ((m = s.match(/\bsave (new )?captures (in|to|into|under)\s+(.+?)\s*$/))) {
+      const typed = orig(/\b(?:in|to|into|under)\s+(.+?)\s*$/i) || m[3].trim();
+      A('captureProject', { name: findNames(' ' + typed.toLowerCase() + ' ', ctx.projects || [])[0] || typed });
+    }
+    if ((m = s.match(/\b(open|show|switch to|go to) (the )?(repo|repository|project repo)\s+(.+?)\s*$/))) {
+      const r = findNames(' ' + m[4] + ' ', ctx.repoNames || [])[0]; A('gitRepo', { name: r || m[4] });
+    }
+    if ((m = s.match(/\b(show|open|switch to|view|check) (the )?branch\s+([\w./-]+)/)) || (m = s.match(/\bbranch\s+([\w./-]+)\b/))) A('gitBranch', { name: m[3] || m[1] });
+    if ((m = s.match(/\bcommits? (by|from) (\w[\w .-]*?)\s*$/)) || (m = s.match(/\b(search|find) commits? (for |about |with )?(.+?)\s*$/))) A('gitSearch', { text: (m[2] && m[1] !== 'search' && m[1] !== 'find' ? m[2] : m[3]).trim() });
+
+    // ---- navigation ----
+    const navM = s.match(/\b(go to|goto|open|switch to|take me to|show me|show|bring up|navigate to|jump to)\s+(the\s+)?([a-z+ ]+?)(\s+(page|tab|view|screen|window|section))?\s*$/);
+    let page = navM && findKey(' ' + navM[3] + ' ', PAGES).find(p => PAGES[p].some(w => navM[3].trim() === w || navM[3].trim() === w + 's'));
+    if (!page) { const only = s.trim(); page = Object.keys(PAGES).find(p => PAGES[p].includes(only)); }
+    if (page && !acts.some(a => ['localPlace', 'localPath', 'gitRepo', 'shell', 'loadView'].includes(a.type))) A('nav', { page });
+
+    // ---- filters (dashboard / bookmarks) ----
+    // Filters combine only with arranging (layout/group/sort/columns); other commands stand alone.
+    if (!page && acts.every(a => ['layout', 'group', 'sort', 'cols', 'cardWidth'].includes(a.type))) {
+      const f = filterPatch(s, ctx);
+      if (Object.keys(f).length) {
+        const add = /\b(also|add|plus|include|as well)\b/.test(s);
+        A('filter', { patch: f, merge: add, page: /\b(bookmarks?|links?|urls?|sites?)\b/.test(s) && !/\bservers?\b/.test(s) ? 'bookmarks' : null });
+      }
+    }
+    return acts;
+  }
+
+  // Filter words in a sentence → changes to the dashboard view.
+  function filterPatch(s, ctx) {
+    const f = {};
+    // exclusions: "hide dev", "except prod", "without uat", "not payments"
+    const ex = s.match(/\b(hide|except|excluding|exclude|without|not|no|but not|apart from|other than|remove)\s+([a-z0-9 /_-]+?)(?=\s(and|but|as|sorted|grouped|in|from)\b|\s*$|,)/g) || [];
+    let rest = s;
+    for (const chunk of ex) {
+      const body = ' ' + chunk.replace(/^\s*\S+\s+/, '') + ' ';
+      if (/\b(password|passwords|pwd|url|urls|link|links)\b/.test(body) && /\b(without|no)\b/.test(chunk)) continue; // handled below
+      const envs = findKey(body, ENVS).filter(e => e !== 'NONE');
+      const projs = findNames(body, ctx.projects || []);
+      if (envs.length || projs.length) {
+        if (envs.length) f.notEnvs = envs;
+        if (projs.length) f.notProjects = projs;
+        rest = rest.replace(chunk, ' ');
+      }
+    }
+    // A server named in full ("app-prod-01") is a name, not the words inside it.
+    const hostHit = findNames(rest, ctx.hosts || [], true);
+    if (hostHit.length === 1) {
+      f.text = hostHit[0];
+      const ln = hostHit[0].toLowerCase();
+      rest = rest.replace(ln, ' ').replace(new RegExp(`(^|[^a-z0-9])${esc(ln.split('.')[0])}($|[^a-z0-9])`), ' ');
+    }
+    const envs = findKey(rest, ENVS);
+    if (envs.length) f.envs = envs;
+    const projs = findNames(rest, ctx.projects || []).filter(p => !(f.notProjects || []).includes(p));
+    if (projs.length) f.projects = projs;
+    let types = findKey(rest, TYPES);
+    // "oracle databases" means Oracle only; "sftp servers" means SFTP, not every file server.
+    if (types.some(t => t === 'oracle' || t === 'postgres')) types = types.filter(t => t !== 'db');
+    if (types.some(t => t === 'ftp' || t === 'sftp')) types = types.filter(t => t !== 'files');
+    if (types.length > 1) types = types.filter(t => t !== 'web' || !/\b(bookmarks?|links?)\b/.test(rest));
+    if (types.length) f.types = types;
+    const st = findKey(rest, STATUS);
+    if (st.length && /\b(server|servers|link|links|connection|connections|bookmark|bookmarks|db|database|sites?|hosts?|ones|that|which|are|is)\b/.test(rest) || /\b(broken|failed|failing|down|unreachable|untested|not working|not tested)\b/.test(rest)) {
+      if (st.length) f.status = st[0];
+    }
+    if (/\b(pinned|starred|favou?rites?|stars?)\b/.test(rest)) f.pinned = true;
+    if (/\b(with|having|has|that have) (a )?(password|passwords|credentials|logins?)\b/.test(s)) f.withPassword = true;
+    if (/\b(without|no|missing) (a )?(password|passwords|credentials|logins?)\b/.test(s)) f.withPassword = false;
+    if (/\b(with|having|has) (a )?(url|urls|link|links)\b/.test(s)) f.withUrl = true;
+    if (/\b(without|no|missing) (a )?(url|urls|link|links)\b/.test(s)) f.withUrl = false;
+    let m;
+    if (/\b(used|opened|accessed) (today|recently)\b|\brecently used\b/.test(s)) f.recentDays = /today/.test(s) ? 1 : 7;
+    if ((m = s.match(/\b(used|opened|accessed) (this|last) (week|month)\b|\b(used|opened) in the last (\d+) days?\b/))) f.recentDays = m[5] ? +m[5] : m[3] === 'week' ? 7 : 31;
+    if ((m = s.match(/\b(named|called|containing|contains|matching|with name|like|about|mentioning)\s+(.+?)(?=\s(and|as|sorted|grouped|in)\b|\s*$)/))) f.text = m[2].trim().replace(/^["']|["']$/g, '');
+    const q = (s.match(/"([^"]+)"/) || [])[1]; if (q) f.text = q;
+    return f;
+  }
+
+  return { parse, filterPatch, lev, findNames };
+})();
+const parseCommand = CMD.parse;
+
+// ---------- apply (browser only) ----------
+const Views = {
+  all() { try { return JSON.parse(localStorage.getItem('savedViews') || '{}'); } catch { return {}; } },
+  put(all) { try { localStorage.setItem('savedViews', JSON.stringify(all)); } catch { /* ignore */ } },
+};
+const viewHistory = [];
+function snapshot() {
+  return { view: JSON.parse(JSON.stringify(S.view)), groupBy: S.groupBy, layout: S.layout, bm: Bookmarks.mode, cardW: +$('#cardWidth').value,
+    search: $('#search').value, fProject: $('#fProject').value, fEnv: $('#fEnv').value };
+}
+function restore(snap) {
+  S.view = { ...emptyView(), ...snap.view }; saveView();
+  setGroup(snap.groupBy); setLayout(snap.layout); Bookmarks.mode = snap.bm || Bookmarks.mode;
+  if (snap.cardW) { $('#cardWidth').value = snap.cardW; $('#cardWidth').dispatchEvent(new Event('input')); $('#cardWidth').dispatchEvent(new Event('change')); }
+  $('#search').value = snap.search || ''; $('#fProject').value = snap.fProject || ''; $('#fEnv').value = snap.fEnv || '';
+  refreshViews();
+}
+function setGroup(g) { S.groupBy = g; localStorage.setItem('groupBy', g); $$('#groupBy button').forEach(b => b.classList.toggle('active', b.dataset.g === g)); }
+function setLayout(l) { S.layout = l; localStorage.setItem('layout', l); $$('#layout button').forEach(b => b.classList.toggle('active', b.dataset.l === l)); }
+function refreshViews() {
+  renderBoard(); Bookmarks.render();
+  $$('#bmGroup button').forEach(x => x.classList.toggle('active', x.dataset.g === Bookmarks.mode));
+  try { localStorage.setItem('bmGroup', Bookmarks.mode); } catch { /* ignore */ }
+}
+const currentPage = () => ($('.view.active')?.id || 'view-dashboard').replace('view-', '');
+
+function commandContext() {
+  return {
+    projects: [...new Set(S.entries.map(e => e.project).filter(Boolean).flatMap(p => p.split('/').map((_, i, a) => a.slice(0, i + 1).join('/'))))],
+    hosts: [...new Set(S.entries.flatMap(e => [e.host, e.name]).filter(Boolean))],
+    repoNames: (S.settings.repos || []).map(p => p.split(/[\\/]/).filter(Boolean).pop()),
+    views: Object.keys(Views.all()),
+    page: currentPage(),
+  };
+}
+
+function describeView(list) {
+  const v = S.view, bits = [];
+  if (v.envs.length) bits.push(v.envs.map(e => e === 'NONE' ? 'no-env' : e).join('/'));
+  if (v.types.length) bits.push(v.types.join('/'));
+  if (v.status) bits.push({ ok: 'working', fail: 'failed', none: 'untested' }[v.status]);
+  if (v.pinned) bits.push('pinned');
+  const where = v.projects.length ? ` in ${v.projects.join(', ')}` : '';
+  const not = [...v.notEnvs, ...v.notProjects];
+  return `${[list.length, ...bits].join(' ')} item${list.length === 1 ? '' : 's'}${where}${not.length ? ` (excluding ${not.join(', ')})` : ''}${v.text ? ` matching "${v.text}"` : ''}`;
+}
+
+const HELP = `Things you can say (in your own words — I understand synonyms and typos):
+<b>Filter</b>  "show prod servers in payments" · "only UAT oracle databases" · "hide dev" · "broken links" · "servers without passwords" · "used this week" · "pinned only" · "anything called refund"
+<b>Arrange</b>  "as a table" · "group by environment" · "sort by last used" · "newest first" · "wider cards" · "hide password column" · "show only host user password columns"
+<b>Remember</b>  "save this view as Prod overview" · "open Prod overview" · "list my views" · "undo" · "reset"
+<b>Ask</b>  "how many prod servers" · "password for app-prod-01" · "user for jenkins"
+<b>Pages</b>  "go to filezilla" · "hide the sidebar" · "hide the tree" · "dark mode" · "bigger font in putty" · "font 16"
+<b>Bookmarks</b>  "bookmarks by folder" · "group links by app" · "check links" · "sync bookmarks"
+<b>FileZilla</b>  "sort files by size" · "newest first" · "go to downloads" · "open C:\\temp"
+<b>SQL</b>  "max rows 5000" · "autocommit off" · "run script" · "hide tables panel"
+<b>Other</b>  "new note" · "wrap on" · "language yaml" · "open repo payments" · "branch develop" · "commits by ann" · "open powershell" · "stop watching clipboard" · "save captures to Payments"
+Connections still work as before: paste details and say putty / filezilla / sql.`;
+
+async function runCommand(text) {
+  const ctx = commandContext();
+  const acts = parseCommand(text, ctx);
+  if (!acts.length) return null;
+  const before = snapshot();
+  const said = [];
+  let viewChanged = false, showDash = false;
+  for (const a of acts) {
+    switch (a.type) {
+      case 'help': said.push(HELP); break;
+      case 'undo': {
+        const prev = viewHistory.pop();
+        if (!prev) { said.push('Nothing to undo.'); break; }
+        restore(prev); said.push('Undone.'); return said.join('\n');
+      }
+      case 'reset':
+        Object.assign(S.view, emptyView()); saveView();
+        $('#search').value = ''; $('#fProject').value = ''; $('#fEnv').value = ''; $('#bmSearch').value = '';
+        viewChanged = true; said.push('Cleared all filters.'); break;
+      case 'saveView': {
+        const all = Views.all(); all[a.name] = snapshot(); Views.put(all);
+        said.push(`Saved this view as <b>${esc(a.name)}</b>. Say "open ${esc(a.name)}" to come back to it.`); break;
+      }
+      case 'loadView': {
+        const all = Views.all();
+        const name = Object.keys(all).find(n => n.toLowerCase() === a.name.toLowerCase()) || CMD.findNames(' ' + a.name.toLowerCase() + ' ', Object.keys(all))[0];
+        if (!name) { said.push(`I don't have a view called "${esc(a.name)}". ${Object.keys(all).length ? 'Saved views: ' + Object.keys(all).map(esc).join(', ') : 'No views saved yet.'}`); break; }
+        viewHistory.push(before); restore(all[name]); show('dashboard');
+        said.push(`Opened view <b>${esc(name)}</b>: ${describeView(filtered())}.`); return said.join('\n');
+      }
+      case 'deleteView': {
+        const all = Views.all(); const name = Object.keys(all).find(n => n.toLowerCase() === a.name.toLowerCase());
+        if (name) { delete all[name]; Views.put(all); said.push(`Deleted view ${esc(name)}.`); } else said.push(`No view called "${esc(a.name)}".`);
+        break;
+      }
+      case 'listViews': { const n = Object.keys(Views.all()); said.push(n.length ? 'Saved views: ' + n.map(x => `<b>${esc(x)}</b>`).join(', ') : 'No saved views yet. Say "save this view as …".'); break; }
+      case 'lookup': {
+        const t = a.target.toLowerCase();
+        const scored = S.entries.map(e => {
+          const names = [e.host, e.name, e.url].filter(Boolean).map(x => x.toLowerCase());
+          const sc = names.some(n => n === t) ? 3 : names.some(n => n.includes(t) || t.includes(n)) ? 2 : names.some(n => CMD.lev(n, t) <= 2) ? 1 : 0;
+          return [sc, e];
+        }).filter(x => x[0]).sort((x, y) => y[0] - x[0]);
+        if (!scored.length) { said.push(`I couldn't find "${esc(a.target)}".`); break; }
+        const best = scored.filter(x => x[0] === scored[0][0]).map(x => x[1]).slice(0, 5);
+        for (const e of best) {
+          const val = { password: e.password, username: e.username, url: e.url, host: e.host }[a.what];
+          if (a.what === 'details') said.push(`<b>${esc(e.name)}</b>: ${esc(e.username || '-')} @ ${esc(e.host || e.url || '')}${e.port ? ':' + e.port : ''}  password: <code>${esc(e.password || '-')}</code>`);
+          else said.push(`${a.what} for <b>${esc(e.name)}</b>${e.env ? ` (${e.env})` : ''}: <code>${esc(val || '(none saved)')}</code>`);
+        }
+        if (best.length === 1 && a.what !== 'details') {
+          const val = { password: best[0].password, username: best[0].username, url: best[0].url, host: best[0].host }[a.what];
+          if (val) { copyText(val, `${a.what[0].toUpperCase() + a.what.slice(1)} copied`); said.push('(copied to the clipboard)'); }
+        }
+        break;
+      }
+      case 'count': {
+        const v = { ...emptyView(), ...a.filter };
+        const list = S.entries.filter(e => viewMatch(e, v));
+        const hosts = new Set(list.map(e => e.host).filter(Boolean)).size;
+        said.push(`${list.length} matching item${list.length === 1 ? '' : 's'} (${hosts} distinct host${hosts === 1 ? '' : 's'}).`); break;
+      }
+      case 'theme': Theme.set(a.mode); said.push(`Theme: ${a.mode}.`); break;
+      case 'sidebar': if (document.body.classList.contains('side-collapsed') === a.show) toggleSide(); said.push(a.show ? 'Sidebar shown.' : 'Sidebar hidden — say "show sidebar" or press Ctrl+B to bring it back.'); break;
+      case 'tree':
+        $$('.with-tree').forEach(wt => { if (wt.classList.contains('tree-hidden') === a.show) $('.knob', wt).click(); });
+        said.push(a.show ? 'Server tree shown.' : 'Server tree hidden.'); break;
+      case 'font': {
+        const page = currentPage();
+        const target = a.target !== 'current' ? a.target : page === 'terminal' ? 'term' : page === 'sql' ? 'sql' : page === 'notes' ? 'editor' : null;
+        if (!target) { said.push('Use Ctrl + and Ctrl − to zoom the whole app, or say e.g. "bigger font in putty".'); break; }
+        Fonts.set(target, a.size || Fonts.size(target) + a.delta);
+        said.push(`${{ term: 'Terminal', sql: 'SQL', editor: 'Editor' }[target]} text size: ${Fonts.size(target)}px.`); break;
+      }
+      case 'layout': setLayout(a.v); viewChanged = showDash = true; said.push(a.v === 'table' ? 'Showing as a table.' : 'Showing as cards.'); break;
+      case 'cardWidth': {
+        const sl = $('#cardWidth'); sl.value = clamp(+sl.value + a.delta, 240, 700);
+        sl.dispatchEvent(new Event('input')); sl.dispatchEvent(new Event('change'));
+        if (S.layout !== 'cards') setLayout('cards');
+        viewChanged = showDash = true; said.push(`Card width ${sl.value}px.`); break;
+      }
+      case 'group': setGroup(a.v); viewChanged = showDash = true; said.push(a.v === 'none' ? 'No grouping.' : `Grouped by ${a.v === 'protocol' ? 'type' : a.v}.`); break;
+      case 'sort': S.view.sort = a.key; S.view.sortDir = a.dir; viewChanged = showDash = true; said.push(a.key ? `Sorted by ${a.key}${a.dir < 0 ? ' (descending)' : ''}.` : 'Default order.'); break;
+      case 'cols': {
+        const all = TABLE_COLS.map(c => c[0] || 'actions');
+        if (a.only) S.view.hideCols = all.filter(c => !a.only.includes(c) && c !== 'actions');
+        else if (a.hide) S.view.hideCols = [...new Set([...S.view.hideCols, ...a.hide])];
+        else S.view.hideCols = a.show === 'all' ? [] : S.view.hideCols.filter(c => !a.show.includes(c));
+        if (S.layout !== 'table') setLayout('table');
+        viewChanged = showDash = true; said.push(S.view.hideCols.length ? `Hidden columns: ${S.view.hideCols.join(', ')}.` : 'All columns shown.'); break;
+      }
+      case 'filter': {
+        const p = a.patch;
+        if (!a.merge) Object.assign(S.view, { ...emptyView(), sort: S.view.sort, sortDir: S.view.sortDir, hideCols: S.view.hideCols });
+        for (const [k, v] of Object.entries(p)) S.view[k] = Array.isArray(v) ? [...new Set([...(a.merge ? S.view[k] : []), ...v])] : v;
+        $('#search').value = ''; $('#fProject').value = ''; $('#fEnv').value = '';
+        viewChanged = true;
+        if (a.page === 'bookmarks' || currentPage() === 'bookmarks') { show('bookmarks'); said.push(`Bookmarks: ${describeView(Bookmarks.list())}.`); }
+        else { showDash = true; said.push(`Showing ${describeView(filtered())}.`); }
+        break;
+      }
+      case 'bmGroup': Bookmarks.mode = a.v; viewChanged = true; show('bookmarks'); said.push(`Bookmarks grouped by ${a.v === 'smart' ? 'category' : a.v}.`); break;
+      case 'checkLinks': show('bookmarks'); Bookmarks.check(); said.push('Checking links — dots turn green or red in a few seconds.'); break;
+      case 'syncBookmarks': show('bookmarks'); Bookmarks.sync(true); said.push('Re-reading Edge/Chrome bookmarks.'); break;
+      case 'fileSort': {
+        show('files');
+        for (const p of [Local, Remote]) { p.sortBy = { key: a.key, dir: a.dir }; try { localStorage.setItem('sort.' + p.root.id, JSON.stringify(p.sortBy)); } catch { /* ignore */ } if (p.loaded) p.render(); }
+        said.push(`Files sorted by ${{ mtime: 'date modified', size: 'size', name: 'name', type: 'type' }[a.key]}${a.dir < 0 ? ', ' + (a.key === 'mtime' ? 'newest' : a.key === 'size' ? 'largest' : 'Z→A') + ' first' : ''}.`); break;
+      }
+      case 'localPlace': {
+        show('files');
+        const places = await api('GET', '/api/local/places').catch(() => []);
+        const pl = places.find(x => x.name.toLowerCase() === a.place);
+        if (pl) { Local.load(pl.path); said.push(`This PC: ${esc(pl.path)}`); } else said.push(`I couldn't find your ${a.place} folder.`);
+        break;
+      }
+      case 'localPath': show('files'); Local.load(a.path); said.push(`This PC: ${esc(a.path)}`); break;
+      case 'sqlMax': { const sel = $('#sqlMax'); if (![...sel.options].some(o => +o.value === a.n)) sel.add(new Option(String(a.n), String(a.n))); sel.value = String(a.n); said.push(`SQL max rows: ${a.n}.`); break; }
+      case 'sqlAuto': $('#sqlAuto').checked = a.on; $('#sqlAuto').dispatchEvent(new Event('change')); said.push(`Auto-commit ${a.on ? 'on' : 'off'}.`); break;
+      case 'sqlRun': if (!SQL.active) { said.push('Connect to a database on the SQL page first.'); break; } show('sql'); SQL.run(a.all); said.push(a.all ? 'Running the script.' : 'Running the statement at the cursor.'); break;
+      case 'sqlTables': $('.sql-grid').classList.toggle('no-objects', !a.show); said.push(a.show ? 'Tables panel shown.' : 'Tables panel hidden.'); break;
+      case 'newNote': show('notes'); $('#newNote').click(); said.push('New note created.'); break;
+      case 'wrap': $('#wrapToggle').checked = a.on; $('#wrapToggle').dispatchEvent(new Event('change')); said.push(`Line wrap ${a.on ? 'on' : 'off'}.`); break;
+      case 'lang':
+        if (!Notes.active) { said.push('Open a note or file in Notepad++ first.'); break; }
+        $('#langPick').value = a.v; $('#langPick').dispatchEvent(new Event('change')); said.push(`Language: ${$('#langPick').selectedOptions[0].text}.`); break;
+      case 'shell': {
+        const want = a.which.toLowerCase();
+        const sh = SHELLS.find(x => want.includes('powershell') || want === 'pwsh' ? /powershell/i.test(x.name) : want.includes('bash') ? /bash/i.test(x.name) : /command|cmd|zsh|sh/i.test(x.name)) || SHELLS[0];
+        if (!sh) { said.push('No command prompt available.'); break; }
+        Term.openLocal(sh, Local.loaded && !Local.roots ? Local.path : ''); said.push(`Opened ${esc(sh.name)}.`); break;
+      }
+      case 'watch': saveSettings({ watch: a.on }); said.push(a.on ? 'Watching the clipboard.' : 'Clipboard watching paused.'); break;
+      case 'captureProject': saveSettings({ project: a.name }); $('#captureProject').value = a.name; said.push(`New captures go to project <b>${esc(a.name)}</b>.`); break;
+      case 'gitRepo': {
+        const repo = (S.settings.repos || []).find(p => p.split(/[\\/]/).filter(Boolean).pop().toLowerCase() === a.name.toLowerCase())
+          || (S.settings.repos || []).find(p => p.toLowerCase().includes(a.name.toLowerCase()));
+        if (!repo) { said.push(`No repository called "${esc(a.name)}". Add it on the Git page with + or Find.`); break; }
+        show('git'); Git.open(repo); said.push(`Opened repository ${esc(repo.split(/[\\/]/).filter(Boolean).pop())}.`); break;
+      }
+      case 'gitBranch': {
+        if (!Git.info) { said.push('Open a repository on the Git page first.'); break; }
+        const b = Git.info.branches.find(x => x.name.toLowerCase() === a.name.toLowerCase()) || Git.info.branches.find(x => x.name.toLowerCase().endsWith('/' + a.name.toLowerCase()) || x.name.toLowerCase().includes(a.name.toLowerCase()));
+        if (!b) { said.push(`No branch matching "${esc(a.name)}".`); break; }
+        show('git'); Git.ref = b.name; Git.renderBranches(); Git.loadLog(); said.push(`Showing history of ${esc(b.name)}.`); break;
+      }
+      case 'gitSearch': show('git'); $('#gitSearch').value = a.text; if (Git.repo) Git.loadLog(); said.push(`Searching commits for "${esc(a.text)}".`); break;
+      case 'nav': show(a.page); said.push(`Opened ${$(`#nav button[data-view="${a.page}"] .nl`)?.textContent || a.page}.`); break;
+    }
+  }
+  if (viewChanged) { viewHistory.push(before); if (viewHistory.length > 30) viewHistory.shift(); saveView(); refreshViews(); }
+  if (showDash && currentPage() !== 'dashboard' && currentPage() !== 'bookmarks') show('dashboard');
+  return said.join('\n') || null;
+}
+
+// Theme: light / dark / follow Windows. Dark rules from the stylesheet are
+// re-scoped to [data-theme=dark] so the choice can override the system.
+const Theme = {
+  init() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let list; try { list = sheet.cssRules; } catch { continue; }
+      for (let i = list.length - 1; i >= 0; i--) {
+        const r = list[i];
+        if (r instanceof CSSMediaRule && /prefers-color-scheme:\s*dark/.test(r.conditionText || r.media.mediaText)) {
+          for (const inner of r.cssRules) rules.push(inner.cssText.replace(/^([^{]+)/, sel => sel.split(',').map(x => x.trim() === ':root' ? ':root[data-theme="dark"]' : `:root[data-theme="dark"] ${x.trim()}`).join(', ')));
+          sheet.deleteRule(i);
+        }
+      }
+    }
+    const st = document.createElement('style'); st.textContent = rules.join('\n'); document.head.append(st);
+    this.mq = window.matchMedia('(prefers-color-scheme: dark)');
+    this.mq.addEventListener('change', () => this.apply());
+    this.apply();
+  },
+  pref() { try { return localStorage.getItem('theme') || 'auto'; } catch { return 'auto'; } },
+  set(mode) { try { localStorage.setItem('theme', mode); } catch { /* ignore */ } this.apply(); },
+  apply() {
+    const m = this.pref(), dark = m === 'dark' || (m === 'auto' && this.mq.matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  },
+};
+if (typeof document !== 'undefined' && document.styleSheets) Theme.init();

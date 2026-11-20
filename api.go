@@ -148,6 +148,18 @@ func (a *App) handleDeleteEntry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
+func (a *App) handleHide(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Hidden bool `json:"hidden"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	a.store.SetHidden(r.PathValue("id"), in.Hidden)
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
 func (a *App) handleSecret(w http.ResponseWriter, r *http.Request) {
 	e, ok := a.store.Entry(r.PathValue("id"))
 	if !ok {

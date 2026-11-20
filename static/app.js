@@ -80,7 +80,7 @@ const S = {
   groupBy: localStorage.getItem('groupBy') || 'project',
   layout: localStorage.getItem('layout') || 'cards',
 };
-const byId = id => S.entries.find(e => e.id === id);
+const byId = id => (S.allEntries || S.entries).find(e => e.id === id);
 
 // ---------- URL labels ----------
 // First match wins, so specific patterns come before generic ones. Each regex
@@ -267,7 +267,8 @@ function show(view) {
   if (view === 'bookmarks') {
     Bookmarks.sync(false);
     // Re-check links not checked in the last hour.
-    const stale = S.entries.filter(e => /^https?:/i.test(e.url || '') && (!e.status_at || Date.now() - new Date(e.status_at) > 3600e3)).map(e => e.id);
+    // Only internal links are re-checked automatically; "Check links" does everything.
+    const stale = S.entries.filter(e => /^https?:/i.test(e.url || '') && isInternal(e) && (!e.status_at || Date.now() - new Date(e.status_at) > 3600e3)).map(e => e.id);
     if (stale.length) Bookmarks.check(stale);
   }
   if (view === 'sql') SQL.fit();
@@ -292,7 +293,9 @@ document.addEventListener('keydown', e => {
 // ---------- sync ----------
 async function refreshAll() {
   const [entries, clips, settings] = await Promise.all([api('GET', '/api/entries'), api('GET', '/api/clips'), api('GET', '/api/settings')]);
-  S.entries = entries || []; S.clips = clips || []; S.settings = settings;
+  S.allEntries = entries || [];
+  S.entries = S.allEntries.filter(e => !e.hidden); // hidden = removed by the user, kept so it isn't re-imported
+  S.clips = clips || []; S.settings = settings;
   // Each part draws on its own so one failure can't blank the rest of the app.
   for (const [name, fn] of [['settings', renderSettings], ['filters', renderFilters], ['dashboard', renderBoard], ['captured', renderClips],
     ['outlook', () => Mail.render()], ['tree', () => Tree.render()], ['bookmarks', () => Bookmarks.render()], ['notes', () => Notes.renderLists()]]) {
@@ -381,9 +384,70 @@ function matches(e, q) {
   return q.split(/\s+/).every(w => hay.includes(w));
 }
 
+// View options the chat can set on top of the toolbar filters.
+const emptyView = () => ({ projects: [], notProjects: [], envs: [], notEnvs: [], types: [], status: '', pinned: false,
+  withPassword: null, withUrl: null, text: '', recentDays: 0, sort: '', sortDir: 1, hideCols: [] });
+S.view = (() => { try { return { ...emptyView(), ...JSON.parse(localStorage.getItem('dashView') || '{}') }; } catch { return emptyView(); } })();
+function saveView() { try { localStorage.setItem('dashView', JSON.stringify(S.view)); } catch { /* ignore */ } }
+
+const TYPE_TEST = {
+  ssh: e => canSSH(e), files: e => canFiles(e), ftp: e => isFTP(e), sftp: e => canSSH(e), db: e => canDB(e),
+  oracle: e => dbKindOf(e) === 'oracle', postgres: e => dbKindOf(e) === 'postgres', web: e => /^https?:/i.test(e.url || ''),
+  rdp: e => e.protocol === 'rdp' || e.port === 3389, smb: e => e.protocol === 'smb' || /^\\\\/.test(e.url || ''),
+  ldap: e => /^ldaps?$/.test(e.protocol || ''), credential: e => !e.host && !e.url,
+};
+const inProject = (e, p) => { const a = (e.project || '').toLowerCase(), b = p.toLowerCase(); return a === b || a.startsWith(b + '/'); };
+function viewMatch(e, v = S.view) {
+  return (!v.projects.length || v.projects.some(p => inProject(e, p))) && !v.notProjects.some(p => inProject(e, p))
+    && (!v.envs.length || v.envs.includes(e.env || 'NONE')) && !v.notEnvs.includes(e.env || 'NONE')
+    && (!v.types.length || v.types.some(t => TYPE_TEST[t]?.(e)))
+    && (!v.status || (e.status || 'none') === v.status) && (!v.pinned || e.favorite)
+    && (v.withPassword == null || !!e.has_password === v.withPassword) && (v.withUrl == null || !!e.url === v.withUrl)
+    && (!v.text || matches(e, v.text.toLowerCase()))
+    && (!v.recentDays || (e.last_used && Date.now() - new Date(e.last_used) < v.recentDays * 864e5));
+}
+const SORT_KEY = {
+  name: e => (e.name || '').toLowerCase(), host: e => (e.host || e.url || '').toLowerCase(), project: e => (e.project || '').toLowerCase(),
+  env: e => ENV_RANK[e.env] ?? 9, used: e => -(new Date(e.last_used || 0).getTime() || 0), added: e => -(new Date(e.created || 0).getTime() || 0),
+  updated: e => -(new Date(e.updated || 0).getTime() || 0), status: e => ({ fail: 0, ok: 1 }[e.status] ?? 2), opens: e => -(e.open_count || 0),
+};
+const ENV_RANK = { PROD: 0, DR: 1, UAT: 2, STAGE: 3, TEST: 4, DEV: 5 };
+function sortEntries(list) {
+  const f = SORT_KEY[S.view.sort];
+  if (!f) return list;
+  const d = S.view.sortDir || 1;
+  return [...list].sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * d; });
+}
+
 function filtered() {
   const q = $('#search').value.trim().toLowerCase(), p = $('#fProject').value, env = $('#fEnv').value;
-  return S.entries.filter(e => (!p || e.project === p) && (!env || e.env === env) && matches(e, q));
+  return sortEntries(S.entries.filter(e => (!p || e.project === p) && (!env || e.env === env) && matches(e, q) && viewMatch(e)));
+}
+
+// Chips showing what the chat changed, each removable.
+function renderViewChips() {
+  const v = S.view, chips = [];
+  v.projects.forEach(p => chips.push([`project: ${p}`, () => (v.projects = v.projects.filter(x => x !== p))]));
+  v.notProjects.forEach(p => chips.push([`not ${p}`, () => (v.notProjects = v.notProjects.filter(x => x !== p))]));
+  v.envs.forEach(x => chips.push([x === 'NONE' ? 'no env' : x, () => (v.envs = v.envs.filter(y => y !== x))]));
+  v.notEnvs.forEach(x => chips.push([`not ${x}`, () => (v.notEnvs = v.notEnvs.filter(y => y !== x))]));
+  v.types.forEach(t => chips.push([t, () => (v.types = v.types.filter(y => y !== t))]));
+  if (v.status) chips.push([{ ok: 'working', fail: 'failed', none: 'untested' }[v.status], () => (v.status = '')]);
+  if (v.pinned) chips.push(['pinned', () => (v.pinned = false)]);
+  if (v.withPassword != null) chips.push([v.withPassword ? 'with password' : 'no password', () => (v.withPassword = null)]);
+  if (v.withUrl != null) chips.push([v.withUrl ? 'with URL' : 'no URL', () => (v.withUrl = null)]);
+  if (v.text) chips.push([`"${v.text}"`, () => (v.text = '')]);
+  if (v.recentDays) chips.push([`used in ${v.recentDays}d`, () => (v.recentDays = 0)]);
+  if (v.sort) chips.push([`sort: ${v.sort}${v.sortDir < 0 ? ' ↓' : ''}`, () => (v.sort = '')]);
+  if (v.hideCols.length) chips.push([`hidden: ${v.hideCols.join(', ')}`, () => (v.hideCols = [])]);
+  for (const el of [$('#viewChips'), $('#bmChips')]) {
+  el.innerHTML = chips.length ? chips.map((c, i) => `<span class="vchip" data-vc="${i}">${esc(c[0])} ✕</span>`).join('') + '<span class="vchip clear" data-vc="all">clear all</span>' : '';
+  el.onclick = e => {
+    const c = e.target.closest('[data-vc]'); if (!c) return;
+    if (c.dataset.vc === 'all') Object.assign(S.view, emptyView()); else chips[+c.dataset.vc][1]();
+    saveView(); renderBoard(); Bookmarks.render();
+  };
+  }
 }
 
 const isFTP = e => ['ftp', 'ftps'].includes(e.protocol) || (!e.protocol && e.port === 21);
@@ -415,6 +479,7 @@ function renderStats(list) {
 }
 
 function renderBoard() {
+  renderViewChips();
   const list = filtered();
   renderStats(list);
   const board = $('#board');
@@ -423,7 +488,10 @@ function renderBoard() {
     return;
   }
   if (!list.length) { board.innerHTML = '<div class="empty">No matches.</div>'; return; }
-  const keyOf = e => S.groupBy === 'env' ? (e.env || 'No environment') : S.groupBy === 'protocol' ? (e.protocol || 'other') : (e.project || 'General');
+  const keyOf = {
+    env: e => e.env || 'No environment', protocol: e => e.protocol || 'other', status: e => ({ ok: 'Working', fail: 'Failed' }[e.status] || 'Not tried'),
+    host: e => e.host || e.url || e.name, none: () => 'All', project: e => e.project || 'General',
+  }[S.groupBy] || (e => e.project || 'General');
   const groups = {};
   list.forEach(e => (groups[keyOf(e)] ||= []).push(e));
   board.innerHTML = Object.keys(groups).sort().map(g => {
@@ -440,7 +508,8 @@ function cardsHTML(items) {
     const k = (e.host || e.url || e.name).toLowerCase();
     (hosts[k] ||= []).push(e);
   });
-  const cards = Object.values(hosts).sort((a, b) => (b.some(e => e.favorite) - a.some(e => e.favorite)) || (a[0].host || a[0].name).localeCompare(b[0].host || b[0].name));
+  const cards = S.view.sort ? Object.values(hosts) // already in the chosen order
+    : Object.values(hosts).sort((a, b) => (b.some(e => e.favorite) - a.some(e => e.favorite)) || (a[0].host || a[0].name).localeCompare(b[0].host || b[0].name));
   return '<div class="cards">' + cards.map(es => {
     const h = es[0], env = es.find(e => e.env)?.env || '', fav = es.some(e => e.favorite);
     const title = h.host || h.name;
@@ -482,18 +551,22 @@ function svcHTML(e) {
 // Table columns: drag a header edge to resize (shared by every group's table).
 const TABLE_COLS = [['Env', 95], ['Name', 170], ['Host', 190], ['Port', 64], ['Type', 80], ['URL', 280], ['User', 130], ['Password', 130], ['', 110]];
 function tableHTML(items) {
-  return `<table class="tbl"><colgroup>${TABLE_COLS.map((c, i) => `<col style="width:var(--c${i}, ${c[1]}px)">`).join('')}</colgroup>
-    <thead><tr>${TABLE_COLS.map((c, i) => `<th>${c[0]}<span class="colgrip" data-col="${i}" title="Drag to resize · double-click to reset"></span></th>`).join('')}</tr></thead><tbody>` +
-    items.map(e => `<tr>
-      <td>${dot(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}</td>
-      <td>${esc(e.name)}</td>
-      <td><span class="copy" data-copy="${esc(e.host)}">${esc(e.host)}</span></td>
-      <td>${e.port || ''}</td><td>${esc(e.protocol)}</td>
-      <td>${urlLabel(e.url) ? `<span class="ulabel">${esc(urlLabel(e.url))}</span> ` : ''}${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a>` : ''}</td>
-      <td><span class="copy" data-copy="${esc(e.username)}">${esc(e.username)}</span></td>
-      <td><span class="copy" data-copy="${esc(e.password)}">${esc(e.password)}</span></td>
-      <td>${canSSH(e) ? `<button class="icon" data-act="ssh" data-id="${e.id}">SSH</button> ` : ''}<button class="icon" data-act="edit" data-id="${e.id}">Edit</button></td>
-    </tr>`).join('') + '</tbody></table>';
+  const cell = [
+    e => `${dot(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`,
+    e => esc(e.name),
+    e => `<span class="copy" data-copy="${esc(e.host)}">${esc(e.host)}</span>`,
+    e => e.port || '',
+    e => esc(e.protocol),
+    e => `${urlLabel(e.url) ? `<span class="ulabel">${esc(urlLabel(e.url))}</span> ` : ''}${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a>` : ''}`,
+    e => `<span class="copy" data-copy="${esc(e.username)}">${esc(e.username)}</span>`,
+    e => `<span class="copy" data-copy="${esc(e.password)}">${esc(e.password)}</span>`,
+    e => `${canSSH(e) ? `<button class="icon" data-act="ssh" data-id="${e.id}">SSH</button> ` : ''}<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
+  ];
+  const hidden = S.view.hideCols.map(h => h.toLowerCase());
+  const cols = TABLE_COLS.map((c, i) => i).filter(i => !hidden.includes((TABLE_COLS[i][0] || 'actions').toLowerCase()));
+  return `<table class="tbl"><colgroup>${cols.map(i => `<col style="width:var(--c${i}, ${TABLE_COLS[i][1]}px)">`).join('')}</colgroup>
+    <thead><tr>${cols.map(i => `<th>${TABLE_COLS[i][0]}<span class="colgrip" data-col="${i}" title="Drag to resize · double-click to reset"></span></th>`).join('')}</tr></thead><tbody>` +
+    items.map(e => `<tr>${cols.map(i => `<td>${cell[i](e)}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
 }
 
 $('#board').addEventListener('click', async ev => {
@@ -1129,7 +1202,7 @@ const Chat = {
 
   help(short) {
     this.say(short
-      ? 'Paste connection details and tell me what to do — e.g. <code>ftp</code>, <code>sftp</code> or <code>terminal</code>. I\'ll show what I found and connect when you confirm. Type <code>help</code> for more.'
+      ? 'Tell me what you want in plain English — e.g. <code>show prod servers in payments as a table</code>, <code>bookmarks by folder</code>, <code>password for app01</code>, <code>save this view as Prod</code>. Or paste connection details and say <code>putty</code>, <code>filezilla</code> or <code>sql</code>. Type <code>help</code> for more.'
       : `Things you can say:
 • <code>putty</code> / <code>ssh</code> / <code>terminal</code> + details → PuTTY (SSH session)
 • <code>filezilla</code>, <code>ftp</code>, <code>ftps</code>, <code>sftp</code> + details → FileZilla (file transfer)
@@ -1143,10 +1216,10 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
 
   intent(t) {
     const l = t.toLowerCase();
-    if (/^\s*(help|\?)\s*$/.test(l)) return 'help';
+    if (/^\s*(help|\?)\s*$/.test(l)) return 'cmdhelp';
     if (/^\s*(y|yes|ok|okay|go|confirm|do it)\s*!?\s*$/.test(l)) return 'yes';
     if (/^\s*(n|no|cancel|stop|nevermind)\s*$/.test(l)) return 'no';
-    if (/^\s*(find|search|show|list|where|lookup|look up)\b/.test(l)) return 'find';
+    if (/^\s*(find|search( for)?|look ?up|where is|where are)\b/.test(l)) return 'find';
     if (/\b(sql|query|oracle|postgres|postgresql|psql|sqlplus|sqldeveloper|database|db)\b/.test(l)) return 'db';
     if (/\b(ftps?|sftp|filezilla|winscp|files?|upload|download|scp|transfer)\b/.test(l)) return 'files';
     if (/\b(ssh|terminal|putty|shell|console|connect|login|log ?in)\b/.test(l)) return 'terminal';
@@ -1168,7 +1241,7 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
     this.say(esc(text), 'me');
     const intent = this.intent(text);
     this.lastText = text;
-    if (intent === 'help') return this.help(false);
+    if (intent === 'cmdhelp') return this.say(HELP.replace(/\n/g, '<br>'));
     if (intent === 'yes') {
       const open = this.cards.filter(c => !c.done);
       if (open.length === 1) return this.confirm(open[0], open[0].action || 'terminal');
@@ -1179,6 +1252,16 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
       return this.say('OK, dismissed.');
     }
     if (intent === 'find') return this.find(text.replace(/^\s*\S+\s*(up\s*)?/i, ''));
+
+    // Plain-English view commands ("show prod servers as a table"), unless the
+    // message carries connection details (key: value, user@host, URLs, IPs).
+    const looksLikeDetails = /\n|[:=]\s*\S|@\S+\.|:\/\/|\b\d{1,3}(\.\d{1,3}){3}\b/.test(text) && !/\b(password|user|url|host)\s+(for|of)\b/i.test(text);
+    if (!looksLikeDetails || !['terminal', 'files', 'db', 'save'].includes(intent)) {
+      try {
+        const reply = await runCommand(text);
+        if (reply) return this.say(reply.replace(/\n/g, '<br>'));
+      } catch (err) { console.error(err); return this.say('Sorry, that went wrong: ' + esc(err.message)); }
+    }
 
     let found = [];
     try { found = await api('POST', '/api/parse', { text }); } catch (err) { return this.say(esc(err.message)); }
@@ -1197,7 +1280,7 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
     if (!found.length) {
       return this.say(intent
         ? 'I couldn\'t find a host in that. Paste the details (host, user, password) or name a saved server.'
-        : 'I didn\'t spot any host there. Paste connection details and add <code>terminal</code> or <code>ftp</code>, or type <code>help</code>.');
+        : 'I didn\'t understand that. Try e.g. <code>show prod servers</code>, <code>group by env</code>, <code>password for app01</code>, or paste connection details with <code>putty</code>. Type <code>help</code> for everything I can do.');
     }
     const proto = this.fileProto(text);
     this.say(found.length === 1 ? (intent ? 'Here\'s what I understood — check it and confirm (or type <code>yes</code>):' : 'Found this. What should I do with it?') : `Found ${found.length} servers:`);
@@ -1325,6 +1408,49 @@ function siteOf(host) {
   return p.slice(-n).join('.');
 }
 const ENV_ORDER = { PROD: 0, DR: 1, UAT: 2, STAGE: 3, TEST: 4, DEV: 5 };
+
+// Same page under different spellings → one key (mirrors normURL on the server).
+function normURL(raw) {
+  try {
+    const u = new URL(raw);
+    let host = u.hostname.toLowerCase().replace(/^www\./, '');
+    if (u.port && u.port !== '80' && u.port !== '443') host += ':' + u.port;
+    for (const k of [...u.searchParams.keys()]) if (/^utm_|^(fbclid|gclid|mc_cid|mc_eid)$/i.test(k)) u.searchParams.delete(k);
+    u.searchParams.sort();
+    const q = u.searchParams.toString();
+    return host + u.pathname.replace(/\/+$/, '') + (q ? '?' + q : '');
+  } catch { return (raw || '').toLowerCase().replace(/\/+$/, ''); }
+}
+
+// Internal (work) links get priority over public sites.
+const INTERNAL_SUFFIX = /\.(local|corp|internal|intra|intranet|lan|home|priv|private|ad|localdomain|int|svc|cluster\.local)$/i;
+const PUBLIC_SITES = new Set(['google.com', 'google.co.uk', 'bing.com', 'yahoo.com', 'github.com', 'gitlab.com', 'stackoverflow.com', 'stackexchange.com',
+  'superuser.com', 'serverfault.com', 'youtube.com', 'wikipedia.org', 'microsoft.com', 'live.com', 'office.com', 'apple.com', 'amazon.com', 'amazon.co.uk',
+  'facebook.com', 'linkedin.com', 'twitter.com', 'x.com', 'reddit.com', 'medium.com', 'w3schools.com', 'mozilla.org', 'npmjs.com', 'pypi.org',
+  'docker.com', 'oracle.com', 'postgresql.org', 'go.dev', 'golang.org', 'python.org', 'java.com', 'apache.org', 'chatgpt.com', 'openai.com',
+  'anthropic.com', 'claude.ai', 'bbc.co.uk', 'bbc.com', 'cnn.com', 'netflix.com', 'spotify.com', 'whatsapp.com', 'instagram.com', 'gmail.com']);
+let internalDomainCache = null;
+function internalDomains() {
+  if (internalDomainCache) return internalDomainCache;
+  const d = new Set();
+  for (const e of S.entries) {
+    const h = (e.host || '').toLowerCase();
+    if (!h || !h.includes('.') || /^[\d.]+$/.test(h)) continue;
+    const site = siteOf(h);
+    if (PUBLIC_SITES.has(site)) continue;
+    // Domains of your servers, databases and saved logins are work domains.
+    if (!/^https?:/i.test(e.url || '') || e.username || e.has_password || (e.source === '' && e.clip_ids?.length)) d.add(site);
+  }
+  return (internalDomainCache = d);
+}
+function isInternal(e) {
+  const h = (e.host || '').toLowerCase();
+  if (!h) return false;
+  if (e.username || e.has_password) return true;
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|169\.254\.)/.test(h) || !h.includes('.') || INTERNAL_SUFFIX.test(h)) return true;
+  const site = siteOf(h);
+  return !PUBLIC_SITES.has(site) && internalDomains().has(site);
+}
 function avatar(text) {
   let h = 0;
   for (const c of text) h = (h * 31 + c.charCodeAt(0)) % 360;
@@ -1334,13 +1460,24 @@ function avatar(text) {
 const Bookmarks = {
   mode: localStorage.getItem('bmGroup') || 'smart',
 
+  internalOnly: (() => { try { return localStorage.getItem('bmInternalOnly') === '1'; } catch { return false; } })(),
+
   list() {
     const q = $('#bmSearch').value.trim().toLowerCase();
-    return S.entries.filter(e => e.url && /^https?:/i.test(e.url) && matches(e, q));
+    internalDomainCache = null;
+    // One tile per real link: prefer the copy with a login, notes or most opens.
+    const best = new Map();
+    const score = e => (e.has_password ? 4 : 0) + (e.username ? 2 : 0) + (e.notes ? 1 : 0) + (e.open_count || 0) / 1000;
+    for (const e of (this.showHidden ? S.allEntries.filter(x => x.hidden) : S.entries)) {
+      if (!e.url || !/^https?:/i.test(e.url)) continue;
+      const k = normURL(e.url), cur = best.get(k);
+      if (!cur || score(e) > score(cur)) best.set(k, e);
+    }
+    return [...best.values()].filter(e => matches(e, q) && viewMatch(e) && (!this.internalOnly || isInternal(e)));
   },
 
   sortItems(a, b) {
-    return (b.open_count || 0) - (a.open_count || 0) || (ENV_ORDER[a.env] ?? 9) - (ENV_ORDER[b.env] ?? 9) || a.name.localeCompare(b.name);
+    return (isInternal(b) - isInternal(a)) || (b.open_count || 0) - (a.open_count || 0) || (ENV_ORDER[a.env] ?? 9) - (ENV_ORDER[b.env] ?? 9) || a.name.localeCompare(b.name);
   },
 
   tile(e) {
@@ -1352,7 +1489,7 @@ const Bookmarks = {
         <div class="bm-sub">${label && e.name !== e.host ? `<span class="ulabel">${esc(label)}</span>` : ''}${esc(e.host)}${e.username ? ' · ' + esc(e.username) : ''}</div>
         ${e.folder && this.mode !== 'folder' ? `<div class="bm-sub" title="${esc(e.folder)}">📁 ${esc(e.folder.split(' › ').slice(1).join(' › ') || e.folder)}</div>` : ''}</div>
       <div class="bm-meta">${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="n">${when}</span>
-        <span class="bm-tools"><button class="icon" data-bmcopy="${e.id}" title="Copy URL">URL</button>${e.password ? `<button class="icon" data-bmpw="${e.id}" title="Copy password">pw</button>` : ''}<button class="icon" data-bmedit="${e.id}">✎</button></span></div>
+        <span class="bm-tools"><button class="icon" data-bmcopy="${e.id}" title="Copy URL">URL</button>${e.password ? `<button class="icon" data-bmpw="${e.id}" title="Copy password">pw</button>` : ''}<button class="icon" data-bmedit="${e.id}" title="Edit">✎</button>${e.hidden ? `<button class="icon" data-bmrestore="${e.id}" title="Show this bookmark again">↺ Restore</button>` : `<button class="icon danger" data-bmdel="${e.id}" title="Remove from WorkHub (your browser is not changed)">🗑</button>`}</span></div>
     </div>`;
   },
 
@@ -1361,7 +1498,7 @@ const Bookmarks = {
   },
 
   render() {
-    const all = this.list();
+    let all = this.list();
     if (!all.length) {
       $('#bmBoard').innerHTML = `<div class="empty">No web links yet.<br>Copy or paste URLs, press <b>+ Add</b>, or <b>Import from Edge/Chrome</b>.</div>`;
       return;
@@ -1374,7 +1511,10 @@ const Bookmarks = {
       env: e => e.env || 'No environment',
       folder: e => e.folder || 'Saved in WorkHub',
     }[this.mode];
+    let external = [];
     if (this.mode === 'smart') {
+      external = all.filter(e => !isInternal(e));
+      all = all.filter(e => isInternal(e));
       const used = all.filter(e => e.open_count > 0);
       const top = [...used].sort((a, b) => b.open_count - a.open_count).slice(0, 8);
       const recent = [...used].filter(e => !top.includes(e)).sort((a, b) => new Date(b.last_used) - new Date(a.last_used)).slice(0, 8);
@@ -1386,9 +1526,13 @@ const Bookmarks = {
     const weight = g => groups[g].reduce((s, e) => s + (e.open_count || 0), 0);
     // Folders keep the browser's order (alphabetical path = tree order).
     const order = this.mode === 'folder' ? (a, b) => a.localeCompare(b)
-      : (a, b) => weight(b) - weight(a) || groups[b].length - groups[a].length || a.localeCompare(b);
+      : (a, b) => internalShare(b) - internalShare(a) || weight(b) - weight(a) || groups[b].length - groups[a].length || a.localeCompare(b);
+    const internalShare = g => groups[g].filter(isInternal).length / groups[g].length;
     Object.keys(groups).sort(order)
       .forEach(g => { html += this.section(g, groups[g].sort(this.sortItems)); });
+    if (external.length) {
+      html += `<details class="group ext-group" ${this.extOpen ? 'open' : ''}><summary class="group-head"><h3>External sites</h3><span class="n">${external.length}</span><span class="muted tiny">public websites — click to show</span></summary><div class="bm-grid">${external.sort(this.sortItems).map(e => this.tile(e)).join('')}</div></details>`;
+    }
     $('#bmBoard').innerHTML = html;
   },
 };
@@ -1400,8 +1544,21 @@ $('#bmGroup').addEventListener('click', ev => {
   $$('#bmGroup button').forEach(x => x.classList.toggle('active', x === b));
   Bookmarks.render();
 });
-$('#bmBoard').addEventListener('click', ev => {
+$('#bmBoard').addEventListener('toggle', ev => { if (ev.target.classList?.contains('ext-group')) Bookmarks.extOpen = ev.target.open; }, true);
+$('#bmBoard').addEventListener('click', async ev => {
   const t = ev.target.closest('button');
+  if (t?.dataset.bmdel) {
+    // Hide rather than delete: WorkHub remembers it so the next sync doesn't import it again.
+    const e = byId(t.dataset.bmdel);
+    await api('POST', `/api/entries/${e.id}/hide`, { hidden: true }).catch(err => toast(err.message, true));
+    toast(`Removed "${e.name}" — turn on "Show hidden" to restore it`);
+    return poll();
+  }
+  if (t?.dataset.bmrestore) {
+    await api('POST', `/api/entries/${t.dataset.bmrestore}/hide`, { hidden: false }).catch(err => toast(err.message, true));
+    toast('Restored');
+    return poll();
+  }
   if (t?.dataset.bmcopy) return copyText(byId(t.dataset.bmcopy).url);
   if (t?.dataset.bmpw) return copyText(byId(t.dataset.bmpw).password, 'Password copied');
   if (t?.dataset.bmedit) return openEntryDialog(byId(t.dataset.bmedit));
@@ -1426,6 +1583,9 @@ Bookmarks.check = async (ids) => {
   } catch (err) { toast(err.message, true); }
 };
 $('#bmCheck').onclick = () => Bookmarks.check();
+$('#bmHidden').onchange = e => { Bookmarks.showHidden = e.target.checked; Bookmarks.render(); };
+$('#bmInternal').checked = Bookmarks.internalOnly;
+$('#bmInternal').onchange = e => { Bookmarks.internalOnly = e.target.checked; try { localStorage.setItem('bmInternalOnly', e.target.checked ? '1' : '0'); } catch { /* ignore */ } Bookmarks.render(); };
 $('#bmSync').onchange = e => saveSettings({ no_browser_sync: !e.target.checked }).then(() => e.target.checked && Bookmarks.sync(true));
 
 // ---------- SQL (Oracle / PostgreSQL) ----------
