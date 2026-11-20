@@ -293,7 +293,11 @@ document.addEventListener('keydown', e => {
 async function refreshAll() {
   const [entries, clips, settings] = await Promise.all([api('GET', '/api/entries'), api('GET', '/api/clips'), api('GET', '/api/settings')]);
   S.entries = entries || []; S.clips = clips || []; S.settings = settings;
-  renderSettings(); renderFilters(); renderBoard(); renderClips(); Mail.render(); Tree.render(); Bookmarks.render(); Notes.renderLists();
+  // Each part draws on its own so one failure can't blank the rest of the app.
+  for (const [name, fn] of [['settings', renderSettings], ['filters', renderFilters], ['dashboard', renderBoard], ['captured', renderClips],
+    ['outlook', () => Mail.render()], ['tree', () => Tree.render()], ['bookmarks', () => Bookmarks.render()], ['notes', () => Notes.renderLists()]]) {
+    try { await fn(); } catch (err) { console.error(`WorkHub: drawing ${name} failed:`, err); }
+  }
 }
 
 async function poll() {
@@ -302,7 +306,7 @@ async function poll() {
     $('#dataDir').textContent = 'Data: ' + data_dir;
     $('#appVersion').textContent = 'Version ' + app_version;
     if (v !== S.version) { S.version = v; await refreshAll(); }
-  } catch (e) { /* server stopped or session expired */ }
+  } catch (e) { if (e.message !== 'unauthorized') console.error('WorkHub refresh failed:', e); }
 }
 setInterval(poll, 2500);
 
@@ -1868,7 +1872,11 @@ $('#sqlCsv').onclick = () => {
 
 // ---------- Outlook monitoring ----------
 const Mail = {
-  cfg() { return { enabled: false, rules: [], folder: '', minutes: 2, keep_all: false, lookback: 7, ...(S.settings.mail || {}) }; },
+  cfg() {
+    const c = { enabled: false, folder: '', minutes: 2, keep_all: false, lookback: 7, ...(S.settings.mail || {}) };
+    c.rules = c.rules || []; // a new workspace sends null
+    return c;
+  },
   async save(patch) { await saveSettings({ mail: { ...this.cfg(), ...patch } }); this.render(); },
   render() {
     const c = this.cfg();
