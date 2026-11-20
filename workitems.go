@@ -7,21 +7,26 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"html"
 	"io"
 	"net/http"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 )
 
 type WorkItem struct {
-	ID      string    `json:"id"`
-	Title   string    `json:"title"`
-	Status  string    `json:"status"` // todo, doing, blocked, done
-	Tags    []string  `json:"tags,omitempty"`
-	Blocks  []*Block  `json:"blocks"`
-	Created time.Time `json:"created"`
-	Updated time.Time `json:"updated"`
+	ID      string       `json:"id"`
+	Title   string       `json:"title"`
+	Status  string       `json:"status"` // todo, doing, blocked, done
+	Tags    []string     `json:"tags,omitempty"`
+	Blocks  []*Block     `json:"blocks"`          // older format, converted into Doc by the page
+	Doc     string       `json:"doc"`             // the free-form document (sanitised HTML)
+	Files   []Attachment `json:"files,omitempty"` // images/files placed in Doc
+	Created time.Time    `json:"created"`
+	Updated time.Time    `json:"updated"`
 }
 
 type Block struct {
@@ -93,6 +98,9 @@ func (s *Store) DeleteWorkItem(id string) {
 				if b.File != nil {
 					_ = removeFile(s.attachDir(), b.File.ID)
 				}
+			}
+			for _, f := range w.Files {
+				_ = removeFile(s.attachDir(), f.ID)
 			}
 			s.st.WorkItems = append(s.st.WorkItems[:i], s.st.WorkItems[i+1:]...)
 			s.changed()
@@ -166,9 +174,40 @@ func (s *Store) DeleteBlock(id, bid string) error {
 	return errors.New("block not found")
 }
 
-// workAttachment finds a file stored on a work item block (see ReadAttachment).
+// SetWorkDoc saves a work item's document.
+func (s *Store) SetWorkDoc(id, doc string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w := s.workItem(id)
+	if w == nil {
+		return errors.New("work item not found")
+	}
+	w.Doc, w.Updated = doc, time.Now()
+	w.Blocks = nil // converted into the document
+	s.changed()
+	return nil
+}
+
+func (s *Store) AddWorkFile(id string, a Attachment) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w := s.workItem(id)
+	if w == nil {
+		return errors.New("work item not found")
+	}
+	w.Files = append(w.Files, a)
+	s.changed()
+	return nil
+}
+
+// workAttachment finds a file stored on a work item (see ReadAttachment).
 func (s *Store) workAttachment(aid string) *Attachment {
 	for _, w := range s.st.WorkItems {
+		for i := range w.Files {
+			if w.Files[i].ID == aid {
+				return &w.Files[i]
+			}
+		}
 		for _, b := range w.Blocks {
 			if b.File != nil && b.File.ID == aid {
 				return b.File
@@ -186,6 +225,16 @@ func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 		n := map[string]int{}
 		var sb strings.Builder
 		sb.WriteString(strings.ToLower(wi.Title + " " + strings.Join(wi.Tags, " ")))
+		doc := strings.ToLower(wi.Doc)
+		n["image"] += strings.Count(doc, "<img")
+		n["link"] += strings.Count(doc, "<a ")
+		if strings.TrimSpace(tagRe.ReplaceAllString(wi.Doc, "")) != "" {
+			n["text"]++
+		}
+		sb.WriteString(" " + strings.ToLower(html.UnescapeString(tagRe.ReplaceAllString(strings.ReplaceAll(wi.Doc, "<", " <"), " "))))
+		for _, m := range hrefRe.FindAllStringSubmatch(wi.Doc, -1) {
+			sb.WriteString(" " + strings.ToLower(m[1]))
+		}
 		for _, b := range wi.Blocks {
 			n[b.Kind]++
 			sb.WriteString(" " + strings.ToLower(b.Text+" "+b.URL+" "+b.Title))
@@ -214,10 +263,32 @@ func (a *App) handleWorkSave(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err)
 		return
 	}
-	writeJSON(w, a.store.SaveWorkItem(in))
+	wi := a.store.SaveWorkItem(in)
+	_, _ = a.store.writeWorkDocx(wi.ID) // title/status/tags are in the Word copy too
+	writeJSON(w, wi)
+}
+
+// handleWorkWord opens the work item's Word copy ("word") or its folder.
+func (a *App) handleWorkWord(w http.ResponseWriter, r *http.Request) {
+	name, err := a.store.writeWorkDocx(r.PathValue("id"))
+	if name == "" && err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	target := name
+	if r.URL.Query().Get("what") == "folder" {
+		target = filepath.Dir(name)
+	}
+	openPath(target)
+	res := map[string]any{"path": name}
+	if err != nil {
+		res["warning"] = err.Error()
+	}
+	writeJSON(w, res)
 }
 
 func (a *App) handleWorkDelete(w http.ResponseWriter, r *http.Request) {
+	a.store.removeWorkDocx(r.PathValue("id"))
 	a.store.DeleteWorkItem(r.PathValue("id"))
 	writeJSON(w, map[string]bool{"ok": true})
 }
@@ -284,6 +355,68 @@ func (a *App) handleWorkAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, []Block{b})
+}
+
+var (
+	tagRe  = regexp.MustCompile(`<[^>]*>`)
+	hrefRe = regexp.MustCompile(`href="([^"]*)"`)
+)
+
+func (a *App) handleWorkDoc(w http.ResponseWriter, r *http.Request) {
+	b, err := io.ReadAll(io.LimitReader(r.Body, 20<<20))
+	if err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	if err := a.store.SetWorkDoc(r.PathValue("id"), string(b)); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	// Keep the Word copy in <data>/work-items up to date.
+	name, derr := a.store.writeWorkDocx(r.PathValue("id"))
+	res := map[string]any{"ok": true, "docx": name}
+	if derr != nil {
+		res["docx_error"] = derr.Error()
+	}
+	writeJSON(w, res)
+}
+
+// handleWorkFile stores an image/file pasted or dropped into the document.
+func (a *App) handleWorkFile(w http.ResponseWriter, r *http.Request) {
+	mr, err := r.MultipartReader()
+	if err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	var out []Attachment
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			writeErr(w, 400, err)
+			return
+		}
+		if part.FileName() == "" {
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(part, maxAttachment+1))
+		if err != nil {
+			writeErr(w, 400, err)
+			return
+		}
+		at, err := a.store.storeAttachment(part.FileName(), data)
+		if err == nil {
+			err = a.store.AddWorkFile(r.PathValue("id"), at)
+		}
+		if err != nil {
+			writeErr(w, 400, err)
+			return
+		}
+		out = append(out, at)
+	}
+	writeJSON(w, out)
 }
 
 func (a *App) handleWorkBlock(w http.ResponseWriter, r *http.Request) {

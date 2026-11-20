@@ -14,6 +14,7 @@ require (
 	github.com/pkg/sftp v1.13.12
 	github.com/sijms/go-ora/v2 v2.9.0
 	golang.org/x/crypto v0.59.0
+	golang.org/x/net v0.62.0
 	golang.org/x/sys v0.50.0
 )
 
@@ -42,7 +43,6 @@ require (
 	github.com/u-root/u-root v0.16.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
-	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect

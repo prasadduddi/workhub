@@ -20,12 +20,15 @@ type Finding struct {
 
 var (
 	reURL        = regexp.MustCompile(`(?i)\b(?:https?|ftps?|sftp|ssh|ldaps?|jdbc:[a-z0-9]+(?::[a-z0-9]+)*|mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqps?|smb|rdp|wss?)://[^\s"'<>\x60]+`)
-	reOracleJDBC = regexp.MustCompile(`(?i)jdbc:oracle:thin:(?:([^/@\s]+)/([^@\s]+))?@(?://)?([A-Za-z0-9.\-]+):(\d{1,5})[/:]([A-Za-z0-9_.$\-]+)`)
-	reUserAt     = regexp.MustCompile(`\b([A-Za-z0-9._\-\\]+)@([A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9\-]+)*)(?::(\d{1,5}))?\b`)
-	rePortFlag   = regexp.MustCompile(`\s-[pP]\s*(\d{1,5})\b`)
-	reUNC        = regexp.MustCompile(`\\\\([A-Za-z0-9.\-]+)\\[^\s]+`)
-	reIPv4       = regexp.MustCompile(`\b((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?::(\d{1,5}))?\b`)
-	reFQDN       = regexp.MustCompile(`\b((?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63})(?::(\d{1,5}))?\b`)
+	reOracleJDBC = regexp.MustCompile(`(?i)jdbc:oracle:thin:(?:([^/@\s]+)/([^@\s]+))?@(?://)?([A-Za-z0-9.\-]+):(\d{1,5})([/:])([A-Za-z0-9_.$\-]+)`)
+	// Oracle TNS form: jdbc:oracle:thin:[user/pass]@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=h)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=s)))
+	reOracleTNS = regexp.MustCompile(`(?is)jdbc:oracle:thin:(?:([^/@\s]+)/([^@\s]+))?@\s*(\(\s*DESCRIPTION.*?\)\s*\)\s*\))`)
+	reTNSPart   = regexp.MustCompile(`(?i)\(\s*(HOST|PORT|SERVICE_NAME|SID)\s*=\s*([^)\s]+)\s*\)`)
+	reUserAt    = regexp.MustCompile(`\b([A-Za-z0-9._\-\\]+)@([A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9\-]+)*)(?::(\d{1,5}))?\b`)
+	rePortFlag  = regexp.MustCompile(`\s-[pP]\s*(\d{1,5})\b`)
+	reUNC       = regexp.MustCompile(`\\\\([A-Za-z0-9.\-]+)\\[^\s]+`)
+	reIPv4      = regexp.MustCompile(`\b((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?::(\d{1,5}))?\b`)
+	reFQDN      = regexp.MustCompile(`\b((?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63})(?::(\d{1,5}))?\b`)
 
 	reKVHost = regexp.MustCompile(`(?i)\b(?:host\s?name|host|server\s?name|server|ip\s?address|ip|address|endpoint|machine|node)\s*[:=]\s*([^\s,;)("'<>]+)`)
 	reKVPort = regexp.MustCompile(`(?i)\bport\s*(?:no\.?|number|#)?\s*[:=]?\s*(\d{1,5})\b`)
@@ -155,6 +158,32 @@ func parseChunk(s string) []Finding {
 	masked := s
 	var targets []Finding
 
+	for _, m := range reOracleTNS.FindAllStringSubmatchIndex(masked, -1) {
+		f := Finding{Protocol: "oracle", URL: s[m[0]:m[1]], Extra: map[string]string{}}
+		if m[2] >= 0 {
+			f.Username, f.Password = s[m[2]:m[3]], s[m[4]:m[5]]
+		}
+		for _, p := range reTNSPart.FindAllStringSubmatch(s[m[6]:m[7]], -1) {
+			switch strings.ToUpper(p[1]) {
+			case "HOST":
+				if f.Host == "" {
+					f.Host = p[2]
+				}
+			case "PORT":
+				if f.Port == 0 {
+					f.Port, _ = strconv.Atoi(p[2])
+				}
+			case "SERVICE_NAME":
+				f.Extra["service"] = p[2]
+			case "SID":
+				f.Extra["sid"] = p[2]
+			}
+		}
+		if f.Host != "" {
+			targets = append(targets, f)
+		}
+		masked = blank(masked, m[0], m[1])
+	}
 	for _, m := range reOracleJDBC.FindAllStringSubmatchIndex(masked, -1) {
 		g := func(i int) string {
 			if m[2*i] < 0 {
@@ -163,9 +192,13 @@ func parseChunk(s string) []Finding {
 			return s[m[2*i]:m[2*i+1]]
 		}
 		port, _ := strconv.Atoi(g(4))
+		extra := map[string]string{"service": g(6)}
+		if g(5) == ":" { // host:port:SID is the older SID form
+			extra = map[string]string{"sid": g(6)}
+		}
 		targets = append(targets, Finding{
 			Host: g(3), Port: port, Protocol: "oracle", URL: s[m[0]:m[1]],
-			Username: g(1), Password: g(2), Extra: map[string]string{"service": g(5)},
+			Username: g(1), Password: g(2), Extra: extra,
 		})
 		masked = blank(masked, m[0], m[1])
 	}
@@ -320,6 +353,22 @@ func fromURL(raw string) (Finding, bool) {
 		// Keep credentials out of the stored URL.
 		u.User = nil
 		f.URL = u.String()
+	}
+	if q := u.Query(); scheme != "http" && scheme != "https" && (q.Has("user") || q.Has("password")) {
+		f.Username = orDefault(f.Username, q.Get("user"))
+		f.Password = orDefault(f.Password, q.Get("password"))
+		q.Del("password") // never keep a password inside the stored URL
+		u.RawQuery = q.Encode()
+		f.URL = u.String()
+		if strings.HasPrefix(strings.ToLower(raw), "jdbc:") {
+			f.URL = "jdbc:" + f.URL
+		}
+	}
+	if db := strings.Trim(u.Path, "/"); db != "" && (scheme == "postgresql" || scheme == "postgres" || scheme == "mysql" || scheme == "sqlserver") {
+		if f.Extra == nil {
+			f.Extra = map[string]string{}
+		}
+		f.Extra["database"] = db
 	}
 	if f.Port == 0 && scheme != "http" && scheme != "https" {
 		f.Port = defaultPorts[scheme]

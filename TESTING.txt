@@ -64,3 +64,11 @@ Work items (Notepad++)
   [ ] Copy a Jira/Confluence link, Ctrl+V -> link card with label; click opens in Chrome
   [ ] Paste a paragraph -> note block; edit it; reopen WorkHub -> still there
   [ ] Status / tags; search finds text inside the page; delete a block; move blocks up/down
+
+Work items as documents + Word copies
+  [ ] Type freely; "# " heading, "- " bullets, "[] " checkbox; Ctrl+B/I/U; Ctrl+click opens a link in Chrome
+  [ ] Win+Shift+S then Ctrl+V -> screenshot appears where the cursor is
+  [ ] Paste from Outlook/Confluence -> formatting kept
+  [ ] Open in Word -> workhub-data\work-items\<title>.docx opens with text, links and screenshots
+JDBC
+  [ ] Copy jdbc:oracle:thin:@//host:1521/SERVICE (or :SID, or a TNS (DESCRIPTION=...) string) -> appears in the SQL tree; double-click connects

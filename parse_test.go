@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseSamples(t *testing.T) {
 	cases := []struct {
@@ -28,5 +31,47 @@ func TestParseSamples(t *testing.T) {
 				t.Errorf("%s[%d]: got %+v\n want %+v", c.name, i, g, w)
 			}
 		}
+	}
+}
+
+func TestJDBC(t *testing.T) {
+	cases := []struct {
+		text                       string
+		host, user, pass, key, val string
+		port                       int
+		proto                      string
+	}{
+		{"jdbc:oracle:thin:@//ora-uat.corp.local:1521/PAYUAT", "ora-uat.corp.local", "", "", "service", "PAYUAT", 1521, "oracle"},
+		{"jdbc:oracle:thin:scott/tiger@dbhost01:1522:ORCL", "dbhost01", "scott", "tiger", "sid", "ORCL", 1522, "oracle"},
+		{"jdbc:oracle:thin:app/s3cret@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=ora-prod-scan)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=PAYPRD)))", "ora-prod-scan", "app", "s3cret", "service", "PAYPRD", 1521, "oracle"},
+		{"jdbc:postgresql://pg-dev01:5432/orders?user=app&password=pw1&currentSchema=sales", "pg-dev01", "app", "pw1", "database", "orders", 5432, "postgresql"},
+		{"spring.datasource.url=jdbc:postgresql://pg-uat.corp.local/billing", "pg-uat.corp.local", "", "", "database", "billing", 5432, "postgresql"},
+	}
+	for _, c := range cases {
+		got := Parse(c.text)
+		if len(got) != 1 {
+			t.Errorf("%s: %d findings %+v", c.text, len(got), got)
+			continue
+		}
+		f := got[0]
+		if f.Host != c.host || f.Port != c.port || f.Username != c.user || f.Password != c.pass || f.Protocol != c.proto || f.Extra[c.key] != c.val {
+			t.Errorf("%s:\n got %+v", c.text, f)
+		}
+		if strings.Contains(f.URL, "password") {
+			t.Errorf("password kept in URL: %s", f.URL)
+		}
+	}
+	// Captured from the clipboard it becomes a ready SQL connection.
+	s, _ := OpenStore(t.TempDir())
+	_, es := s.Ingest("jdbc:oracle:thin:scott/tiger@dbhost01:1522:ORCL", "clipboard", "")
+	e, _ := s.Entry(es[0].ID)
+	if dbKind(e) != "oracle" || e.Name != "dbhost01 / ORCL" {
+		t.Fatalf("entry %+v", e)
+	}
+	if name, sid := dbName(e); name != "ORCL" || !sid {
+		t.Fatalf("dbName = %q sid=%v", name, sid)
+	}
+	if _, dsn, err := dbDSN(e, e.Username, e.Password, ""); err != nil || !strings.Contains(dsn, "SID=ORCL") {
+		t.Fatalf("dsn %q %v", dsn, err)
 	}
 }

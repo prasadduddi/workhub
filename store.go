@@ -938,6 +938,9 @@ func inferEnv(s string) string {
 }
 
 func defaultName(e *Entry) string {
+	if db := orDefault(e.Extra["service"], orDefault(e.Extra["sid"], e.Extra["database"])); db != "" && e.Host != "" && dbKind(*e) != "" {
+		return e.Host + " / " + db
+	}
 	switch {
 	case e.Host != "":
 		return e.Host

@@ -324,6 +324,20 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .wblock.image img { max-width: 100%; max-height: 420px; border-radius: 4px; cursor: zoom-in; display: block; margin-bottom: 4px; }
 .wblock.image input { width: 100%; font-size: 12.5px; }
 
+/* work item document */
+.wdoc { flex: 1; min-height: 420px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 26px;
+  font: calc(var(--fs-editor) + 1px)/1.6 "Segoe UI", system-ui, sans-serif; outline: none; overflow-wrap: anywhere; cursor: text; }
+.wdoc:focus { border-color: var(--accent); }
+.wdoc.empty::before { content: attr(data-placeholder); color: var(--muted); white-space: pre-wrap; pointer-events: none; }
+.wdoc h1 { font-size: 1.6em; margin: .6em 0 .3em; } .wdoc h2 { font-size: 1.3em; margin: .6em 0 .3em; } .wdoc h3 { font-size: 1.1em; }
+.wdoc p { margin: .3em 0; } .wdoc ul, .wdoc ol { margin: .3em 0; padding-left: 1.6em; }
+.wdoc a { color: var(--accent); text-decoration: underline; cursor: pointer; }
+.wdoc img { max-width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--border); margin: 4px 0; cursor: zoom-in; }
+.wdoc table { border-collapse: collapse; margin: 6px 0; } .wdoc td, .wdoc th { border: 1px solid var(--border); padding: 3px 8px; }
+.wdoc blockquote { border-left: 3px solid var(--border); margin: 6px 0; padding: 2px 12px; color: var(--muted); }
+.wdoc pre, .wdoc code { font-family: var(--mono); background: var(--panel2); border-radius: 4px; } .wdoc pre { padding: 8px 10px; white-space: pre-wrap; }
+.wdoc input[type=checkbox] { transform: translateY(1px); margin-right: 4px; }
+
 /* chat-applied view filters */
 .vchips { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 10px; }
 .vchips:empty { display: none; }

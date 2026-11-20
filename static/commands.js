@@ -133,12 +133,27 @@ const CMD = (() => {
     // "group all windows related to app-prod-01", "create group Release with a, b and c",
     // "make a group called Payments for payments and pay-api", "group everything about ora-uat"
     if (/\b(group|create (a |new )?group|make (a |new )?group|new group|start (a )?group|collect|gather|bundle)\b/.test(s) && !/\bgroup(ed)? by\b/.test(s)) {
+      // The group's name may come at the end: "… and name them as DEV05",
+      // "… call it DEV05", "… named DEV05", "… as DEV05".
+      let gtext = text, givenName = '';
+      const nameAt = [
+        /[,;]?\s*(?:\band\s+|\bthen\s+)?(?:name|call|label|title|save)\s+(?:it|them|this|that|these|those|the group|the result|the list|the links)?\s*(?:as|to)?\s*["'“]?([^"'”]+?)["'”]?\s*$/i,
+        /\s+(?:and\s+)?(?:as|into)\s+(?:a\s+)?(?:new\s+)?(?:group|collection)\s+(?:called\s+|named\s+)?["'“]?([^"'”]+?)["'”]?\s*$/i,
+        /\s+(?:called|named)\s+["'“]?([^"'”]+?)["'”]?\s*$/i,
+        /\s+as\s+["'“]?([^"'”\s][^"'”]*?)["'”]?\s*$/i,
+      ];
+      for (const re of nameAt) {
+        const nm = gtext.match(re);
+        // "called Night batch for *batch*" is a name followed by patterns, handled below.
+        if (nm && nm.index > 0 && !/\s(for|with|from|containing|matching|of|related to|about)\s/i.test(nm[1])) { givenName = nm[1].trim(); gtext = gtext.slice(0, nm.index); break; }
+      }
       const NAME_RE = String.raw`\s+["'“]?([^"'”,]+?)["'”]?\s+(?:with|for|from|containing|matching|of|that (?:has|have|contains?))\s+(.+)$`;
-      let named = text.match(new RegExp(String.raw`\b(?:called|named)` + NAME_RE, 'i')) || text.match(new RegExp(String.raw`\bgroup` + NAME_RE, 'i'));
+      let named = gtext.match(new RegExp(String.raw`\b(?:called|named)` + NAME_RE, 'i')) || gtext.match(new RegExp(String.raw`\bgroup` + NAME_RE, 'i'));
       if (named && /^(all|everything|every ?thing|servers?|windows?|links?|tabs?|items?|stuff|things|anything|these|those)$/i.test(named[1].trim())) named = null;
-      const about = text.match(/\b(?:related to|relating to|for|about|matching|containing|with|around|on|mentioning|that match|that matches|of)\s+(.+)$/i);
+      const about = gtext.match(/\b(?:related to|relating to|for|about|matching|containing|with|around|on|mentioning|that match|that matches|of)\s+(.+)$/i)
+        || (givenName && gtext.match(/^\s*(?:group|collect|gather|bundle)\s+(?:all\s+|the\s+|every\s+)?(?:links?|servers?|bookmarks?|windows?|items?|things?|everything)?\s*(.+)$/i));
       const pats = splitList((named ? named[2] : about ? about[1] : '').replace(/\s+(servers?|windows?|links?|tabs?)\s*$/i, ''));
-      if (pats.length) return [{ type: 'groupCreate', name: named ? named[1].trim() : pats[0], patterns: pats }];
+      if (pats.length) return [{ type: 'groupCreate', name: givenName || (named ? named[1].trim() : pats[0]), patterns: pats }];
     }
 
     // Bulk actions on matching items — always confirmed before anything changes.

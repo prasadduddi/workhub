@@ -298,3 +298,12 @@ func registryAppPath(exe string) string {
 	}
 	return ""
 }
+
+// openPath opens a file with its program (e.g. Word) or a folder in Explorer.
+func openPath(p string) {
+	if st, err := os.Stat(p); err == nil && st.IsDir() {
+		_ = exec.Command("explorer.exe", p).Start()
+		return
+	}
+	_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", p).Start()
+}

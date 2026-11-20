@@ -74,3 +74,11 @@ func pickFile(startDir string) (string, bool, error) {
 }
 
 func registryAppPath(exe string) string { return "" }
+
+func openPath(p string) {
+	if runtime.GOOS == "darwin" {
+		_ = exec.Command("open", p).Start()
+	} else {
+		_ = exec.Command("xdg-open", p).Start()
+	}
+}
