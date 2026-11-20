@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"hash/fnv"
@@ -182,6 +183,19 @@ func listen(port int, dir string) (net.Listener, error) {
 			return ln, nil
 		}
 		if url, ok := existingInstance(dir, port); ok {
+			// An older WorkHub left running would otherwise keep showing its
+			// old screens: ask it to close and take over.
+			if running := instanceVersion(dir, port); running != version && version != "dev" {
+				fmt.Printf("Closing the running WorkHub %s to start %s…\n", orDefault(running, "(older)"), version)
+				if stopInstance(dir, port) {
+					for j := 0; j < 40; j++ {
+						time.Sleep(250 * time.Millisecond)
+						if ln, err := net.Listen("tcp", addr); err == nil {
+							return ln, nil
+						}
+					}
+				}
+			}
 			fmt.Println("WorkHub is already running:", url)
 			if !isDesktop || !runDesktop(url, (&App{}).openLink) { // desktop: a window onto the running WorkHub
 				openBrowser(url)
@@ -296,6 +310,43 @@ func (a *App) shutdown() {
 	a.store.Flush()
 	_ = os.Remove(filepath.Join(a.dataDir, "session.token"))
 	os.Exit(0)
+}
+
+// instanceCall talks to the WorkHub already running on port with its saved
+// session token (cookie names: "wh<port>" from v1.1, "wh" in v1.0).
+func instanceCall(dir string, port int, method, path string) (*http.Response, error) {
+	tok, err := os.ReadFile(filepath.Join(dir, "session.token"))
+	if err != nil {
+		return nil, err
+	}
+	t := strings.TrimSpace(string(tok))
+	req, _ := http.NewRequest(method, fmt.Sprintf("http://127.0.0.1:%d%s", port, path), nil)
+	req.Header.Set("Cookie", fmt.Sprintf("wh%d=%s; wh=%s", port, t, t))
+	return (&http.Client{Timeout: 3 * time.Second}).Do(req)
+}
+
+// instanceVersion returns the running WorkHub's version ("" if unknown/old).
+func instanceVersion(dir string, port int) string {
+	resp, err := instanceCall(dir, port, "GET", "/api/version")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	var v struct {
+		AppVersion string `json:"app_version"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&v)
+	return v.AppVersion
+}
+
+// stopInstance asks the running WorkHub to save and quit.
+func stopInstance(dir string, port int) bool {
+	resp, err := instanceCall(dir, port, "POST", "/api/quit")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 func existingInstance(dir string, port int) (string, bool) {
