@@ -97,6 +97,7 @@ type State struct {
 	MailFrom time.Time    `json:"mail_since,omitzero"`         // newest mail already checked
 	MailIDs  []string     `json:"mail_seen,omitempty"`         // EntryIDs already captured
 	Ignored  []string     `json:"ignored_bookmarks,omitempty"` // browser bookmark URLs deleted in WorkHub
+	Props    []*PropNode  `json:"props,omitempty"`             // Properties page tree
 	Settings Settings     `json:"settings"`
 }
 

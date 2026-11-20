@@ -44,3 +44,11 @@ Desktop version (WorkHub-Desktop.exe)
   [ ] Copy/paste, Export CSV and file downloads work inside the window
   [ ] Close the window -> WorkHub stops; start again -> same size/position, same data
   [ ] Start WorkHub.exe (web) afterwards -> same data shows in the browser
+
+Properties & JSON schemas
+  [ ] + Application -> add sub-nodes (UAT, PROD); drag a node onto another to move it
+  [ ] Drop files and a whole folder (sub-folders become sub-nodes); upload via Upload files…
+  [ ] Open a .properties / .yml file -> edit -> Save (Ctrl+S)
+  [ ] Win+Shift+S, then Ctrl+V on the page -> screenshot appears; click to view full size
+  [ ] JSON Schemas: open a sample .json -> Format / Check / Validate against schema
+  [ ] Search finds text inside files (e.g. db.url)

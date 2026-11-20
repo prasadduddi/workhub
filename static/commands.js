@@ -28,7 +28,7 @@ const CMD = (() => {
     inbox: ['captured', 'capture', 'captures', 'inbox', 'clips', 'capture history', 'clipboard history', 'outlook'],
     terminal: ['putty', 'terminal', 'terminals', 'ssh page', 'console'], files: ['filezilla', 'file manager', 'files', 'sftp page', 'ftp page', 'transfers'],
     sql: ['sql', 'sql page', 'query window', 'database page', 'db page', 'sql developer'], git: ['git', 'repos', 'repositories', 'source control'],
-    notes: ['notepad', 'notepad++', 'notes', 'editor', 'note'],
+    notes: ['notepad', 'notepad++', 'notes', 'editor', 'note'], props: ['properties', 'properties page', 'property files', 'configs', 'config files', 'json schemas', 'schemas', 'app docs'],
   };
   const SORTS = {
     name: ['name', 'names', 'alphabet', 'alphabetical', 'a-z', 'a to z'], host: ['host', 'hostname', 'server', 'ip', 'address'],
@@ -403,6 +403,7 @@ const HELP = `Things you can say (in your own words — I understand synonyms an
 <b>Change</b>  "delete all youtube links" · "delete these" · "restore youtube links" · "pin these" · "move all jenkins links to DevOps" · "mark ora-uat as UAT" — I always ask before changing anything
 <b>Group</b>  "group all windows related to app-prod-01" · "create group Release with app-prod, ora-uat and jenkins" · "show group release" · "add pay-api to group payments" · "open all servers in group release" · "group tabs" · "list groups"
 <b>Block</b>  "block xhamster.com and similar sites" · "block facebook.com" · "unblock facebook.com" · "list blocked sites"
+<b>Properties</b>  "go to properties" · "go to json schemas" — then drop files/folders, paste screenshots, Format/Check/Validate JSON
 <b>Remember</b>  "save this view as Prod overview" · "open Prod overview" · "list my views" · "undo" · "reset"
 <b>Ask</b>  "how many prod servers" · "password for app-prod-01" · "user for jenkins"
 <b>Pages</b>  "go to filezilla" · "hide the sidebar" · "hide the tree" · "dark mode" · "bigger font in putty" · "font 16"

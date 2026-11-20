@@ -274,6 +274,7 @@ function show(view) {
   if (view === 'sql') SQL.fit();
   if (view === 'inbox') Mail.status();
   if (view === 'groups') Groups.render();
+  if (view === 'props') Props.load();
   if (view === 'git') {
     Git.renderRepos();
     let last = ''; try { last = localStorage.getItem('gitRepo') || ''; } catch { /* ignore */ }
