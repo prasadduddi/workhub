@@ -1399,8 +1399,17 @@ document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.ke
 // ---------- bookmarks ----------
 // Every open is counted; the Smart view puts what you use most and most
 // recently on top, then groups by application (from the URL pattern) or site.
+// Desktop version: links open in the normal browser, not inside WorkHub.
+function openExternal(u) {
+  if (window.WH_DESKTOP && window.whOpenExternal) window.whOpenExternal(u);
+  else window.open(u, '_blank', 'noopener');
+}
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('a[target="_blank"]');
+  if (a && window.WH_DESKTOP) { ev.preventDefault(); openExternal(a.href); }
+}, true);
 function openURL(e) {
-  window.open(e.url, '_blank', 'noopener');
+  openExternal(e.url);
   api('POST', `/api/entries/${e.id}/opened`).then(poll).catch(() => {});
 }
 document.addEventListener('click', ev => {

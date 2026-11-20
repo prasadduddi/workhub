@@ -9,6 +9,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.13.0
+	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/jlaffaye/ftp v0.2.4
 	github.com/pkg/sftp v1.13.12
 	github.com/sijms/go-ora/v2 v2.9.0
@@ -31,6 +32,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
+	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect

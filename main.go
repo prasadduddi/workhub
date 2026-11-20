@@ -98,10 +98,17 @@ func main() {
 		fmt.Println("WorkHub cannot open its data:", err)
 		fmt.Println("  Open:  ", url, " to choose another data folder.")
 		app.recoveryErr = err.Error()
+		srv := &http.Server{Handler: app.recoveryRoutes()}
+		if isDesktop {
+			go srv.Serve(ln)
+			if runDesktop(url) {
+				os.Exit(1)
+			}
+		}
 		if !*noBrowser {
 			openBrowser(url)
 		}
-		fatal("%v", (&http.Server{Handler: app.recoveryRoutes()}).Serve(ln))
+		fatal("%v", srv.Serve(ln))
 	}
 	app.store = store
 	if firstRun {
@@ -135,16 +142,31 @@ func main() {
 	fmt.Println("  Open:  ", url)
 	fmt.Println("  Data:  ", dir)
 	fmt.Println("Close this window (or use Quit in the app) to stop.")
+	srv := &http.Server{Handler: app.routes()}
+	if isDesktop {
+		// Desktop version: own window; closing it stops WorkHub. Without
+		// WebView2 it carries on in the browser like the web version.
+		go func() { fatal("%v", srv.Serve(ln)) }()
+		if runDesktop(url) {
+			app.shutdown()
+		}
+		openBrowser(url)
+		select {}
+	}
 	if !*noBrowser {
 		openBrowser(url)
 	}
-	fatal("%v", (&http.Server{Handler: app.routes()}).Serve(ln))
+	fatal("%v", srv.Serve(ln))
 }
 
 // fatal prints the error and waits a little so it can be read before a
 // double-clicked console window closes.
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "WorkHub error: "+format+"\n", args...)
+	if isDesktop {
+		desktopMessage("WorkHub", fmt.Sprintf(format, args...))
+		os.Exit(1)
+	}
 	time.Sleep(15 * time.Second)
 	os.Exit(1)
 }
@@ -161,7 +183,9 @@ func listen(port int, dir string) (net.Listener, error) {
 		}
 		if url, ok := existingInstance(dir, port); ok {
 			fmt.Println("WorkHub is already running:", url)
-			openBrowser(url)
+			if !isDesktop || !runDesktop(url) { // desktop: a window onto the running WorkHub
+				openBrowser(url)
+			}
 			return nil, nil
 		}
 		if os.Getenv("WORKHUB_RESTART") == "" || i >= 20 {

@@ -37,3 +37,10 @@ SQL (Oracle / PostgreSQL)
 Status dots and text size
   [ ] Bookmarks: "Check links" -> green/red dots (hover a red dot for the reason)
   [ ] A-/A+ in PuTTY, SQL, Notepad++ (or Ctrl + mouse wheel over them); Ctrl +/- zooms everything
+
+Desktop version (WorkHub-Desktop.exe)
+  [ ] Opens in its own window, no console and no browser tab
+  [ ] Links (dashboard Open, bookmarks) open in your normal browser
+  [ ] Copy/paste, Export CSV and file downloads work inside the window
+  [ ] Close the window -> WorkHub stops; start again -> same size/position, same data
+  [ ] Start WorkHub.exe (web) afterwards -> same data shows in the browser

@@ -26,6 +26,7 @@ jobs:
         run: |
           go vet ./...
           GOOS=windows go vet ./... 2>&1 | grep -v "possible misuse of unsafe.Pointer" || true
+          GOOS=windows go vet -tags desktop ./... 2>&1 | grep -v "possible misuse of unsafe.Pointer" || true
           go test -short ./...
 
       - name: Build WorkHub.exe
@@ -33,14 +34,18 @@ jobs:
           stamp=$(date -u +%Y-%m-%d-%H%M)
           version="${GITHUB_REF_NAME}-${stamp}"
           mkdir -p dist
+          # Two versions, always built together: web (browser) and desktop (own window).
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${version}" -o dist/WorkHub.exe .
+          GOOS=windows GOARCH=amd64 go build -trimpath -tags desktop -ldflags "-s -w -H windowsgui -X main.version=${version}" -o dist/WorkHub-Desktop.exe .
           cp README.md TESTING.txt dist/
-          (cd dist && zip -q "WorkHub-${stamp}.zip" WorkHub.exe README.md TESTING.txt)
+          (cd dist && zip -q "WorkHub-${stamp}.zip" WorkHub.exe WorkHub-Desktop.exe README.md TESTING.txt)
 
       - uses: actions/upload-artifact@v4
         with:
           name: WorkHub
-          path: dist/WorkHub.exe
+          path: |
+            dist/WorkHub.exe
+            dist/WorkHub-Desktop.exe
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -48,4 +53,5 @@ jobs:
         with:
           files: |
             dist/WorkHub.exe
+            dist/WorkHub-Desktop.exe
             dist/WorkHub-*.zip

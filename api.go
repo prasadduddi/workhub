@@ -61,7 +61,7 @@ func (a *App) watchClipboard() {
 // ---- misc ----
 
 func (a *App) handleVersion(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"v": a.store.Version(), "data_dir": a.dataDir, "app_version": version})
+	writeJSON(w, map[string]any{"v": a.store.Version(), "data_dir": a.dataDir, "app_version": version, "desktop": isDesktop})
 }
 
 // handleImport merges an old data folder chosen with the folder picker.

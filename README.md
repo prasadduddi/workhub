@@ -5,16 +5,26 @@ clipboard, plus PuTTY-style SSH and command prompts, FileZilla-style SFTP/FTP,
 Oracle/PostgreSQL SQL window, Git browser, bookmarks and a Notepad++-style editor.
 One file, no install, no admin rights, no Python, Java or Oracle client needed.
 
+## Two versions (same app, same data)
+| File | What it is |
+|---|---|
+| `WorkHub.exe` | **Web version** – opens in your browser; a small console window shows it's running. |
+| `WorkHub-Desktop.exe` | **Desktop version** – its own window (Microsoft Edge WebView2, built into Windows 10/11), no console. Closing the window stops it. Links open in your normal browser. If WebView2 is missing it falls back to the browser. |
+
+Both use the same data, so you can switch between them. Run one at a time per workspace
+(starting the other just opens a window onto the one already running).
+
 ## Get it onto a Windows laptop
 
 **Easiest (no Git or Go needed):** open this repository's **Releases** page in the
-browser, download `WorkHub.exe` (or the zip), save it in a folder you own such as
-`Documents\WorkHub`, and double-click it.
+browser, download `WorkHub-Desktop.exe` and/or `WorkHub.exe` (or the zip with both), save it
+in a folder you own such as `Documents\WorkHub`, and double-click it.
 
 **Build it yourself on the laptop (no admin needed):**
 1. Download the Go *zip* for Windows from https://go.dev/dl/ and extract it to e.g. `%USERPROFILE%\go-sdk`.
 2. Get the code: `git clone <this repo>`, or use GitHub's **Code → Download ZIP**.
-3. In the project folder: `%USERPROFILE%\go-sdk\go\bin\go build -o WorkHub.exe .`
+3. In the project folder: `%USERPROFILE%\go-sdk\go\bin\go build -o WorkHub.exe .` (web) and
+   `%USERPROFILE%\go-sdk\go\bin\go build -tags desktop -ldflags "-H windowsgui" -o WorkHub-Desktop.exe .` (desktop)
    (this downloads libraries from the internet; a company proxy may need `set HTTPS_PROXY=...`).
 
 When it starts, your browser opens WorkHub. Keep the small console window open;
@@ -38,7 +48,7 @@ Tag it to publish a release:
     git tag v1.1 && git push origin v1.1
 
 ## Developing
-    ./build.sh                 # dist/WorkHub.exe, dist/workhub-local, dist/WorkHub-<timestamp>.zip
+    ./build.sh                 # dist/WorkHub.exe + dist/WorkHub-Desktop.exe, dist/workhub-local, dist/WorkHub-<timestamp>.zip
     go test -short ./...       # quick tests; without -short also runs a real PostgreSQL test
 
 Options: `WorkHub.exe -workspace NAME -data D:\folder -port 47821 -no-browser`
