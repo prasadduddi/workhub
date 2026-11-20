@@ -14,6 +14,7 @@
   <button id="wsName" class="ws" title="Workspace — click to rename"></button>
   <nav id="nav">
     <div class="navrow"><button data-view="dashboard" class="active"><svg class="ni" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2" fill="#5b8ff0"/><rect x="13" y="3" width="8" height="5" rx="2" fill="#9db8f5"/><rect x="13" y="10" width="8" height="11" rx="2" fill="#5b8ff0"/><rect x="3" y="13" width="8" height="8" rx="2" fill="#9db8f5"/></svg><span class="nl">Dashboard</span></button><button id="navSearch" class="navsearch" title="Search everything (Ctrl+K)"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>
+    <button data-view="groups"><svg class="ni" viewBox="0 0 24 24"><rect x="2.5" y="3" width="8.5" height="8.5" rx="2" fill="#2a9d8f"/><rect x="13" y="3" width="8.5" height="8.5" rx="2" fill="#d9822b"/><rect x="2.5" y="13" width="8.5" height="8.5" rx="2" fill="#8e6bd8"/><rect x="13" y="13" width="8.5" height="8.5" rx="2" fill="#2f6fde"/></svg><span class="nl">Groups</span><span id="groupCount" class="count"></span></button>
     <button data-view="bookmarks"><svg class="ni" viewBox="0 0 24 24"><path d="M6 2.5h12a1 1 0 0 1 1 1V21l-7-4.5L5 21V3.5a1 1 0 0 1 1-1z" fill="#f2a900" stroke="#b07a00" stroke-width="1" stroke-linejoin="round"/><path d="m12 6 1.3 2.7 2.9.4-2.1 2 .5 2.9-2.6-1.4-2.6 1.4.5-2.9-2.1-2 2.9-.4z" fill="#fff"/></svg><span class="nl">Bookmarks</span></button>
     <button data-view="inbox"><svg class="ni" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2" fill="none" stroke="#8a93a1" stroke-width="2"/><rect x="8.5" y="2" width="7" height="4" rx="1.2" fill="#8a93a1"/><path d="M8 11h8M8 15h5" stroke="#2f6fde" stroke-width="2" stroke-linecap="round"/></svg><span class="nl">Captured</span><span id="inboxCount" class="count"></span></button>
     <button data-view="terminal"><svg class="ni" viewBox="0 0 24 24"><rect x="1.5" y="3" width="10" height="7.5" rx="1" fill="#d9dde3" stroke="#555" stroke-width="1"/><rect x="3" y="4.5" width="7" height="4.5" fill="#1d2330"/><rect x="4.5" y="10.5" width="4" height="1.5" fill="#555"/><rect x="12.5" y="12" width="10" height="7.5" rx="1" fill="#d9dde3" stroke="#555" stroke-width="1"/><rect x="14" y="13.5" width="7" height="4.5" fill="#1d2330"/><rect x="15.5" y="19.5" width="4" height="1.5" fill="#555"/><path d="M13.5 2.5 10 9.5h3l-2.5 6.5 6-8.5h-3.2l2.2-5z" fill="#f5c400" stroke="#9a7a00" stroke-width=".6" stroke-linejoin="round"/></svg><span class="nl">PuTTY</span><span id="termCount" class="count"></span></button>
@@ -59,6 +60,17 @@
     <div id="board"></div>
   </section>
 
+  <!-- GROUPS -->
+  <section id="view-groups" class="view">
+    <div class="groups-layout">
+      <div class="groups-side">
+        <button id="groupNew" class="primary">+ New group</button>
+        <div id="groupList"></div>
+      </div>
+      <div id="groupMain" class="groups-main"></div>
+    </div>
+  </section>
+
   <!-- BOOKMARKS -->
   <section id="view-bookmarks" class="view">
     <header class="toolbar">
@@ -72,6 +84,7 @@
       <button id="bmCheck" title="Check which links answer (green = reachable, red = not)">Check links</button>
       <label class="switch small" title="Hide public websites (Google, GitHub, Stack Overflow…)"><input type="checkbox" id="bmInternal"><span></span> Internal only</label>
       <label class="switch small" title="Show bookmarks you removed, to restore them"><input type="checkbox" id="bmHidden"><span></span> Show hidden</label>
+      <button id="bmBlocked" title="Sites that are never imported or captured in this workspace">Blocked sites…</button>
     </header>
     <div id="bmChips" class="vchips"></div>
     <div id="bmBoard"></div>
@@ -305,6 +318,7 @@
 <script src="vendor/addon-fit.js"></script>
 <script src="vendor/cm.js"></script>
 <script src="app.js"></script>
+<script src="groups.js"></script>
 <script src="commands.js"></script>
 </body>
 </html>

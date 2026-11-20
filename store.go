@@ -76,7 +76,16 @@ type Settings struct {
 	OpenTabs      []string     `json:"open_tabs"`
 	NoBrowserSync bool         `json:"no_browser_sync"`
 	Repos         []string     `json:"repos"`
+	Groups        []Group      `json:"groups"`
+	BlockedSites  []string     `json:"blocked_sites"`
 	Mail          MailSettings `json:"mail"`
+}
+
+// Group gathers everything matching its patterns (see static/groups.js).
+type Group struct {
+	Name     string   `json:"name"`
+	Patterns []string `json:"patterns"`
+	Color    string   `json:"color,omitempty"`
 }
 
 type State struct {
@@ -515,9 +524,16 @@ func (s *Store) SyncBookmarks(list []Bookmark) (added, removed int) {
 		ignored[normURL(u)] = true
 	}
 	now, changed := time.Now(), false
+	own := s.st.Settings.BlockedSites
+	for _, e := range s.st.Entries {
+		if e.URL != "" && !e.Hidden && blockedURL(e.URL, own) {
+			e.Hidden = true // blocked site imported earlier: hide it for good
+			changed = true
+		}
+	}
 	for _, b := range list {
 		k := norm(b.URL)
-		if ignored[k] {
+		if ignored[k] || blockedURL(b.URL, own) {
 			continue
 		}
 		if seen[k] {
@@ -664,9 +680,15 @@ func entryKey(host string, port int, user, url string) string {
 // Ingest parses text, stores the clip and merges findings into entries.
 // Clipboard captures without findings are dropped unless CaptureAll is on.
 func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
-	findings := Parse(text)
+	all := Parse(text)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var findings []Finding
+	for _, f := range all {
+		if f.URL == "" || !blockedURL(f.URL, s.st.Settings.BlockedSites) {
+			findings = append(findings, f)
+		}
+	}
 	if project == "" {
 		project = s.st.Settings.Project
 	}
@@ -875,6 +897,11 @@ func (s *Store) Settings() Settings {
 func (s *Store) SetSettings(st Settings) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, e := range s.st.Entries {
+		if e.URL != "" && !e.Hidden && blockedURL(e.URL, st.BlockedSites) {
+			e.Hidden = true
+		}
+	}
 	if st.Project == "" {
 		st.Project = "General"
 	}

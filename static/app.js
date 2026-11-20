@@ -273,6 +273,7 @@ function show(view) {
   }
   if (view === 'sql') SQL.fit();
   if (view === 'inbox') Mail.status();
+  if (view === 'groups') Groups.render();
   if (view === 'git') {
     Git.renderRepos();
     let last = ''; try { last = localStorage.getItem('gitRepo') || ''; } catch { /* ignore */ }
@@ -298,7 +299,7 @@ async function refreshAll() {
   S.clips = clips || []; S.settings = settings;
   // Each part draws on its own so one failure can't blank the rest of the app.
   for (const [name, fn] of [['settings', renderSettings], ['filters', renderFilters], ['dashboard', renderBoard], ['captured', renderClips],
-    ['outlook', () => Mail.render()], ['tree', () => Tree.render()], ['bookmarks', () => Bookmarks.render()], ['notes', () => Notes.renderLists()]]) {
+    ['outlook', () => Mail.render()], ['tree', () => Tree.render()], ['groups', () => Groups.render()], ['tabs', () => renderAllTabs()], ['bookmarks', () => Bookmarks.render()], ['notes', () => Notes.renderLists()]]) {
     try { await fn(); } catch (err) { console.error(`WorkHub: drawing ${name} failed:`, err); }
   }
 }
@@ -810,7 +811,7 @@ const Term = {
 
   renderTabs() {
     $('#termTabs').innerHTML = this.tabs.map(t => `<div class="tab ${t === this.active ? 'active' : ''}" data-t="${t.id}">
-      <span style="color:${t.closed ? 'var(--muted)' : 'var(--ok)'}">●</span>${t.local ? '⌨ ' + esc(t.local.label) : esc((t.creds.username || t.entry.username || '') + '@' + t.entry.host)}
+      <span style="color:${t.closed ? 'var(--muted)' : 'var(--ok)'}">●</span>${typeof Groups !== 'undefined' ? Groups.chip(t.local ? t.local.label + ' ' + t.local.dir : Groups.entryText(t.entry)) : ''}${t.local ? '⌨ ' + esc(t.local.label) : esc((t.creds.username || t.entry.username || '') + '@' + t.entry.host)}
       <span class="x" data-x="${t.id}">✕</span></div>`).join('');
     $('#termCount').textContent = this.tabs.filter(t => !t.closed).length || '';
   },
@@ -1589,6 +1590,14 @@ Bookmarks.check = async (ids) => {
   } catch (err) { toast(err.message, true); }
 };
 $('#bmCheck').onclick = () => Bookmarks.check();
+$('#bmBlocked').onclick = async () => {
+  const cur = (S.settings.blocked_sites || []).join(', ');
+  const v = prompt('Sites never imported or captured in this workspace (comma separated, e.g. facebook.com, example.org).\nWell-known adult sites are always blocked.', cur);
+  if (v === null) return;
+  await saveSettings({ blocked_sites: v.split(',').map(x => x.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')).filter(Boolean) });
+  await poll();
+  toast('Blocked sites saved — matching links are hidden');
+};
 $('#bmHidden').onchange = e => { Bookmarks.showHidden = e.target.checked; Bookmarks.render(); };
 $('#bmInternal').checked = Bookmarks.internalOnly;
 $('#bmInternal').onchange = e => { Bookmarks.internalOnly = e.target.checked; try { localStorage.setItem('bmInternalOnly', e.target.checked ? '1' : '0'); } catch { /* ignore */ } Bookmarks.render(); };
@@ -1687,7 +1696,7 @@ const SQL = {
 
   renderTabs() {
     $('#sqlTabs').innerHTML = this.tabs.map(t => `<div class="tab ${t === this.active ? 'active' : ''}" data-st="${t.sid}">
-      ${t.inTx ? '<span style="color:#e0a800" title="Uncommitted changes">●</span>' : dot(byId(t.entry.id) || t.entry)} 🛢 ${esc(t.entry.name)}${t.entry.env ? ` <span class="badge ${esc(t.entry.env)}">${esc(t.entry.env)}</span>` : ''}
+      ${t.inTx ? '<span style="color:#e0a800" title="Uncommitted changes">●</span>' : dot(byId(t.entry.id) || t.entry)} ${typeof Groups !== 'undefined' ? Groups.chip(Groups.entryText(t.entry)) : ''}🛢 ${esc(t.entry.name)}${t.entry.env ? ` <span class="badge ${esc(t.entry.env)}">${esc(t.entry.env)}</span>` : ''}
       <span class="x" data-sx="${t.sid}">✕</span></div>`).join('');
     $('#sqlCount').textContent = this.tabs.length || '';
   },
@@ -2287,7 +2296,7 @@ const Notes = {
 
   renderTabs() {
     $('#docTabs').innerHTML = this.docs.map(d => `<div class="tab ${d === this.active ? 'active' : ''}" data-k="${esc(d.key)}" title="${esc(d.path || d.title)}">
-      ${d.dirty ? '●' : ''}${esc(d.title)}<span class="x" data-x="${esc(d.key)}">✕</span></div>`).join('');
+      ${d.dirty ? '●' : ''}${typeof Groups !== 'undefined' ? Groups.chip((d.path || '') + ' ' + d.title + ' ' + (d.content || '').slice(0, 20000)) : ''}${esc(d.title)}<span class="x" data-x="${esc(d.key)}">✕</span></div>`).join('');
   },
 
   status(msg) { $('#docStatus').textContent = msg; },

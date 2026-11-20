@@ -100,6 +100,38 @@ const CMD = (() => {
     const sv = (ctx.views || []).find(v => s.trim() === v.toLowerCase() || s.trim() === 'open ' + v.toLowerCase() || s.trim() === 'show ' + v.toLowerCase());
     if (sv) return [{ type: 'loadView', name: sv }];
 
+    // ---- blocked sites (never imported or captured) ----
+    const siteList = t => t.replace(/\b(and |or )?(also )?(other |similar |related |any )+(sites?|websites?|domains?|ones)\b/gi, ' ').replace(/\b(sites? like|websites? like|domains? like|like|such as|the|site|website|domain|from (syncing|sync|importing|import)|syncing|sync|importing|import)\b/gi, ' ')
+      .split(/\s*(?:,|\band\b|\bor\b|&)\s*/i).map(x => x.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '')).filter(x => x.length >= 3);
+    if (/\b(list|show|what are) (the |my )?(blocked|banned) (sites|websites|domains|list)\b|^\s*blocked sites\s*$/.test(s)) return [{ type: 'blockList' }];
+    const SYNCW = String.raw`(?:synch?ing|synch?|importing|import|capturing|capture|showing|show)`;
+    if ((m = text.match(new RegExp(String.raw`^\s*(?:please\s+)?(?:block|ban|blacklist|exclude|never ${SYNCW}|stop ${SYNCW}|avoid(?: ${SYNCW})?|skip(?: ${SYNCW})?|(?:don'?t|do not) ${SYNCW})(?:\s+of)?\s+(.+?)\s*$`, 'i'))) && !/\bcolumns?\b/i.test(text)) {
+      const sites = siteList(m[1]); if (sites.length) return [{ type: 'block', sites, similar: /\b(similar|like|such|other|related)\b/i.test(m[1]) }];
+    }
+    if ((m = text.match(/^\s*(?:please\s+)?(?:unblock|allow|whitelist|un-block)\s+(.+?)\s*$/i))) { const sites = siteList(m[1]); if (sites.length) return [{ type: 'unblock', sites }]; }
+
+    // ---- groups ----
+    const splitList = t => t.split(/\s*(?:,|\band\b|\bor\b|\bplus\b|&)\s*/i).map(x => x.trim().replace(/^["'“‘]|["'”’]$/g, '')).filter(x => x && !/^(the|all|everything|servers?|windows?|links?|stuff)$/i.test(x));
+    if (/\b(arrange|sort|order|organi[sz]e|line up|group) (the |my |all )?(open )?(tabs|windows)( by group)?\b/.test(s) && !/\b(related|for|matching|containing|about|with)\b/.test(s)) return [{ type: 'groupTabs' }];
+    if (/\b(list|show|what are) (my |the |all )?groups\b/.test(s)) return [{ type: 'groupList' }];
+    if ((m = s.match(/\b(delete|remove) (the )?group\s+(.+?)\s*$/))) return [{ type: 'groupDelete', name: orig(/\bgroup\s+(.+?)\s*$/i) || m[3] }];
+    if ((m = s.match(/\bopen (all )?(the )?(servers|sessions|putty|links|bookmarks) (in|of|for) (the )?group\s+(.+?)\s*$/)))
+      return [{ type: 'groupOpenAll', kind: /link|bookmark/.test(m[3]) ? 'links' : 'putty', name: orig(/\bgroup\s+(.+?)\s*$/i) || m[6] }];
+    if ((m = text.match(/\badd\s+(.+?)\s+(?:to|into)\s+(?:the\s+)?group\s+(.+?)\s*$/i))) return [{ type: 'groupAdd', name: m[2].trim(), patterns: splitList(m[1]) }];
+    if ((m = text.match(/\bremove\s+(.+?)\s+from\s+(?:the\s+)?group\s+(.+?)\s*$/i))) return [{ type: 'groupRemovePattern', name: m[2].trim(), patterns: splitList(m[1]) }];
+    if ((m = s.match(/^\s*(show|open|view|go to) (the )?group\s+(.+?)\s*$/)) || ((m = s.match(/^\s*group\s+(.+?)\s*$/)) && (ctx.groups || []).some(g => g.toLowerCase() === m[1].trim())))
+      return [{ type: 'groupShow', name: (m[3] || m[1]).trim() }];
+    // "group all windows related to app-prod-01", "create group Release with a, b and c",
+    // "make a group called Payments for payments and pay-api", "group everything about ora-uat"
+    if (/\b(group|create (a |new )?group|make (a |new )?group|new group|start (a )?group|collect|gather|bundle)\b/.test(s) && !/\bgroup(ed)? by\b/.test(s)) {
+      const NAME_RE = String.raw`\s+["'“]?([^"'”,]+?)["'”]?\s+(?:with|for|from|containing|matching|of|that (?:has|have|contains?))\s+(.+)$`;
+      let named = text.match(new RegExp(String.raw`\b(?:called|named)` + NAME_RE, 'i')) || text.match(new RegExp(String.raw`\bgroup` + NAME_RE, 'i'));
+      if (named && /^(all|everything|every ?thing|servers?|windows?|links?|tabs?|items?|stuff|things|anything|these|those)$/i.test(named[1].trim())) named = null;
+      const about = text.match(/\b(?:related to|relating to|for|about|matching|containing|with|around|on|mentioning|that match|that matches|of)\s+(.+)$/i);
+      const pats = splitList((named ? named[2] : about ? about[1] : '').replace(/\s+(servers?|windows?|links?|tabs?)\s*$/i, ''));
+      if (pats.length) return [{ type: 'groupCreate', name: named ? named[1].trim() : pats[0], patterns: pats }];
+    }
+
     // Bulk actions on matching items — always confirmed before anything changes.
     if (!/\bcolumns?\b|\bfilters?\b/.test(s)) {
       const KIND = /\b(links?|bookmarks?|urls?|websites?|sites?|servers?|hosts?|connections?|entries|items?)\b/g;
@@ -349,6 +381,7 @@ function commandContext() {
     hosts: [...new Set(S.entries.flatMap(e => [e.host, e.name]).filter(Boolean))],
     repoNames: (S.settings.repos || []).map(p => p.split(/[\\/]/).filter(Boolean).pop()),
     views: Object.keys(Views.all()),
+    groups: (S.settings.groups || []).map(g => g.name),
     page: currentPage(),
   };
 }
@@ -368,6 +401,8 @@ const HELP = `Things you can say (in your own words — I understand synonyms an
 <b>Filter</b>  "show prod servers in payments" · "only UAT oracle databases" · "hide dev" · "broken links" · "servers without passwords" · "used this week" · "pinned only" · "anything called refund"
 <b>Arrange</b>  "as a table" · "group by environment" · "sort by last used" · "newest first" · "wider cards" · "hide password column" · "show only host user password columns"
 <b>Change</b>  "delete all youtube links" · "delete these" · "restore youtube links" · "pin these" · "move all jenkins links to DevOps" · "mark ora-uat as UAT" — I always ask before changing anything
+<b>Group</b>  "group all windows related to app-prod-01" · "create group Release with app-prod, ora-uat and jenkins" · "show group release" · "add pay-api to group payments" · "open all servers in group release" · "group tabs" · "list groups"
+<b>Block</b>  "block xhamster.com and similar sites" · "block facebook.com" · "unblock facebook.com" · "list blocked sites"
 <b>Remember</b>  "save this view as Prod overview" · "open Prod overview" · "list my views" · "undo" · "reset"
 <b>Ask</b>  "how many prod servers" · "password for app-prod-01" · "user for jenkins"
 <b>Pages</b>  "go to filezilla" · "hide the sidebar" · "hide the tree" · "dark mode" · "bigger font in putty" · "font 16"
@@ -439,6 +474,55 @@ async function runCommand(text) {
         const hosts = new Set(list.map(e => e.host).filter(Boolean)).size;
         said.push(`${list.length} matching item${list.length === 1 ? '' : 's'} (${hosts} distinct host${hosts === 1 ? '' : 's'}).`); break;
       }
+      case 'block': {
+        const list = [...new Set([...(S.settings.blocked_sites || []), ...a.sites.map(x => x.toLowerCase())])];
+        await saveSettings({ blocked_sites: list }); await poll();
+        said.push(`Blocked: ${a.sites.map(x => `<code>${esc(x)}</code>`).join(', ')}. They won't be imported or captured, and any already here are hidden.` +
+          (a.similar ? ' Well-known adult sites (and site names containing words like "porn" or "xxx") are always blocked too.' : ''));
+        break;
+      }
+      case 'unblock': {
+        const rm = a.sites.map(x => x.toLowerCase());
+        await saveSettings({ blocked_sites: (S.settings.blocked_sites || []).filter(x => !rm.includes(x)) });
+        said.push(`Unblocked ${a.sites.map(esc).join(', ')}. (Already-hidden links stay hidden — say "restore …" to bring them back. Built-in adult-site blocking can't be turned off.)`);
+        break;
+      }
+      case 'blockList': {
+        const l = S.settings.blocked_sites || [];
+        said.push((l.length ? 'Your blocked sites: ' + l.map(x => `<code>${esc(x)}</code>`).join(', ') + '. ' : 'You have no blocked sites of your own. ') + 'Well-known adult sites are always blocked.');
+        break;
+      }
+      case 'groupCreate': {
+        await Groups.create(a.name, a.patterns);
+        const c = Groups.collect(Groups.get(a.name));
+        show('groups');
+        said.push(`Created group <b>${esc(a.name)}</b> (matches ${a.patterns.map(p => `<code>${esc(p)}</code>`).join(', ')}): ` +
+          `${c.servers.length} server(s), ${c.links.length} link(s), ${c.windows.length} open window(s), ${c.notes.length + c.files.length} note(s)/file(s), ${c.repos.length} repo(s), ${c.clips.length} capture(s). Matching tabs now carry its label.`);
+        break;
+      }
+      case 'groupShow': {
+        const g = Groups.get(a.name) || Groups.all().find(x => x.name.toLowerCase().includes(a.name.toLowerCase()));
+        if (!g) { said.push(`No group called "${esc(a.name)}". ${Groups.all().length ? 'Groups: ' + Groups.all().map(x => esc(x.name)).join(', ') : 'Say e.g. "group all windows related to app-prod-01".'}`); break; }
+        Groups.selected = g.name; show('groups'); said.push(`Showing group <b>${esc(g.name)}</b>.`); break;
+      }
+      case 'groupList': { const l = Groups.all(); said.push(l.length ? 'Groups: ' + l.map(g => `<b>${esc(g.name)}</b> (${g.patterns.map(esc).join(', ')})`).join(' · ') : 'No groups yet.'); break; }
+      case 'groupDelete': {
+        const g = Groups.get(a.name); if (!g) { said.push(`No group called "${esc(a.name)}".`); break; }
+        await Groups.save(Groups.all().filter(x => x !== g)); said.push(`Deleted group ${esc(g.name)} (nothing inside it was deleted).`); break;
+      }
+      case 'groupAdd': case 'groupRemovePattern': {
+        const g = Groups.get(a.name) || Groups.all().find(x => x.name.toLowerCase().includes(a.name.toLowerCase()));
+        if (!g) { said.push(`No group called "${esc(a.name)}".`); break; }
+        g.patterns = a.type === 'groupAdd' ? [...new Set([...g.patterns, ...a.patterns])] : g.patterns.filter(p => !a.patterns.some(x => x.toLowerCase() === p.toLowerCase()));
+        await Groups.save(Groups.all()); Groups.selected = g.name; show('groups');
+        said.push(`Group <b>${esc(g.name)}</b> now matches: ${g.patterns.map(p => `<code>${esc(p)}</code>`).join(', ') || '(nothing)'}.`); break;
+      }
+      case 'groupOpenAll': {
+        const g = Groups.get(a.name) || Groups.all().find(x => x.name.toLowerCase().includes(a.name.toLowerCase()));
+        if (!g) { said.push(`No group called "${esc(a.name)}".`); break; }
+        const n = await Groups.openAll(a.kind, g); said.push(`Opened ${n} ${a.kind === 'putty' ? 'PuTTY session(s)' : 'link(s)'} from ${esc(g.name)}.`); break;
+      }
+      case 'groupTabs': arrangeTabsByGroup(); said.push('Tabs arranged by group in PuTTY, SQL and Notepad++.'); break;
       case 'bulk': {
         const pool = a.op === 'unhide' ? S.allEntries.filter(e => e.hidden) : S.entries;
         const page = currentPage();
