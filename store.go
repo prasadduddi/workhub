@@ -90,16 +90,17 @@ type Group struct {
 }
 
 type State struct {
-	Entries  []*Entry     `json:"entries"`
-	Clips    []*Clip      `json:"clips"`
-	Notes    []*Note      `json:"notes"`
-	Recent   []RecentFile `json:"recent"`
-	LocalDir string       `json:"local_dir,omitempty"`         // last folder in This PC
-	MailFrom time.Time    `json:"mail_since,omitzero"`         // newest mail already checked
-	MailIDs  []string     `json:"mail_seen,omitempty"`         // EntryIDs already captured
-	Ignored  []string     `json:"ignored_bookmarks,omitempty"` // browser bookmark URLs deleted in WorkHub
-	Props    []*PropNode  `json:"props,omitempty"`             // Properties page tree
-	Settings Settings     `json:"settings"`
+	Entries   []*Entry     `json:"entries"`
+	Clips     []*Clip      `json:"clips"`
+	Notes     []*Note      `json:"notes"`
+	Recent    []RecentFile `json:"recent"`
+	LocalDir  string       `json:"local_dir,omitempty"`         // last folder in This PC
+	MailFrom  time.Time    `json:"mail_since,omitzero"`         // newest mail already checked
+	MailIDs   []string     `json:"mail_seen,omitempty"`         // EntryIDs already captured
+	Ignored   []string     `json:"ignored_bookmarks,omitempty"` // browser bookmark URLs deleted in WorkHub
+	Props     []*PropNode  `json:"props,omitempty"`             // Properties page tree
+	WorkItems []*WorkItem  `json:"work_items,omitempty"`        // Notepad++ work item pages
+	Settings  Settings     `json:"settings"`
 }
 
 const (

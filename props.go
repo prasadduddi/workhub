@@ -130,8 +130,29 @@ func isTextContent(name string, b []byte) bool {
 	return true
 }
 
+func removeFile(dir, id string) error { return os.Remove(filepath.Join(dir, id)) }
+
 // AddAttachment stores an encrypted copy of a file on a node.
 func (s *Store) AddAttachment(nodeID, name string, data []byte) (Attachment, error) {
+	a, err := s.storeAttachment(name, data)
+	if err != nil {
+		return a, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.propNode(nodeID)
+	if n == nil {
+		_ = os.Remove(filepath.Join(s.attachDir(), a.ID))
+		return Attachment{}, errors.New("node not found")
+	}
+	n.Files = append(n.Files, a)
+	n.Updated = time.Now()
+	s.changed()
+	return a, nil
+}
+
+// storeAttachment writes an encrypted copy of a file and describes it.
+func (s *Store) storeAttachment(name string, data []byte) (Attachment, error) {
 	if len(data) > maxAttachment {
 		return Attachment{}, fmt.Errorf("%s is larger than 50 MB", name)
 	}
@@ -152,16 +173,6 @@ func (s *Store) AddAttachment(nodeID, name string, data []byte) (Attachment, err
 	if err := os.WriteFile(filepath.Join(s.attachDir(), a.ID), blob, 0o600); err != nil {
 		return Attachment{}, err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	n := s.propNode(nodeID)
-	if n == nil {
-		_ = os.Remove(filepath.Join(s.attachDir(), a.ID))
-		return Attachment{}, errors.New("node not found")
-	}
-	n.Files = append(n.Files, a)
-	n.Updated = time.Now()
-	s.changed()
 	return a, nil
 }
 
@@ -180,11 +191,14 @@ func (s *Store) ReadAttachment(id string) (Attachment, []byte, error) {
 	s.mu.RLock()
 	n, i := s.findAttachment(id)
 	var a Attachment
-	if n != nil {
+	found := n != nil
+	if found {
 		a = n.Files[i]
+	} else if wa := s.workAttachment(id); wa != nil { // a work item's file
+		a, found = *wa, true
 	}
 	s.mu.RUnlock()
-	if n == nil {
+	if !found {
 		return a, nil, errors.New("file not found")
 	}
 	blob, err := os.ReadFile(filepath.Join(s.attachDir(), id))

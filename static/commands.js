@@ -104,6 +104,11 @@ const CMD = (() => {
     if ((m = s.match(/\b(open|launch|show)\s+(the\s+)?(links?|urls?|bookmarks?)\s+(in|with|using)\s+(google chrome|chrome|edge|microsoft edge|(?:the\s+)?default( browser)?|my default browser)\b/)))
       return [{ type: 'linkBrowser', v: /chrome/.test(m[5]) ? 'chrome' : /edge/.test(m[5]) ? 'edge' : 'default' }];
 
+    // ---- work items (Notepad++ pages) ----
+    if ((m = text.match(/^\s*(?:new|create|add|start|make)\s+(?:a\s+)?(?:new\s+)?(?:work ?item|ticket page|work page|page)(?:\s+(?:for|called|named|about))?\s*[:-]?\s*(.*)$/i))) return [{ type: 'workNew', title: m[1].trim() }];
+    if ((m = text.match(/^\s*(?:open|show|go to)\s+(?:the\s+)?(?:work ?item|ticket page|work page)\s+(.+)$/i))) return [{ type: 'workOpen', q: m[1].trim() }];
+    if (/\b(list|show)\s+(my\s+)?(open\s+|active\s+|all\s+)?work ?items\b/.test(s)) return [{ type: 'workList' }];
+
     // ---- blocked sites (never imported or captured) ----
     const siteList = t => t.replace(/\b(and |or )?(also )?(other |similar |related |any )+(sites?|websites?|domains?|ones)\b/gi, ' ').replace(/\b(sites? like|websites? like|domains? like|like|such as|the|site|website|domain|from (syncing|sync|importing|import)|syncing|sync|importing|import)\b/gi, ' ')
       .split(/\s*(?:,|\band\b|\bor\b|&)\s*/i).map(x => x.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '')).filter(x => x.length >= 3);
@@ -409,6 +414,7 @@ const HELP = `Things you can say (in your own words — I understand synonyms an
 <b>Block</b>  "block xhamster.com and similar sites" · "block facebook.com" · "unblock facebook.com" · "list blocked sites"
 <b>Properties</b>  "go to properties" · "go to json schemas" — then drop files/folders, paste screenshots, Format/Check/Validate JSON
 <b>Links</b>  "open links in chrome" · "open links in edge" · "open links in default browser" (desktop version)
+<b>Work items</b>  "new work item PAY-123 refund limits" · "open work item PAY-123" · "list work items" — then paste screenshots, links and notes onto the page
 <b>Remember</b>  "save this view as Prod overview" · "open Prod overview" · "list my views" · "undo" · "reset"
 <b>Ask</b>  "how many prod servers" · "password for app-prod-01" · "user for jenkins"
 <b>Pages</b>  "go to filezilla" · "hide the sidebar" · "hide the tree" · "dark mode" · "bigger font in putty" · "font 16"
@@ -479,6 +485,25 @@ async function runCommand(text) {
         const list = S.entries.filter(e => viewMatch(e, v));
         const hosts = new Set(list.map(e => e.host).filter(Boolean)).size;
         said.push(`${list.length} matching item${list.length === 1 ? '' : 's'} (${hosts} distinct host${hosts === 1 ? '' : 's'}).`); break;
+      }
+      case 'workNew': {
+        show('notes');
+        const w = await Work.create(a.title || 'New work item');
+        said.push(`Created work item <b>${esc(w.title)}</b> in Notepad++. Paste screenshots, links or notes onto the page.`);
+        break;
+      }
+      case 'workOpen': {
+        await Work.loadList();
+        const q = a.q.toLowerCase();
+        const w = Work.list.find(x => x.title.toLowerCase() === q) || Work.list.find(x => x.title.toLowerCase().includes(q)) || Work.list.find(x => x.search.includes(q));
+        if (!w) { said.push(`No work item matching "${esc(a.q)}".`); break; }
+        show('notes'); await Work.open(w.id); said.push(`Opened work item <b>${esc(w.title)}</b>.`); break;
+      }
+      case 'workList': {
+        await Work.loadList();
+        const open = Work.list.filter(w => w.status !== 'done');
+        said.push(open.length ? 'Open work items: ' + open.map(w => `<b>${esc(w.title)}</b> (${(STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1]})`).join(' · ') : 'No open work items.');
+        break;
       }
       case 'linkBrowser':
         await saveSettings({ link_browser: a.v });

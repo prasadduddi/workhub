@@ -298,6 +298,32 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 #lightbox[hidden] { display: none; }
 #lightbox img { max-width: 95vw; max-height: 95vh; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
 
+/* work items */
+.whdr { display: flex; align-items: center; justify-content: space-between; }
+#workSearch { width: 100%; margin-bottom: 4px; }
+#workList .li { white-space: normal; }
+.wstatus { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 0 5px; color: #fff; background: var(--dr); }
+.wstatus.todo { background: #7a7f87; } .wstatus.doing { background: var(--dev); } .wstatus.blocked { background: var(--prod); } .wstatus.done { background: var(--ok); }
+.workpage { display: flex; flex-direction: column; min-height: 0; overflow: auto; grid-column: 2; grid-row: 1; }
+.notes-layout > .editor-wrap { grid-column: 2; grid-row: 1; }
+.editor-wrap[hidden] { display: none; }
+.workpage[hidden] { display: none; }
+.workpage.dragover { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.whero { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.wtitle { font-size: 18px; font-weight: 600; flex: 1; min-width: 240px; }
+#workTags { width: 200px; }
+.wbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.wblocks { display: flex; flex-direction: column; gap: 8px; }
+.wblock { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; }
+.whead { display: flex; gap: 8px; align-items: center; font-size: 12px; margin-bottom: 4px; }
+.wtools { margin-left: auto; display: flex; gap: 2px; opacity: .35; } .wblock:hover .wtools { opacity: 1; }
+.wblock textarea { width: 100%; border: none; background: transparent; resize: none; font: 13.5px/1.5 "Segoe UI", system-ui, sans-serif; padding: 2px 0; overflow: hidden; }
+.wblock textarea:focus { outline: none; }
+.wlink { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.wlink input { flex: 0 1 260px; } .wlink a { color: var(--accent); overflow-wrap: anywhere; }
+.wblock.image img { max-width: 100%; max-height: 420px; border-radius: 4px; cursor: zoom-in; display: block; margin-bottom: 4px; }
+.wblock.image input { width: 100%; font-size: 12.5px; }
+
 /* chat-applied view filters */
 .vchips { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 10px; }
 .vchips:empty { display: none; }

@@ -57,3 +57,10 @@ Outlook proof and links
   [ ] Captured → Outlook monitoring → Check now: "Newest email in Inbox" shows your latest mail (time, sender, subject)
   [ ] Send yourself a mail from a watched sender → after the next check "Last email from a watched sender" shows it
   [ ] Desktop version with Chrome open: click two links → both open as new tabs in the same Chrome window
+
+Work items (Notepad++)
+  [ ] + New under Work items (or chat: "new work item PAY-123 refund limits")
+  [ ] Win+Shift+S then Ctrl+V on the page -> screenshot block; click to enlarge
+  [ ] Copy a Jira/Confluence link, Ctrl+V -> link card with label; click opens in Chrome
+  [ ] Paste a paragraph -> note block; edit it; reopen WorkHub -> still there
+  [ ] Status / tags; search finds text inside the page; delete a block; move blocks up/down

@@ -249,6 +249,9 @@
   <section id="view-notes" class="view">
     <div class="notes-layout">
       <div class="notes-side">
+        <h4 class="whdr">Work items <button id="workNew" class="icon primary" title="New work item page">+ New</button></h4>
+        <input id="workSearch" type="search" placeholder="Search work items…">
+        <div id="workList"></div>
         <button id="newNote" class="primary">+ New note</button>
         <h4>Notes</h4><div id="noteList"></div>
         <h4>Open file</h4>
@@ -256,6 +259,7 @@
         <button id="browseFile" class="openbrowse">Browse for a file…</button>
         <h4>Recent files</h4><div id="recentList"></div>
       </div>
+      <div id="workPage" class="workpage" hidden></div>
       <div class="editor-wrap">
         <div id="docTabs" class="tabs"></div>
         <div class="editor" id="editorHost"></div>
@@ -335,6 +339,7 @@
 <script src="app.js"></script>
 <script src="groups.js"></script>
 <script src="props.js"></script>
+<script src="work.js"></script>
 <script src="commands.js"></script>
 </body>
 </html>

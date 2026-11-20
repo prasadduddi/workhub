@@ -263,7 +263,11 @@ function show(view) {
   history.replaceState(null, '', '#' + view);
   if (view === 'terminal') fitActiveTerm();
   if (view === 'files' && !Local.loaded) Local.load('');
-  if (view === 'notes') { Notes.cm.refresh(); Notes.cm.focus(); }
+  if (view === 'notes') {
+    Work.loadList();
+    if (!Work.current) { let sel = ''; try { sel = localStorage.getItem('workSel') || ''; } catch { /* ignore */ } if (sel) Work.open(sel).catch(() => {}); }
+    if (!Work.current) { Notes.cm.refresh(); Notes.cm.focus(); }
+  }
   if (view === 'bookmarks') {
     Bookmarks.sync(false);
     // Re-check links not checked in the last hour.
