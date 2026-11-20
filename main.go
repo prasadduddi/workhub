@@ -39,6 +39,7 @@ type App struct {
 	token       string
 	sftp        *sftpManager
 	dbs         *dbManager
+	tunnels     *tunnelManager
 	mail        mailStatus
 	mailNow     chan struct{}
 	jobs        *jobList
@@ -86,6 +87,7 @@ func main() {
 		token:     randomHex(16),
 		sftp:      newSFTPManager(),
 		dbs:       newDBManager(),
+		tunnels:   &tunnelManager{},
 		mailNow:   make(chan struct{}, 1),
 		jobs:      &jobList{},
 		backedUp:  map[string]bool{},
@@ -131,6 +133,7 @@ func main() {
 	go app.watchClipboard()
 	go app.syncBrowserBookmarks()
 	go app.mailWatcher()
+	go app.jiraWatcher()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -214,7 +217,7 @@ func listen(port int, dir string) (net.Listener, error) {
 var version = "dev"
 
 // defaultDataDir is one fixed per-user folder, so every copy and version of
-// WorkHub.exe (whatever folder it runs from) sees the same data.
+// copy of WorkHub (whatever folder it runs from) sees the same data.
 func defaultDataDir() string {
 	if d := os.Getenv("LOCALAPPDATA"); d != "" {
 		return filepath.Join(d, "WorkHub", "data")
@@ -413,7 +416,7 @@ func (a *App) guard(next http.Handler) http.Handler {
 		c, err := r.Cookie(a.cookieName())
 		if err != nil || subtle.ConstantTimeCompare([]byte(c.Value), []byte(a.token)) != 1 {
 			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte("Session expired. Start WorkHub.exe again to open a fresh window."))
+			w.Write([]byte("Session expired. Start WorkHub again to open a fresh window."))
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
@@ -482,6 +485,15 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/local/places", a.handleLocalPlaces)
 	mux.HandleFunc("POST /api/links/check", a.handleCheckLinks)
 	mux.HandleFunc("POST /api/test", a.handleTestConnection)
+	mux.HandleFunc("GET /api/jira/config", a.handleJiraConfigGet)
+	mux.HandleFunc("PUT /api/jira/config", a.handleJiraConfigPut)
+	mux.HandleFunc("GET /api/jira", a.handleJiraList)
+	mux.HandleFunc("POST /api/jira", a.handleJiraAdd)
+	mux.HandleFunc("POST /api/jira/refresh", a.handleJiraRefresh)
+	mux.HandleFunc("DELETE /api/jira/{key}", a.handleJiraRemove)
+	mux.HandleFunc("GET /api/tunnels", a.handleTunnelsList)
+	mux.HandleFunc("POST /api/tunnels/{id}/start", a.handleTunnelsStart)
+	mux.HandleFunc("POST /api/tunnels/{id}/stop", a.handleTunnelsStop)
 	mux.HandleFunc("GET /api/mail/status", a.handleMailStatus)
 	mux.HandleFunc("POST /api/mail/check", a.handleMailCheck)
 	mux.HandleFunc("POST /api/db/open", a.handleDBOpen)

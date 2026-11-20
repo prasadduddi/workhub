@@ -338,6 +338,15 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .wdoc pre, .wdoc code { font-family: var(--mono); background: var(--panel2); border-radius: 4px; } .wdoc pre { padding: 8px 10px; white-space: pre-wrap; }
 .wdoc input[type=checkbox] { transform: translateY(1px); margin-right: 4px; }
 
+/* jira */
+.jira-layout { display: grid; grid-template-columns: minmax(320px, 40%) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
+#jiraDlg { width: min(520px, 94vw); } #jiraDlg label { margin-bottom: 8px; }
+.tnode.jn .nm { overflow: hidden; text-overflow: ellipsis; }
+.tnode.jn.issue { font-size: 13px; } .tnode.jn.folder { color: var(--muted); }
+.jstat { font-size: 10.5px; border: 1px solid var(--border); border-radius: 8px; padding: 0 6px; color: var(--muted); white-space: nowrap; margin-left: auto; }
+.prs { font-size: 10px; font-weight: 700; color: #fff; border-radius: 4px; padding: 0 5px; text-transform: uppercase; background: #7a7f87; }
+.prs.open { background: var(--ok); } .prs.merged { background: #8e6bd8; } .prs.declined { background: var(--prod); }
+
 /* chat-applied view filters */
 .vchips { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 10px; }
 .vchips:empty { display: none; }
@@ -433,6 +442,8 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .mid { display: flex; flex-direction: column; justify-content: center; gap: 8px; cursor: col-resize; padding: 0 2px; border-radius: 6px; touch-action: none; }
 .mid:hover, .mid.drag { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .mid button { cursor: pointer; }
+.mid button.arrow { font-size: 22px; line-height: 1; padding: 6px 14px; }
+.mid button.flip { transform: scaleX(-1); }
 #jobs { margin-top: 8px; max-height: 140px; overflow: auto; }
 .job { display: grid; grid-template-columns: 90px 1fr 200px 70px; gap: 8px; align-items: center; font-size: 12px; padding: 2px 0; }
 .bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }

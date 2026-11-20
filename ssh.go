@@ -178,6 +178,21 @@ func (a *App) handleTerm(w http.ResponseWriter, r *http.Request) {
 		a.store.SetCredentials(e.ID, start.Username, start.Password)
 	}
 	a.store.Touch(e.ID)
+	// PuTTY-style tunnels on this server start with the session.
+	if fws, ferr := parseForwards(e.Extra["tunnels"]); ferr != nil {
+		send([]byte("\x1b[33m" + ferr.Error() + "\x1b[0m\r\n"))
+	} else if len(fws) > 0 && a.tunnels.byEntry(e.ID) == nil {
+		ts, errs := startForwards(client, fws)
+		ts.entryID, ts.name = e.ID, e.Name
+		a.tunnels.add(ts)
+		defer func() { ts.close(); a.tunnels.remove(ts) }()
+		for _, f := range ts.forwards {
+			send([]byte("\x1b[90mTunnel ready: " + f.String() + "\x1b[0m\r\n"))
+		}
+		for _, e := range errs {
+			send([]byte("\x1b[33m" + e.Error() + "\x1b[0m\r\n"))
+		}
+	}
 
 	cols, rows := max(start.Cols, 20), max(start.Rows, 5)
 	t := &termSession{app: a, client: client, entryID: e.ID, send: send, cols: cols, rows: rows}

@@ -91,6 +91,11 @@ func (a *App) testEntry(e Entry) (string, error) {
 
 func (a *App) testDB(e Entry) (string, error) {
 	label := map[string]string{"oracle": "Oracle", "postgres": "PostgreSQL"}[dbKind(e)]
+	if isLocalHost(e.Host) {
+		if via, err := a.tunnelFor(dbPort(e)); err != nil {
+			return label, fmt.Errorf("tunnel through %s: %w", via, err)
+		}
+	}
 	if e.Username == "" {
 		return label, errors.New("enter a username")
 	}
@@ -112,7 +117,7 @@ func (a *App) testDB(e Entry) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
-		return label + " login", err
+		return label + " login", explainRefused(e, err)
 	}
 	var ver string
 	if dbKind(e) == "oracle" {

@@ -94,7 +94,7 @@ func main() {
 	vi.SetProductVersion("1.0.0.0")
 	for k, v := range map[string]string{
 		version.ProductName: "WorkHub", version.FileDescription: "WorkHub", version.InternalName: "WorkHub",
-		version.OriginalFilename: "WorkHub.exe", version.CompanyName: "WorkHub", version.LegalCopyright: "WorkHub",
+		version.OriginalFilename: "WorkHub", version.CompanyName: "WorkHub", version.LegalCopyright: "WorkHub",
 	} {
 		_ = vi.Set(0, k, v)
 	}

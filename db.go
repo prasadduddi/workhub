@@ -105,6 +105,13 @@ func dbKind(e Entry) string {
 }
 
 // dbName finds the Oracle service/SID or PostgreSQL database for an entry.
+func dbPort(e Entry) int {
+	if e.Port != 0 {
+		return e.Port
+	}
+	return map[string]int{"oracle": 1521, "postgres": 5432}[dbKind(e)]
+}
+
 func dbName(e Entry) (name string, isSID bool) {
 	for _, k := range []string{"service", "service_name", "database", "db_name", "dbname"} {
 		if v := e.Extra[k]; v != "" {
@@ -179,6 +186,13 @@ func (a *App) handleDBOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, pass := orDefault(in.Username, e.Username), orDefault(in.Password, e.Password)
+	if isLocalHost(e.Host) { // a localhost database may need an SSH tunnel first
+		if via, terr := a.tunnelFor(dbPort(e)); terr != nil {
+			a.store.SetStatus(e.ID, terr)
+			writeErr(w, 502, fmt.Errorf("could not start the tunnel through %s: %w", via, terr))
+			return
+		}
+	}
 	driver, dsn, err := dbDSN(e, user, pass, in.Database)
 	if err != nil {
 		writeErr(w, 400, err)
@@ -205,6 +219,7 @@ func (a *App) handleDBOpen(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = conn.PingContext(ctx)
 	}
+	err = explainRefused(e, err)
 	a.store.SetStatus(e.ID, err)
 	if err != nil {
 		db.Close()

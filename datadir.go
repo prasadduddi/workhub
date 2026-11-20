@@ -189,7 +189,7 @@ button.alt{background:#fff;color:#2f6fde}#msg{color:#c93535;margin-top:10px}</st
 <h2>WorkHub can't open its data</h2>
 <p><b>Problem:</b> %s</p><p><b>Data folder:</b> <code>%s</code></p>
 <p>Your data has not been changed or deleted. Choose the folder that holds your <code>workhub-data</code>
-(for example where an older WorkHub.exe was), or go back to the standard location.</p>
+(for example where an older copy of WorkHub was), or go back to the standard location.</p>
 <button id="pick">Choose data folder…</button><button class="alt" id="def">Use standard location</button>
 <div id="msg"></div></div>
 <script>

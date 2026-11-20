@@ -22,6 +22,7 @@
     <button data-view="files"><svg class="ni" viewBox="0 0 24 24"><rect x="1.5" y="1.5" width="21" height="21" rx="5" fill="#bf1e2e"/><path d="M7 7h10l-8.5 10H17" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nl">FileZilla</span></button>
     <button data-view="sql"><svg class="ni" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="#4f8fd8"/><path d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13c0 1.7-3.4 3-7.5 3s-7.5-1.3-7.5-3z" fill="#2f6fde"/><path d="M4.5 10c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3M4.5 14.5c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3" fill="none" stroke="#9db8f5" stroke-width="1.2"/></svg><span class="nl">SQL</span><span id="sqlCount" class="count"></span></button>
     <button data-view="git"><svg class="ni" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3" transform="rotate(45 12 12)" fill="#f05033"/><path d="M9.5 7.5v9M9.5 11.5c0-2 5-1.5 5-4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="9.5" cy="7.5" r="1.5" fill="#fff"/><circle cx="9.5" cy="16.5" r="1.5" fill="#fff"/><circle cx="14.5" cy="7.5" r="1.5" fill="#fff"/></svg><span class="nl">Git</span></button>
+    <button data-view="jira"><svg class="ni" viewBox="0 0 24 24"><path d="M12 2.5 21.5 12 12 21.5 2.5 12z" fill="#2684ff"/><path d="M12 7.2 16.8 12 12 16.8 7.2 12z" fill="#fff"/><path d="M12 9.6 14.4 12 12 14.4 9.6 12z" fill="#0052cc"/></svg><span class="nl">Jira</span></button>
     <button data-view="props"><svg class="ni" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" fill="#e0a800"/><path d="M7 11h10M7 14h7M7 17h9" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg><span class="nl">Properties</span></button>
     <button data-view="notes"><svg class="ni" viewBox="0 0 24 24"><path d="M5 2.5h10l4 4v15H5z" fill="#fff" stroke="#6b7380" stroke-width="1.2" stroke-linejoin="round"/><path d="M15 2.5v4h4" fill="none" stroke="#6b7380" stroke-width="1.2"/><path d="M7.5 9h6M7.5 12h4" stroke="#b5bcc6" stroke-width="1.3" stroke-linecap="round"/><circle cx="16.5" cy="17" r="6" fill="#7cb342"/><path d="M12.8 17h3.4M14.5 15.3v3.4M17.2 17h3.4M18.9 15.3v3.4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nl">Notepad++</span></button>
   </nav>
@@ -151,8 +152,8 @@
         <div class="listing"></div>
       </div>
       <div class="mid" title="Drag to resize">
-        <button id="putBtn" title="Upload selected">Upload →</button>
-        <button id="getBtn" title="Download selected">← Download</button>
+        <button id="putBtn" class="arrow" title="Upload: copy the selected files from This PC to the server">➜</button>
+        <button id="getBtn" class="arrow flip" title="Download: copy the selected files from the server to This PC">➜</button>
       </div>
       <div class="pane" id="remotePane">
         <div class="pane-head">
@@ -189,6 +190,8 @@
           <label class="muted tiny">Max rows <select id="sqlMax"><option>100</option><option selected>1000</option><option>10000</option><option>50000</option></select></label>
           <span class="spacer"></span><span id="sqlInfo" class="muted tiny"></span>
           <span class="fontctl" data-font="sql" title="SQL text size (or Ctrl + mouse wheel)"><button>A−</button><span></span><button>A+</button></span>
+          <button id="sqlReconnect" title="Drop this connection and connect again (keeps your SQL text)">⟳ Reconnect</button>
+          <button id="sqlDisconnect" title="Close this database connection">⏏ Disconnect</button>
           <button id="sqlObjToggle" title="Show/hide tables">Tables</button>
         </div>
         <div class="sql-grid no-objects">
@@ -232,6 +235,22 @@
           <div id="gitDetail" class="git-detail"><div class="empty">Select a commit to see its changes.</div></div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- JIRA -->
+  <section id="view-jira" class="view">
+    <header class="toolbar">
+      <input id="jiraAdd" placeholder="Add a Jira issue: key (PAY-123), several keys, or paste an issue link" style="flex:1;min-width:280px">
+      <button id="jiraAddBtn" class="primary">Add</button>
+      <input id="jiraFilter" type="search" placeholder="Filter…" style="width:180px">
+      <button id="jiraRefreshAll" title="Re-read all issues from Jira (also happens every 15 minutes)">↻ Refresh all</button>
+      <button id="jiraSettings">Jira settings…</button>
+    </header>
+    <div id="jiraSetupHint" class="gsec" hidden>First, <a href="#" id="jiraSetupLink">set up Jira</a>: your Jira address and a token. Pasting an issue link fills in the address for you.</div>
+    <div class="jira-layout">
+      <div class="props-side"><div id="jiraTree" class="tree"></div></div>
+      <div id="jiraDetail" class="props-main"></div>
     </div>
   </section>
 
@@ -295,6 +314,7 @@
       <label>Password<input name="password" autocomplete="off"></label>
       <label id="dbNameRow">Service name / database<input name="dbname" placeholder="e.g. ORCLPDB1 or postgres"></label>
       <label class="check" id="sidRow" title="Oracle: tick if this is a SID rather than a service name"><input type="checkbox" name="is_sid"> It's an Oracle SID</label>
+      <label class="wide" id="tunnelRow" title="Like PuTTY Connection › SSH › Tunnels (local forwards). Started with this server's session, by right-click › Start tunnels, or automatically when a database at localhost:PORT needs one.">Tunnels (PuTTY-style)<input name="tunnels" placeholder="1522:dbhost:1521, 8443:app01:443"></label>
       <label class="wide">Private key file (OpenSSH format)<input name="key_file" placeholder="C:\Users\me\.ssh\id_rsa"></label>
       <label class="wide">Tags (comma separated)<input name="tags"></label>
       <label class="wide">Extra (key=value per line)<textarea name="extra" rows="2"></textarea></label>
@@ -307,6 +327,19 @@
 </dialog>
 <datalist id="protoList"><option>ssh</option><option>postgres</option><option>https</option><option>http</option><option>rdp</option><option>oracle</option><option>postgres</option><option>mysql</option><option>sqlserver</option><option>ftp</option><option>smb</option><option>ldap</option></datalist>
 <datalist id="envList"><option>PROD</option><option>UAT</option><option>TEST</option><option>STAGE</option><option>DEV</option><option>DR</option></datalist>
+
+<dialog id="jiraDlg">
+  <form method="dialog">
+    <h3>Jira settings (this workspace)</h3>
+    <label>Jira address<input id="jiraUrl" placeholder="https://yourcompany.atlassian.net  or  https://jira.company.com"></label>
+    <label>Sign-in type<select id="jiraMode"><option value="cloud">Jira Cloud — email + API token</option><option value="server">Jira Server / Data Center — personal access token</option><option value="basic">Username + password</option></select></label>
+    <label id="jiraUserRow">Email / username<input id="jiraUser" autocomplete="off"></label>
+    <label>Token / password<input id="jiraToken" type="password" autocomplete="new-password"></label>
+    <label>Show sub-tasks and linked issues starting with<input id="jiraPrefix" placeholder="CM-"></label>
+    <div class="muted tiny">Jira Cloud: create an API token at id.atlassian.com → Security → API tokens. Jira Server/DC: your profile → Personal Access Tokens. The token is stored encrypted and never shown again.</div>
+    <div class="row end"><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div>
+  </form>
+</dialog>
 
 <dialog id="credDlg">
   <form method="dialog">
@@ -341,6 +374,7 @@
 <script src="groups.js"></script>
 <script src="props.js"></script>
 <script src="work.js"></script>
+<script src="jira.js"></script>
 <script src="commands.js"></script>
 </body>
 </html>

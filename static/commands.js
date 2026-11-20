@@ -26,7 +26,7 @@ const CMD = (() => {
   const PAGES = {
     dashboard: ['dashboard', 'home', 'overview', 'main page', 'start'], bookmarks: ['bookmarks', 'bookmark page', 'favourites page', 'links page'],
     inbox: ['captured', 'capture', 'captures', 'inbox', 'clips', 'capture history', 'clipboard history', 'outlook'],
-    terminal: ['putty', 'terminal', 'terminals', 'ssh page', 'console'], files: ['filezilla', 'file manager', 'files', 'sftp page', 'ftp page', 'transfers'],
+    terminal: ['putty', 'terminal', 'terminals', 'ssh page', 'console'], jira: ['jira', 'jira page', 'tickets', 'pull requests', 'prs'], files: ['filezilla', 'file manager', 'files', 'sftp page', 'ftp page', 'transfers'],
     sql: ['sql', 'sql page', 'query window', 'database page', 'db page', 'sql developer'], git: ['git', 'repos', 'repositories', 'source control'],
     notes: ['notepad', 'notepad++', 'notes', 'editor', 'note'], props: ['properties', 'properties page', 'property files', 'configs', 'config files', 'json schemas', 'schemas', 'app docs'],
   };
@@ -103,6 +103,10 @@ const CMD = (() => {
     // Desktop version: which browser opens links.
     if ((m = s.match(/\b(open|launch|show)\s+(the\s+)?(links?|urls?|bookmarks?)\s+(in|with|using)\s+(google chrome|chrome|edge|microsoft edge|(?:the\s+)?default( browser)?|my default browser)\b/)))
       return [{ type: 'linkBrowser', v: /chrome/.test(m[5]) ? 'chrome' : /edge/.test(m[5]) ? 'edge' : 'default' }];
+
+    // ---- Jira ----
+    if ((m = text.match(/^\s*(?:add|track|follow|watch)\s+(?:the\s+)?(?:jira\s*(?:issue|ticket)?s?\s+)?((?:[A-Za-z][A-Za-z0-9_]+-\d+|https?:\/\/\S+)(?:[\s,]+(?:and\s+)?(?:[A-Za-z][A-Za-z0-9_]+-\d+|https?:\/\/\S+))*)\s*(?:in|to)?\s*(?:jira)?\s*$/i))) return [{ type: 'jiraAdd', ref: m[1] }];
+    if (/^\s*(refresh|update|sync)\s+(all\s+)?jira\b/.test(s)) return [{ type: 'jiraRefresh' }];
 
     // ---- work items (Notepad++ pages) ----
     if ((m = text.match(/^\s*(?:new|create|add|start|make)\s+(?:a\s+)?(?:new\s+)?(?:work ?item|ticket page|work page|page)(?:\s+(?:for|called|named|about))?\s*[:-]?\s*(.*)$/i))) return [{ type: 'workNew', title: m[1].trim() }];
@@ -430,6 +434,7 @@ const HELP = `Things you can say (in your own words — I understand synonyms an
 <b>Properties</b>  "go to properties" · "go to json schemas" — then drop files/folders, paste screenshots, Format/Check/Validate JSON
 <b>Links</b>  "open links in chrome" · "open links in edge" · "open links in default browser" (desktop version)
 <b>Work items</b>  "new work item PAY-123 refund limits" · "open work item PAY-123" · "list work items" — then paste screenshots, links and notes onto the page
+<b>Jira</b>  "add jira PAY-123" · "track PAY-123, PAY-130" · "refresh jira" · "go to jira"
 <b>Remember</b>  "save this view as Prod overview" · "open Prod overview" · "list my views" · "undo" · "reset"
 <b>Ask</b>  "how many prod servers" · "password for app-prod-01" · "user for jenkins"
 <b>Pages</b>  "go to filezilla" · "hide the sidebar" · "hide the tree" · "dark mode" · "bigger font in putty" · "font 16"
@@ -501,6 +506,8 @@ async function runCommand(text) {
         const hosts = new Set(list.map(e => e.host).filter(Boolean)).size;
         said.push(`${list.length} matching item${list.length === 1 ? '' : 's'} (${hosts} distinct host${hosts === 1 ? '' : 's'}).`); break;
       }
+      case 'jiraAdd': show('jira'); await Jira.add(a.ref); said.push(`Added ${esc(a.ref.toUpperCase())} to the Jira page — its pull requests and ${esc(Jira.cfg?.child_prefix || 'CM-')} items appear under it.`); break;
+      case 'jiraRefresh': show('jira'); $('#jiraRefreshAll').click(); said.push('Refreshing all Jira issues.'); break;
       case 'workNew': {
         show('notes');
         const w = await Work.create(a.title || 'New work item');

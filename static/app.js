@@ -12,7 +12,7 @@ async function api(method, url, body) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (r.status === 401) {
-    document.body.innerHTML = '<div class="empty">Session expired. Start <b>WorkHub.exe</b> again to open a fresh window.</div>';
+    document.body.innerHTML = '<div class="empty">Session expired. Start <b>WorkHub</b> again to open a fresh window.</div>';
     throw new Error('unauthorized');
   }
   const data = await r.json().catch(() => ({}));
@@ -279,6 +279,7 @@ function show(view) {
   if (view === 'inbox') Mail.status();
   if (view === 'groups') Groups.render();
   if (view === 'props') Props.load();
+  if (view === 'jira') Jira.load();
   if (view === 'git') {
     Git.renderRepos();
     let last = ''; try { last = localStorage.getItem('gitRepo') || ''; } catch { /* ignore */ }
@@ -633,6 +634,8 @@ async function openEntryDialog(e) {
   f.tags.value = (v.tags || []).join(', ');
   const ex = { ...(v.extra || {}) };
   f.dbname.value = ex.service || ex.service_name || ex.database || ex.db_name || ex.dbname || ex.sid || '';
+  f.tunnels.value = ex.tunnels || '';
+  delete ex.tunnels;
   f.is_sid.checked = !!ex.sid && !(ex.service || ex.service_name || ex.database);
   for (const k of DB_KEYS) delete ex[k];
   f.extra.value = Object.entries(ex).map(([k, x]) => `${k}=${x}`).join('\n');
@@ -658,6 +661,7 @@ function entryFormBody() {
   const f = $('#entryForm');
   const extra = {};
   f.extra.value.split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) extra[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
+  if (f.tunnels.value.trim()) extra.tunnels = f.tunnels.value.trim();
   const db = f.dbname.value.trim();
   if (db && $('#dbNameRow').style.display !== 'none') {
     const p = f.protocol.value.trim().toLowerCase();
@@ -1161,8 +1165,19 @@ const Tree = {
     const e = node?.dataset.id && byId(node.dataset.id);
     const items = [];
     if (e) {
-      if (canDB(e)) items.push(['Open in SQL', () => SQL.open(e)]);
+      if (canDB(e)) {
+        const t = SQL.tabs.find(x => x.entry.id === e.id);
+        items.push(['Open in SQL', () => SQL.open(e)]);
+        if (t) items.push(['Reconnect', () => SQL.reconnect(t)], ['Disconnect', () => SQL.close(t)]);
+        else items.push(['Connect and show tables', () => SQL.toggleConn(e)]);
+      }
       if (canSSH(e)) items.push(['Open in PuTTY', () => Term.open(e)]);
+      if (canSSH(e) && e.extra?.tunnels) {
+        items.push(['Start tunnels (' + e.extra.tunnels + ')', async () => {
+          try { const r = await api('POST', `/api/tunnels/${e.id}/start`); toast('Tunnels running: ' + r.forwards.join(', ') + (r.warning ? ' — ' + r.warning : '')); }
+          catch (err) { toast(err.message, true); }
+        }], ['Stop tunnels', async () => { await api('POST', `/api/tunnels/${e.id}/stop`); toast('Tunnels stopped'); }]);
+      }
       if (canFiles(e)) items.push([`Open in FileZilla (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
       items.push('-',
         ['Copy host', () => copyText(e.host)]);
@@ -1697,7 +1712,7 @@ const SQL = {
     this.connecting.add(e.id); delete this.connErr[e.id]; Tree.render();
     try {
       const r = await api('POST', '/api/db/open', { id: e.id, ...creds, database: database.trim() });
-      const t = { sid: r.sid, entry: e, kind: r.kind, info: r, sql: this.loadSQL(e), result: null, out: '', inTx: false, objects: null };
+      const t = { sid: r.sid, entry: e, kind: r.kind, info: r, sql: this.loadSQL(e), result: null, out: '', inTx: false, objects: null, creds: { ...creds, save: false }, database: database.trim() };
       this.tabs.push(t);
       this.activate(t);
       this.say(t, `<span class="ok">Connected: ${esc(r.user || '')}  ${esc(r.version || '')}</span>\n`);
@@ -1737,6 +1752,31 @@ const SQL = {
       ${t.inTx ? '<span style="color:#e0a800" title="Uncommitted changes">●</span>' : dot(byId(t.entry.id) || t.entry)} ${typeof Groups !== 'undefined' ? Groups.chip(Groups.entryText(t.entry)) : ''}🛢 ${esc(t.entry.name)}${t.entry.env ? ` <span class="badge ${esc(t.entry.env)}">${esc(t.entry.env)}</span>` : ''}
       <span class="x" data-sx="${t.sid}">✕</span></div>`).join('');
     $('#sqlCount').textContent = this.tabs.length || '';
+  },
+
+  // Reconnect: new session, same tab (SQL text, output and history kept).
+  async reconnect(t = this.active) {
+    if (!t) return;
+    if (t.inTx && !confirm(`${t.entry.name} has uncommitted changes. Reconnecting rolls them back. Continue?`)) return;
+    api('POST', '/api/db/close', { sid: t.sid }).catch(() => {});
+    this.say(t, `<span class="cmd">Reconnecting to ${esc(t.entry.host)}…</span>\n`);
+    this.connecting.add(t.entry.id); Tree.render();
+    try {
+      const e = byId(t.entry.id) || t.entry;
+      const r = await api('POST', '/api/db/open', { id: e.id, ...(t.creds || {}), database: t.database || '' });
+      Object.assign(t, { sid: r.sid, info: r, inTx: false, ot: null, objects: null, entry: e });
+      this.say(t, `<span class="ok">Connected: ${esc(r.user || '')}  ${esc(r.version || '')}</span>\n`);
+      this.loadObjects(t, '');
+      toast('Reconnected to ' + e.name);
+    } catch (err) {
+      this.say(t, `<span class="err">${esc(err.message)}</span>\n`);
+      this.connErr[t.entry.id] = err.message;
+      toast(err.message, true);
+    } finally {
+      this.connecting.delete(t.entry.id);
+      if (t === this.active) { this.renderTabs(); this.renderTx(); }
+      Tree.render();
+    }
   },
 
   async close(t) {
@@ -2010,6 +2050,8 @@ Object.assign(SQL, {
 
 // SQL page events
 $('#sqlRun').onclick = () => SQL.run(false);
+$('#sqlReconnect').onclick = () => SQL.reconnect();
+$('#sqlDisconnect').onclick = () => SQL.active && SQL.close(SQL.active);
 $('#sqlScript').onclick = () => SQL.run(true);
 $('#sqlStop').onclick = () => SQL.active && api('POST', '/api/db/cancel', { sid: SQL.active.sid }).catch(() => {});
 $('#sqlCommit').onclick = () => SQL.tx('commit');
