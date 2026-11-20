@@ -1,0 +1,15 @@
+# Build output and local data: never commit (dist/demo-data holds real bookmarks
+# and an encryption key from test runs).
+dist/
+workhub-data/
+*.dat
+*.dat.bak
+*.dat.tmp
+key.bin
+session.token
+known_hosts
+/workhub
+*.exe
+.DS_Store
+.idea/
+.vscode/

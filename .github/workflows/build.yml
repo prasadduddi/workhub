@@ -1,0 +1,51 @@
+# Builds WorkHub.exe on every push. Pushing a tag like v1.0 also publishes a
+# GitHub Release with WorkHub.exe and a zip attached, so the work laptop only
+# needs a browser to download it (no Git, Go or admin rights).
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: |
+          go vet ./...
+          GOOS=windows go vet ./... 2>&1 | grep -v "possible misuse of unsafe.Pointer" || true
+          go test -short ./...
+
+      - name: Build WorkHub.exe
+        run: |
+          stamp=$(date -u +%Y-%m-%d-%H%M)
+          version="${GITHUB_REF_NAME}-${stamp}"
+          mkdir -p dist
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${version}" -o dist/WorkHub.exe .
+          cp README.md TESTING.txt dist/
+          (cd dist && zip -q "WorkHub-${stamp}.zip" WorkHub.exe README.md TESTING.txt)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WorkHub
+          path: dist/WorkHub.exe
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/WorkHub.exe
+            dist/WorkHub-*.zip

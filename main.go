@@ -1,0 +1,412 @@
+// WorkHub: a portable, no-install, no-admin workbench that collects work
+// information (hosts, ports, URLs, credentials) from the clipboard and offers
+// SSH terminals, SFTP transfers and notes from one local browser UI.
+package main
+
+import (
+	"crypto/rand"
+	"crypto/subtle"
+	"embed"
+	"encoding/hex"
+	"flag"
+	"fmt"
+	"hash/fnv"
+	"io"
+	"io/fs"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+)
+
+//go:embed static
+var staticFS embed.FS
+
+const defaultPort = 47821
+
+type App struct {
+	store       *Store
+	dataDir     string
+	workspace   string
+	recoveryErr string
+	addr        string
+	token       string
+	sftp        *sftpManager
+	dbs         *dbManager
+	jobs        *jobList
+
+	khMu     sync.Mutex
+	backupMu sync.Mutex
+	backedUp map[string]bool
+}
+
+func main() {
+	port := flag.Int("port", defaultPort, "port to listen on (always bound to 127.0.0.1)")
+	dataDir := flag.String("data", "", `data folder (default: %LOCALAPPDATA%\WorkHub\data, or the folder chosen in the app)`)
+	noBrowser := flag.Bool("no-browser", false, "do not open the browser on start")
+	workspace := flag.String("workspace", "", "separate workspace name, e.g. ClientB (own data, key and port)")
+	flag.Parse()
+
+	ws := strings.TrimSpace(*workspace)
+	if ws != "" && !regexp.MustCompile(`^[A-Za-z0-9 _.-]{1,40}$`).MatchString(ws) {
+		fatal("workspace name %q: use letters, digits, space, _ . - (max 40)", ws)
+	}
+	dir := *dataDir
+	if dir == "" {
+		dir = chosenDataDir(ws)
+	}
+	if ws != "" && *port == defaultPort {
+		h := fnv.New32a()
+		h.Write([]byte(strings.ToLower(ws)))
+		*port = defaultPort + 1 + int(h.Sum32()%500) // stable per workspace
+	}
+	_, statErr := os.Stat(filepath.Join(dir, "workhub.dat"))
+	firstRun := statErr != nil
+
+	ln, err := listen(*port, dir)
+	if err != nil {
+		fatal("%v", err)
+	}
+	if ln == nil { // already running; its window was opened
+		return
+	}
+
+	app := &App{
+		dataDir:   dir,
+		workspace: ws,
+		addr:      ln.Addr().String(),
+		token:     randomHex(16),
+		sftp:      newSFTPManager(),
+		dbs:       newDBManager(),
+		jobs:      &jobList{},
+		backedUp:  map[string]bool{},
+	}
+	url := fmt.Sprintf("http://%s/?t=%s", app.addr, app.token)
+
+	store, err := OpenStore(dir)
+	if err != nil {
+		// Don't just exit (the console window would vanish): show a page
+		// where the user can pick another data folder.
+		fmt.Println("WorkHub cannot open its data:", err)
+		fmt.Println("  Open:  ", url, " to choose another data folder.")
+		app.recoveryErr = err.Error()
+		if !*noBrowser {
+			openBrowser(url)
+		}
+		fatal("%v", (&http.Server{Handler: app.recoveryRoutes()}).Serve(ln))
+	}
+	app.store = store
+	if firstRun {
+		name := ws
+		if name == "" {
+			name, _ = os.Hostname()
+		}
+		st := store.Settings()
+		st.Workspace = name
+		store.SetSettings(st)
+		// Old-version folders only ever belong to the default workspace; named
+		// workspaces start empty so clients' data never mixes.
+		if *dataDir == "" && ws == "" && dir == defaultDataDir() {
+			importOldFolders(store, dir)
+		}
+	}
+	_ = os.WriteFile(filepath.Join(dir, "session.token"), []byte(app.token), 0o600)
+
+	go app.watchClipboard()
+	go app.syncBrowserBookmarks()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	go func() {
+		<-sig
+		app.shutdown()
+	}()
+
+	fmt.Println("WorkHub", version, "is running.")
+	fmt.Println("  Open:  ", url)
+	fmt.Println("  Data:  ", dir)
+	fmt.Println("Close this window (or use Quit in the app) to stop.")
+	if !*noBrowser {
+		openBrowser(url)
+	}
+	fatal("%v", (&http.Server{Handler: app.routes()}).Serve(ln))
+}
+
+// fatal prints the error and waits a little so it can be read before a
+// double-clicked console window closes.
+func fatal(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "WorkHub error: "+format+"\n", args...)
+	time.Sleep(15 * time.Second)
+	os.Exit(1)
+}
+
+// listen binds the port. If WorkHub with the same data folder is already
+// running it opens that window instead and returns a nil listener. After a
+// restart it waits briefly for the previous process to release the port.
+func listen(port int, dir string) (net.Listener, error) {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	for i := 0; ; i++ {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			return ln, nil
+		}
+		if url, ok := existingInstance(dir, port); ok {
+			fmt.Println("WorkHub is already running:", url)
+			openBrowser(url)
+			return nil, nil
+		}
+		if os.Getenv("WORKHUB_RESTART") == "" || i >= 20 {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return net.Listen("tcp", "127.0.0.1:0")
+}
+
+// version is set at build time (-ldflags "-X main.version=...").
+var version = "dev"
+
+// defaultDataDir is one fixed per-user folder, so every copy and version of
+// WorkHub.exe (whatever folder it runs from) sees the same data.
+func defaultDataDir() string {
+	if d := os.Getenv("LOCALAPPDATA"); d != "" {
+		return filepath.Join(d, "WorkHub", "data")
+	}
+	if d, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(d, "WorkHub", "data")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".workhub")
+}
+
+// findOldFolders looks for "workhub-data" folders left by versions that kept
+// data next to the exe.
+func findOldFolders() []string {
+	home, _ := os.UserHomeDir()
+	exe, _ := os.Executable()
+	roots := []struct {
+		dir   string
+		depth int
+	}{{filepath.Dir(filepath.Dir(exe)), 3}, {home, 1}}
+	for _, d := range []string{"Downloads", "Documents", "Desktop"} {
+		roots = append(roots, struct {
+			dir   string
+			depth int
+		}{filepath.Join(home, d), 4})
+	}
+	if od := os.Getenv("OneDrive"); od != "" {
+		roots = append(roots, struct {
+			dir   string
+			depth int
+		}{od, 4})
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, r := range roots {
+		base := strings.Count(filepath.Clean(r.dir), string(filepath.Separator))
+		_ = filepath.WalkDir(r.dir, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || !d.IsDir() {
+				return nil
+			}
+			if strings.Count(p, string(filepath.Separator))-base > r.depth || (p != r.dir && strings.HasPrefix(d.Name(), ".")) || d.Name() == "AppData" || d.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			if d.Name() == "workhub-data" {
+				if _, err := os.Stat(filepath.Join(p, "workhub.dat")); err == nil && !seen[p] {
+					seen[p] = true
+					out = append(out, p)
+				}
+				return filepath.SkipDir
+			}
+			return nil
+		})
+	}
+	return out
+}
+
+func importOldFolders(store *Store, dir string) {
+	for _, old := range findOldFolders() {
+		st, err := readDataFolder(old)
+		if err != nil {
+			fmt.Printf("  Could not import %s: %v\n", old, err)
+			continue
+		}
+		e, n := store.Merge(st)
+		fmt.Printf("  Imported %d connections and %d notes from %s\n", e, n, old)
+		_ = copyDir(filepath.Join(old, "backups"), filepath.Join(dir, "backups"))
+		if kh, err := os.ReadFile(filepath.Join(old, "known_hosts")); err == nil {
+			f, err := os.OpenFile(filepath.Join(dir, "known_hosts"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+			if err == nil {
+				f.Write(kh)
+				f.Close()
+			}
+		}
+	}
+	store.Flush()
+}
+
+func copyDir(src, dst string) error {
+	ents, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	_ = os.MkdirAll(dst, 0o700)
+	for _, e := range ents {
+		if !e.IsDir() {
+			_ = copyFile(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name()))
+		}
+	}
+	return nil
+}
+
+func (a *App) shutdown() {
+	a.store.Flush()
+	_ = os.Remove(filepath.Join(a.dataDir, "session.token"))
+	os.Exit(0)
+}
+
+func existingInstance(dir string, port int) (string, bool) {
+	tok, err := os.ReadFile(filepath.Join(dir, "session.token"))
+	if err != nil {
+		return "", false
+	}
+	c := http.Client{Timeout: 2 * time.Second}
+	resp, err := c.Get(fmt.Sprintf("http://127.0.0.1:%d/api/ping", port))
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if string(b) != pingReply(dir) { // a different workspace is on that port
+		return "", false
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d/?t=%s", port, strings.TrimSpace(string(tok))), true
+}
+
+// pingReply identifies the instance by its data folder so a second
+// workspace never attaches to another workspace's window.
+func pingReply(dir string) string {
+	abs, _ := filepath.Abs(dir)
+	h := fnv.New64a()
+	h.Write([]byte(strings.ToLower(abs)))
+	return fmt.Sprintf("workhub %x", h.Sum64())
+}
+
+// cookieName includes the port: browsers share cookies across ports, and each
+// workspace has its own session token.
+func (a *App) cookieName() string {
+	_, port, _ := net.SplitHostPort(a.addr)
+	return "wh" + port
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
+
+// guard keeps other local programs and web pages away from the API: the Host
+// header must be our loopback address (blocks DNS rebinding) and requests must
+// carry the session cookie handed out via the one-time launch URL.
+func (a *App) guard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, port, _ := net.SplitHostPort(a.addr)
+		if r.Host != a.addr && r.Host != "localhost:"+port {
+			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		if r.URL.Path == "/api/ping" {
+			w.Write([]byte(pingReply(a.dataDir)))
+			return
+		}
+		if t := r.URL.Query().Get("t"); t != "" && subtle.ConstantTimeCompare([]byte(t), []byte(a.token)) == 1 {
+			http.SetCookie(w, &http.Cookie{Name: a.cookieName(), Value: a.token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		c, err := r.Cookie(a.cookieName())
+		if err != nil || subtle.ConstantTimeCompare([]byte(c.Value), []byte(a.token)) != 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("Session expired. Start WorkHub.exe again to open a fresh window."))
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *App) routes() http.Handler {
+	mux := http.NewServeMux()
+	static, _ := fs.Sub(staticFS, "static")
+	mux.Handle("GET /", http.FileServerFS(static))
+
+	mux.HandleFunc("GET /api/version", a.handleVersion)
+	mux.HandleFunc("POST /api/import", a.handleImport)
+	mux.HandleFunc("POST /api/datadir/pick", a.handleDataDirPick)
+	mux.HandleFunc("POST /api/datadir/set", a.handleDataDirSet)
+	mux.HandleFunc("POST /api/quit", a.handleQuit)
+	mux.HandleFunc("GET /api/settings", a.handleGetSettings)
+	mux.HandleFunc("PUT /api/settings", a.handlePutSettings)
+
+	mux.HandleFunc("GET /api/entries", a.handleListEntries)
+	mux.HandleFunc("POST /api/entries", a.handleSaveEntry)
+	mux.HandleFunc("DELETE /api/entries/{id}", a.handleDeleteEntry)
+	mux.HandleFunc("GET /api/entries/{id}/secret", a.handleSecret)
+	mux.HandleFunc("POST /api/projects/rename", a.handleRenameProject)
+	mux.HandleFunc("POST /api/entries/{id}/opened", a.handleOpened)
+	mux.HandleFunc("POST /api/bookmarks/sync", a.handleSyncBookmarks)
+
+	mux.HandleFunc("POST /api/ingest", a.handleIngest)
+	mux.HandleFunc("POST /api/parse", a.handleParse)
+	mux.HandleFunc("GET /api/clips", a.handleListClips)
+	mux.HandleFunc("DELETE /api/clips/{id}", a.handleDeleteClip)
+
+	mux.HandleFunc("GET /api/notes", a.handleListNotes)
+	mux.HandleFunc("POST /api/notes", a.handleSaveNote)
+	mux.HandleFunc("DELETE /api/notes/{id}", a.handleDeleteNote)
+	mux.HandleFunc("GET /api/file", a.handleReadFile)
+	mux.HandleFunc("PUT /api/file", a.handleWriteFile)
+	mux.HandleFunc("POST /api/file", a.handleWriteFile) // sendBeacon on tab close
+	mux.HandleFunc("GET /api/recent", a.handleRecent)
+
+	mux.HandleFunc("GET /ws/term", a.handleTerm)
+	mux.HandleFunc("GET /ws/local", a.handleLocalTerm)
+	mux.HandleFunc("GET /api/local/shells", a.handleLocalShells)
+	mux.HandleFunc("GET /api/git/info", a.handleGitInfo)
+	mux.HandleFunc("GET /api/git/log", a.handleGitLog)
+	mux.HandleFunc("GET /api/git/commit", a.handleGitCommit)
+	mux.HandleFunc("GET /api/git/status", a.handleGitStatus)
+	mux.HandleFunc("POST /api/git/fetch", a.handleGitFetch)
+	mux.HandleFunc("GET /api/git/find", a.handleGitFind)
+
+	mux.HandleFunc("POST /api/sftp/open", a.handleSFTPOpen)
+	mux.HandleFunc("POST /api/sftp/close", a.handleSFTPClose)
+	mux.HandleFunc("GET /api/sftp/ls", a.handleSFTPList)
+	mux.HandleFunc("GET /api/sftp/download", a.handleSFTPDownload)
+	mux.HandleFunc("POST /api/sftp/upload", a.handleSFTPUpload)
+	mux.HandleFunc("POST /api/sftp/op", a.handleSFTPOp)
+	mux.HandleFunc("POST /api/sftp/transfer", a.handleSFTPTransfer)
+	mux.HandleFunc("GET /api/jobs", a.handleJobs)
+	mux.HandleFunc("GET /api/local/ls", a.handleLocalList)
+	mux.HandleFunc("POST /api/local/mkdir", a.handleLocalMkdir)
+	mux.HandleFunc("POST /api/local/pick", a.handleLocalPick)
+	mux.HandleFunc("POST /api/local/pickfile", a.handlePickFile)
+	mux.HandleFunc("GET /api/local/places", a.handleLocalPlaces)
+	mux.HandleFunc("POST /api/links/check", a.handleCheckLinks)
+	mux.HandleFunc("POST /api/db/open", a.handleDBOpen)
+	mux.HandleFunc("POST /api/db/close", a.handleDBClose)
+	mux.HandleFunc("POST /api/db/exec", a.handleDBExec)
+	mux.HandleFunc("POST /api/db/cancel", a.handleDBCancel)
+	mux.HandleFunc("POST /api/db/tx", a.handleDBTx)
+	mux.HandleFunc("GET /api/db/objects", a.handleDBObjects)
+	mux.HandleFunc("GET /api/db/columns", a.handleDBColumns)
+
+	return a.guard(mux)
+}

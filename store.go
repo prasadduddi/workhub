@@ -1,0 +1,916 @@
+package main
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+)
+
+type Entry struct {
+	ID            string            `json:"id"`
+	Project       string            `json:"project"`
+	Name          string            `json:"name"`
+	Host          string            `json:"host,omitempty"`
+	Port          int               `json:"port,omitempty"`
+	Protocol      string            `json:"protocol,omitempty"`
+	URL           string            `json:"url,omitempty"`
+	Username      string            `json:"username,omitempty"`
+	Password      string            `json:"password,omitempty"`
+	PrevPasswords []string          `json:"prev_passwords,omitempty"`
+	KeyFile       string            `json:"key_file,omitempty"`
+	Env           string            `json:"env,omitempty"`
+	Tags          []string          `json:"tags,omitempty"`
+	Extra         map[string]string `json:"extra,omitempty"`
+	Notes         string            `json:"notes,omitempty"`
+	Favorite      bool              `json:"favorite,omitempty"`
+	ClipIDs       []string          `json:"clip_ids,omitempty"`
+	Created       time.Time         `json:"created"`
+	Updated       time.Time         `json:"updated"`
+	LastUsed      time.Time         `json:"last_used,omitzero"`
+	LastDir       string            `json:"last_dir,omitempty"` // last remote folder (terminal or Files)
+	OpenCount     int               `json:"open_count,omitempty"`
+	Folder        string            `json:"folder,omitempty"` // browser bookmark folder, e.g. "Edge › Favorites bar › Infra"
+	Source        string            `json:"source,omitempty"` // "edge"/"chrome" when it came from browser bookmarks
+	Status        string            `json:"status,omitempty"` // last connection/link check: "ok" or "fail"
+	StatusAt      time.Time         `json:"status_at,omitzero"`
+	StatusMsg     string            `json:"status_msg,omitempty"`
+}
+
+type Clip struct {
+	ID       string    `json:"id"`
+	Text     string    `json:"text"`
+	Source   string    `json:"source"`
+	Project  string    `json:"project"`
+	Created  time.Time `json:"created"`
+	EntryIDs []string  `json:"entry_ids,omitempty"`
+}
+
+type Note struct {
+	ID      string    `json:"id"`
+	Title   string    `json:"title"`
+	Body    string    `json:"body"`
+	Updated time.Time `json:"updated"`
+}
+
+type RecentFile struct {
+	Path   string    `json:"path"`
+	Opened time.Time `json:"opened"`
+}
+
+type Settings struct {
+	Workspace     string   `json:"workspace"`
+	Watch         bool     `json:"watch"`
+	CaptureAll    bool     `json:"capture_all"`
+	Project       string   `json:"project"`
+	OpenTabs      []string `json:"open_tabs"`
+	NoBrowserSync bool     `json:"no_browser_sync"`
+	Repos         []string `json:"repos"`
+}
+
+type State struct {
+	Entries  []*Entry     `json:"entries"`
+	Clips    []*Clip      `json:"clips"`
+	Notes    []*Note      `json:"notes"`
+	Recent   []RecentFile `json:"recent"`
+	LocalDir string       `json:"local_dir,omitempty"` // last folder in This PC
+	Settings Settings     `json:"settings"`
+}
+
+const (
+	maxClips  = 2000
+	maxRecent = 30
+	fileMagic = "WHUB1"
+)
+
+// Store keeps everything in memory and writes it to one encrypted file
+// (AES-GCM). On Windows the key itself is protected with DPAPI, so the data
+// file is unreadable for other Windows users or if copied to another PC.
+type Store struct {
+	mu      sync.RWMutex
+	path    string
+	key     []byte
+	st      State
+	version int64
+	dirty   bool
+}
+
+func OpenStore(dir string) (*Store, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	s := &Store{path: filepath.Join(dir, "workhub.dat")}
+	_, statErr := os.Stat(s.path)
+	dataExists := statErr == nil
+
+	keyPath := filepath.Join(dir, "key.bin")
+	raw, err := os.ReadFile(keyPath)
+	switch {
+	case err == nil:
+		s.key, err = unprotectKey(raw)
+		if err != nil {
+			return nil, fmt.Errorf("cannot unlock key.bin (was the data folder created by another Windows user or PC?): %w", err)
+		}
+	case errors.Is(err, os.ErrNotExist) && !dataExists:
+		s.key = make([]byte, 32)
+		if _, err := rand.Read(s.key); err != nil {
+			return nil, err
+		}
+		prot, err := protectKey(s.key)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(keyPath, prot, 0o600); err != nil {
+			return nil, err
+		}
+	case errors.Is(err, os.ErrNotExist):
+		return nil, fmt.Errorf("%s exists but key.bin is missing; refusing to start so nothing is overwritten", s.path)
+	default:
+		return nil, err
+	}
+
+	s.st.Settings = Settings{Watch: true, Project: "General"}
+	if dataExists {
+		blob, err := os.ReadFile(s.path)
+		if err != nil {
+			return nil, err
+		}
+		plain, err := s.decrypt(blob)
+		if err != nil {
+			return nil, fmt.Errorf("cannot decrypt %s: %w", s.path, err)
+		}
+		if err := json.Unmarshal(plain, &s.st); err != nil {
+			return nil, fmt.Errorf("corrupt data file %s: %w", s.path, err)
+		}
+	}
+	go s.saver()
+	return s, nil
+}
+
+func (s *Store) encrypt(plain []byte) ([]byte, error) {
+	block, err := aes.NewCipher(s.key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	out := append([]byte(fileMagic), nonce...)
+	return gcm.Seal(out, nonce, plain, nil), nil
+}
+
+func (s *Store) decrypt(blob []byte) ([]byte, error) { return decryptWith(s.key, blob) }
+
+func decryptWith(key, blob []byte) ([]byte, error) {
+	if !strings.HasPrefix(string(blob), fileMagic) {
+		return nil, errors.New("not a WorkHub data file")
+	}
+	blob = blob[len(fileMagic):]
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	if len(blob) < gcm.NonceSize() {
+		return nil, errors.New("file too short")
+	}
+	return gcm.Open(nil, blob[:gcm.NonceSize()], blob[gcm.NonceSize():], nil)
+}
+
+// changed must be called with s.mu held for writing.
+func (s *Store) changed() {
+	s.version++
+	s.dirty = true
+}
+
+func (s *Store) Version() int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.version
+}
+
+func (s *Store) saver() {
+	for range time.Tick(time.Second) {
+		s.Flush()
+	}
+}
+
+func (s *Store) Flush() {
+	s.mu.Lock()
+	if !s.dirty {
+		s.mu.Unlock()
+		return
+	}
+	plain, err := json.Marshal(&s.st)
+	s.dirty = false
+	s.mu.Unlock()
+	if err == nil {
+		err = s.writeFile(plain)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "save failed:", err)
+		s.mu.Lock()
+		s.dirty = true
+		s.mu.Unlock()
+	}
+}
+
+func (s *Store) writeFile(plain []byte) error {
+	blob, err := s.encrypt(plain)
+	if err != nil {
+		return err
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, blob, 0o600); err != nil {
+		return err
+	}
+	if _, err := os.Stat(s.path); err == nil {
+		_ = copyFile(s.path, s.path+".bak")
+	}
+	return os.Rename(tmp, s.path)
+}
+
+func copyFile(src, dst string) error {
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, b, 0o600)
+}
+
+// ---- entries ----
+
+// EntryView is an entry as sent to the browser.
+type EntryView struct {
+	Entry
+	HasPassword bool `json:"has_password"`
+}
+
+func view(e *Entry) EntryView {
+	return EntryView{Entry: *e, HasPassword: e.Password != ""}
+}
+
+func (s *Store) Entries() []EntryView {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]EntryView, 0, len(s.st.Entries))
+	for _, e := range s.st.Entries {
+		out = append(out, view(e))
+	}
+	return out
+}
+
+func (s *Store) Entry(id string) (Entry, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, e := range s.st.Entries {
+		if e.ID == id {
+			return *e, true
+		}
+	}
+	return Entry{}, false
+}
+
+// EntryInput is what the edit form sends. Nil Password means "unchanged".
+type EntryInput struct {
+	ID       string            `json:"id"`
+	Project  string            `json:"project"`
+	Name     string            `json:"name"`
+	Host     string            `json:"host"`
+	Port     int               `json:"port"`
+	Protocol string            `json:"protocol"`
+	URL      string            `json:"url"`
+	Username string            `json:"username"`
+	Password *string           `json:"password"`
+	KeyFile  string            `json:"key_file"`
+	Env      string            `json:"env"`
+	Tags     []string          `json:"tags"`
+	Extra    map[string]string `json:"extra"`
+	Notes    string            `json:"notes"`
+	Favorite bool              `json:"favorite"`
+}
+
+func (s *Store) SaveEntry(in EntryInput) (EntryView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	var e *Entry
+	if in.ID != "" {
+		for _, x := range s.st.Entries {
+			if x.ID == in.ID {
+				e = x
+			}
+		}
+		if e == nil {
+			return EntryView{}, errors.New("entry not found")
+		}
+	} else {
+		e = &Entry{ID: randomHex(8), Created: now}
+		s.st.Entries = append(s.st.Entries, e)
+	}
+	e.Project = orDefault(strings.TrimSpace(in.Project), "General")
+	e.Host = strings.TrimSpace(in.Host)
+	e.Port = in.Port
+	e.Protocol = strings.ToLower(strings.TrimSpace(in.Protocol))
+	e.URL = strings.TrimSpace(in.URL)
+	e.Username = strings.TrimSpace(in.Username)
+	if in.Password != nil && *in.Password != e.Password {
+		if e.Password != "" {
+			e.PrevPasswords = append(e.PrevPasswords, e.Password)
+		}
+		e.Password = *in.Password
+	}
+	e.KeyFile = strings.TrimSpace(in.KeyFile)
+	e.Env = strings.ToUpper(strings.TrimSpace(in.Env))
+	if e.Env == "" {
+		e.Env = inferEnv(e.Host + " " + e.URL + " " + in.Name)
+	}
+	e.Tags = in.Tags
+	e.Extra = in.Extra
+	e.Notes = in.Notes
+	e.Favorite = in.Favorite
+	e.Name = strings.TrimSpace(in.Name)
+	if e.Name == "" {
+		e.Name = defaultName(e)
+	}
+	e.Updated = now
+	s.changed()
+	return view(e), nil
+}
+
+func (s *Store) DeleteEntry(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, e := range s.st.Entries {
+		if e.ID == id {
+			s.st.Entries = append(s.st.Entries[:i], s.st.Entries[i+1:]...)
+			s.changed()
+			return
+		}
+	}
+}
+
+func (s *Store) Touch(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.st.Entries {
+		if e.ID == id {
+			e.LastUsed = time.Now()
+			s.changed()
+		}
+	}
+}
+
+// SetStatus records whether the last connection or link check worked.
+func (s *Store) SetStatus(id string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.st.Entries {
+		if e.ID == id {
+			e.Status, e.StatusMsg, e.StatusAt = "ok", "", time.Now()
+			if err != nil {
+				e.Status, e.StatusMsg = "fail", err.Error()
+			}
+			s.changed()
+		}
+	}
+}
+
+func (s *Store) SetExtra(id, key, val string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.st.Entries {
+		if e.ID == id {
+			if e.Extra == nil {
+				e.Extra = map[string]string{}
+			}
+			e.Extra[key] = val
+			s.changed()
+		}
+	}
+}
+
+// Opened records that the user opened the entry's URL.
+func (s *Store) Opened(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.st.Entries {
+		if e.ID == id {
+			e.OpenCount++
+			e.LastUsed = time.Now()
+			s.changed()
+		}
+	}
+}
+
+// SyncBookmarks mirrors the browsers' bookmarks: new ones are added, renamed
+// or moved ones updated, and ones deleted in the browser removed (unless the
+// user added a login or notes to them). Links the user saved in WorkHub are
+// never removed; they just get the folder if the browser has them too.
+func (s *Store) SyncBookmarks(list []Bookmark) (added, removed int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	norm := func(u string) string { return strings.TrimRight(strings.ToLower(u), "/") }
+	byURL := map[string]*Entry{}
+	for _, e := range s.st.Entries {
+		if e.URL != "" {
+			byURL[norm(e.URL)] = e
+		}
+	}
+	seen := map[string]bool{}
+	now, changed := time.Now(), false
+	for _, b := range list {
+		k := norm(b.URL)
+		if seen[k] {
+			continue // same link in two folders: keep the first
+		}
+		seen[k] = true
+		name := strings.TrimSpace(b.Name)
+		if e := byURL[k]; e != nil {
+			if e.Folder != b.Folder || (e.Source != "" && name != "" && e.Name != name) {
+				e.Folder = b.Folder
+				if e.Source != "" && name != "" {
+					e.Name = name
+				}
+				changed = true
+			}
+			continue
+		}
+		f, ok := fromURL(b.URL)
+		if !ok {
+			continue
+		}
+		e := &Entry{ID: randomHex(8), Project: "Bookmarks", Name: orDefault(name, f.Host), Host: f.Host, Port: f.Port,
+			Protocol: f.Protocol, URL: f.URL, Folder: b.Folder, Source: b.Source, Created: now, Updated: now}
+		e.Env = inferEnv(e.Host + " " + e.URL + " " + e.Name)
+		s.st.Entries = append(s.st.Entries, e)
+		byURL[k] = e
+		added++
+		changed = true
+	}
+	kept := s.st.Entries[:0]
+	for _, e := range s.st.Entries {
+		if e.Source != "" && !seen[norm(e.URL)] && e.Password == "" && e.Username == "" && e.Notes == "" {
+			removed++
+			changed = true
+			continue
+		}
+		kept = append(kept, e)
+	}
+	s.st.Entries = kept
+	if changed {
+		s.changed()
+	}
+	return added, removed
+}
+
+func (s *Store) SetLastDir(id, dir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.st.Entries {
+		if e.ID == id && e.LastDir != dir {
+			e.LastDir = dir
+			s.changed()
+		}
+	}
+}
+
+func (s *Store) LocalDir() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.st.LocalDir
+}
+
+func (s *Store) SetLocalDir(dir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.st.LocalDir != dir {
+		s.st.LocalDir = dir
+		s.dirty = true // no version bump: the UI doesn't need to refresh for this
+	}
+}
+
+// SetCredentials stores credentials typed at connect time.
+func (s *Store) SetCredentials(id, user, pass string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.st.Entries {
+		if e.ID == id {
+			if user != "" {
+				e.Username = user
+			}
+			if pass != "" && pass != e.Password {
+				if e.Password != "" {
+					e.PrevPasswords = append(e.PrevPasswords, e.Password)
+				}
+				e.Password = pass
+			}
+			e.Updated = time.Now()
+			s.changed()
+		}
+	}
+}
+
+func (s *Store) RenameProject(from, to string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rename := func(p string) string {
+		if p == from {
+			return to
+		}
+		if strings.HasPrefix(p, from+"/") {
+			return to + p[len(from):]
+		}
+		return p
+	}
+	for _, e := range s.st.Entries {
+		e.Project = rename(e.Project)
+	}
+	s.st.Settings.Project = rename(s.st.Settings.Project)
+	s.changed()
+}
+
+// ---- capture ----
+
+func entryKey(host string, port int, user, url string) string {
+	return strings.ToLower(host) + "|" + fmt.Sprint(port) + "|" + strings.ToLower(user) + "|" + strings.TrimRight(strings.ToLower(url), "/")
+}
+
+// Ingest parses text, stores the clip and merges findings into entries.
+// Clipboard captures without findings are dropped unless CaptureAll is on.
+func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
+	findings := Parse(text)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if project == "" {
+		project = s.st.Settings.Project
+	}
+	if len(findings) == 0 && source == "clipboard" && !s.st.Settings.CaptureAll {
+		return nil, nil
+	}
+	now := time.Now()
+	clip := &Clip{ID: randomHex(8), Text: text, Source: source, Project: project, Created: now}
+
+	index := map[string]*Entry{}
+	for _, e := range s.st.Entries {
+		index[entryKey(e.Host, e.Port, e.Username, e.URL)] = e
+	}
+	var touched []EntryView
+	for _, f := range findings {
+		k := entryKey(f.Host, f.Port, f.Username, f.URL)
+		e := index[k]
+		if e == nil {
+			e = &Entry{ID: randomHex(8), Project: project, Created: now}
+			s.st.Entries = append(s.st.Entries, e)
+			index[k] = e
+		}
+		mergeFinding(e, f)
+		e.ClipIDs = appendUnique(e.ClipIDs, clip.ID)
+		e.Updated = now
+		clip.EntryIDs = append(clip.EntryIDs, e.ID)
+		touched = append(touched, view(e))
+	}
+	s.st.Clips = append(s.st.Clips, clip)
+	if len(s.st.Clips) > maxClips {
+		s.st.Clips = s.st.Clips[len(s.st.Clips)-maxClips:]
+	}
+	s.changed()
+	return clip, touched
+}
+
+func mergeFinding(e *Entry, f Finding) {
+	if e.Host == "" {
+		e.Host = f.Host
+	}
+	if e.Port == 0 {
+		e.Port = f.Port
+	}
+	if e.URL == "" {
+		e.URL = f.URL
+	}
+	if e.Username == "" {
+		e.Username = f.Username
+	}
+	if e.Protocol == "" {
+		e.Protocol = f.Protocol
+	}
+	if f.Password != "" && f.Password != e.Password {
+		if e.Password != "" {
+			e.PrevPasswords = append(e.PrevPasswords, e.Password)
+		}
+		e.Password = f.Password
+	}
+	for k, v := range f.Extra {
+		if e.Extra == nil {
+			e.Extra = map[string]string{}
+		}
+		e.Extra[k] = v
+	}
+	if e.Env == "" {
+		e.Env = inferEnv(e.Host + " " + e.URL)
+	}
+	if e.Name == "" {
+		e.Name = defaultName(e)
+	}
+}
+
+// FindEntry returns the id of the entry a finding would merge into: same
+// host/port/user/url, or failing that the same host and user.
+func (s *Store) FindEntry(f Finding) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	k := entryKey(f.Host, f.Port, f.Username, f.URL)
+	for _, e := range s.st.Entries {
+		if entryKey(e.Host, e.Port, e.Username, e.URL) == k {
+			return e.ID
+		}
+	}
+	for _, e := range s.st.Entries {
+		if f.Host != "" && strings.EqualFold(e.Host, f.Host) && (f.Username == "" || strings.EqualFold(e.Username, f.Username)) {
+			return e.ID
+		}
+	}
+	return ""
+}
+
+// IsKnownValue reports whether text is exactly a stored value, i.e. the user
+// just copied something out of WorkHub itself.
+func (s *Store) IsKnownValue(text string) bool {
+	t := strings.TrimSpace(text)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, e := range s.st.Entries {
+		if t == e.Password || t == e.Username || t == e.Host || t == e.URL {
+			return true
+		}
+	}
+	return false
+}
+
+// Clips returns the newest clips first.
+func (s *Store) Clips(limit int) []Clip {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []Clip{}
+	for i := len(s.st.Clips) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, *s.st.Clips[i])
+	}
+	return out
+}
+
+func (s *Store) DeleteClip(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, c := range s.st.Clips {
+		if c.ID == id {
+			s.st.Clips = append(s.st.Clips[:i], s.st.Clips[i+1:]...)
+			s.changed()
+			return
+		}
+	}
+}
+
+// ---- notes, recent files, settings ----
+
+func (s *Store) Notes() []Note {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Note, 0, len(s.st.Notes))
+	for _, n := range s.st.Notes {
+		out = append(out, *n)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Updated.After(out[j].Updated) })
+	return out
+}
+
+func (s *Store) SaveNote(n Note) Note {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n.Updated = time.Now()
+	if n.ID != "" {
+		for _, x := range s.st.Notes {
+			if x.ID == n.ID {
+				*x = n
+				s.changed()
+				return n
+			}
+		}
+	}
+	if n.ID == "" {
+		n.ID = randomHex(8)
+	}
+	s.st.Notes = append(s.st.Notes, &n)
+	s.changed()
+	return n
+}
+
+func (s *Store) DeleteNote(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, n := range s.st.Notes {
+		if n.ID == id {
+			s.st.Notes = append(s.st.Notes[:i], s.st.Notes[i+1:]...)
+			s.changed()
+			return
+		}
+	}
+}
+
+func (s *Store) AddRecent(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := []RecentFile{{Path: path, Opened: time.Now()}}
+	for _, r := range s.st.Recent {
+		if !strings.EqualFold(r.Path, path) {
+			list = append(list, r)
+		}
+	}
+	if len(list) > maxRecent {
+		list = list[:maxRecent]
+	}
+	s.st.Recent = list
+	s.changed()
+}
+
+func (s *Store) Recent() []RecentFile {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]RecentFile{}, s.st.Recent...)
+}
+
+func (s *Store) Settings() Settings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.st.Settings
+}
+
+func (s *Store) SetSettings(st Settings) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if st.Project == "" {
+		st.Project = "General"
+	}
+	s.st.Settings = st
+	s.changed()
+}
+
+// ---- helpers ----
+
+var envRe = regexp.MustCompile(`(?i)(?:^|[^a-z])(prod|prd|production|live|uat|qa|sit|tst|test|stg|stage|staging|preprod|dev|develop|sbx|sandbox|dr)(?:[^a-z]|$)`)
+
+func inferEnv(s string) string {
+	m := envRe.FindStringSubmatch(s)
+	if m == nil {
+		return ""
+	}
+	switch strings.ToLower(m[1]) {
+	case "prod", "prd", "production", "live":
+		return "PROD"
+	case "uat":
+		return "UAT"
+	case "qa", "sit", "tst", "test":
+		return "TEST"
+	case "stg", "stage", "staging", "preprod":
+		return "STAGE"
+	case "dr":
+		return "DR"
+	default:
+		return "DEV"
+	}
+}
+
+func defaultName(e *Entry) string {
+	switch {
+	case e.Host != "":
+		return e.Host
+	case e.URL != "":
+		return e.URL
+	case e.Username != "":
+		return "Credential: " + e.Username
+	}
+	return "Untitled"
+}
+
+func orDefault(s, d string) string {
+	if s == "" {
+		return d
+	}
+	return s
+}
+
+func appendUnique(list []string, v string) []string {
+	for _, x := range list {
+		if x == v {
+			return list
+		}
+	}
+	return append(list, v)
+}
+
+// ---- importing data folders from older versions ----
+
+// readDataFolder decrypts another WorkHub data folder (same Windows user).
+func readDataFolder(dir string) (State, error) {
+	var st State
+	raw, err := os.ReadFile(filepath.Join(dir, "key.bin"))
+	if err != nil {
+		return st, err
+	}
+	key, err := unprotectKey(raw)
+	if err != nil {
+		return st, fmt.Errorf("key.bin belongs to another Windows user or PC: %w", err)
+	}
+	blob, err := os.ReadFile(filepath.Join(dir, "workhub.dat"))
+	if err != nil {
+		return st, err
+	}
+	plain, err := decryptWith(key, blob)
+	if err != nil {
+		return st, err
+	}
+	return st, json.Unmarshal(plain, &st)
+}
+
+// Merge adds another state's data; for items present in both, the most
+// recently updated copy wins. It returns how many entries and notes were added.
+func (s *Store) Merge(o State) (entries, notes int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	byID, byKey := map[string]*Entry{}, map[string]*Entry{}
+	for _, e := range s.st.Entries {
+		byID[e.ID] = e
+		byKey[entryKey(e.Host, e.Port, e.Username, e.URL)] = e
+	}
+	for _, e := range o.Entries {
+		cur := byID[e.ID]
+		if cur == nil {
+			cur = byKey[entryKey(e.Host, e.Port, e.Username, e.URL)]
+		}
+		switch {
+		case cur == nil:
+			s.st.Entries = append(s.st.Entries, e)
+			byID[e.ID] = e
+			entries++
+		case e.Updated.After(cur.Updated):
+			id := cur.ID
+			*cur = *e
+			cur.ID = id
+		}
+	}
+	notesByID := map[string]*Note{}
+	for _, n := range s.st.Notes {
+		notesByID[n.ID] = n
+	}
+	for _, n := range o.Notes {
+		if cur := notesByID[n.ID]; cur == nil {
+			s.st.Notes = append(s.st.Notes, n)
+			notes++
+		} else if n.Updated.After(cur.Updated) {
+			*cur = *n
+		}
+	}
+	clipIDs := map[string]bool{}
+	for _, c := range s.st.Clips {
+		clipIDs[c.ID] = true
+	}
+	for _, c := range o.Clips {
+		if !clipIDs[c.ID] {
+			s.st.Clips = append(s.st.Clips, c)
+		}
+	}
+	sort.Slice(s.st.Clips, func(i, j int) bool { return s.st.Clips[i].Created.Before(s.st.Clips[j].Created) })
+	if len(s.st.Clips) > maxClips {
+		s.st.Clips = s.st.Clips[len(s.st.Clips)-maxClips:]
+	}
+	for _, r := range o.Recent {
+		found := false
+		for _, x := range s.st.Recent {
+			found = found || strings.EqualFold(x.Path, r.Path)
+		}
+		if !found && len(s.st.Recent) < maxRecent {
+			s.st.Recent = append(s.st.Recent, r)
+		}
+	}
+	if s.st.LocalDir == "" {
+		s.st.LocalDir = o.LocalDir
+	}
+	s.changed()
+	return entries, notes
+}

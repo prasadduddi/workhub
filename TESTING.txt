@@ -1,0 +1,39 @@
+WorkHub - first test on the work laptop
+=======================================
+Setup
+  1. Make a folder you own, e.g. Documents\WorkHub, and put WorkHub.exe in it.
+  2. Double-click WorkHub.exe.
+     - "Windows protected your PC"?  Click "More info" -> "Run anyway" (no admin needed).
+     - Blocked by company policy?  Note the exact message, try another folder you own.
+  3. Your browser opens WorkHub. Leave the small black window open (closing it stops WorkHub).
+
+Checks (note anything that fails, with the message shown)
+  [ ] Watch clipboard is on. Copy:   host: test01.corp.local  user: me  password: x
+      -> it appears on Dashboard within ~2 seconds
+  [ ] Copy something from KeePass/password manager -> should NOT be captured
+  [ ] Captured page: paste a real email with server details -> Extract & save
+  [ ] Terminal: double-click a real SSH server in the tree -> logs in
+        (first connect saves the server fingerprint)
+  [ ] Select text in terminal = copied; right-click = paste; type exit, press Enter = reconnect
+  [ ] Files: double-click an SFTP server -> listing; upload + download a small file
+  [ ] Files: an FTP server (port 21) if you have one
+  [ ] Assistant (Ctrl+J): paste details + "ftp" or "terminal" -> confirm -> connects
+  [ ] Notes: new note, type, close the browser tab, re-open WorkHub -> text kept
+  [ ] Quit WorkHub, start again -> everything still there
+
+Your data: %LOCALAPPDATA%\WorkHub\data (shown at the bottom of the sidebar). Any version of
+the exe uses it. Old workhub-data folders are imported automatically on first run.
+  [ ] Bookmarks page shows your Edge/Chrome bookmarks with their folders (Folders view)
+  [ ] Drag the bars: sidebar edge, server tree edge, FileZilla middle; « hides the sidebar
+
+SQL (Oracle / PostgreSQL)
+  [ ] Tree: + new connection, Type oracle (Extra: service=YOURSERVICE) or postgres (Extra: database=NAME)
+  [ ] Double-click -> connects; dot turns green (red with the reason if it fails)
+  [ ] Ctrl+Enter runs the statement at the cursor; F5 runs the whole script (see "Script output")
+  [ ] BEGIN DBMS_OUTPUT.PUT_LINE('hi'); END;   + "/" line -> "hi" shown in Script output
+  [ ] Auto-commit off: UPDATE shows "uncommitted changes"; Rollback undoes it
+  [ ] Stop cancels a long query; Tables panel lists tables; double-click previews rows
+  [ ] Copy -> paste into Excel; Export CSV
+Status dots and text size
+  [ ] Bookmarks: "Check links" -> green/red dots (hover a red dot for the reason)
+  [ ] A-/A+ in PuTTY, SQL, Notepad++ (or Ctrl + mouse wheel over them); Ctrl +/- zooms everything
