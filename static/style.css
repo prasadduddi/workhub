@@ -312,6 +312,9 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .mail-body .row { margin-top: 0; }
 .mail-body .row.wrap { flex-wrap: wrap; gap: 12px; }
 .mail-body #mailMatch { flex: 2; } .mail-body #mailProject { flex: 1; }
+.mailproof { font-size: 12.5px; background: var(--panel2); border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 3px; }
+.mailproof:empty { display: none; }
+.mailproof .ok { color: var(--ok); }
 .rule { display: flex; gap: 8px; align-items: center; font: 13px var(--mono); padding: 3px 8px; background: var(--panel2); border-radius: 6px; }
 .rule .p { color: var(--muted); font-family: "Segoe UI", system-ui, sans-serif; font-size: 12px; }
 .rule .x { margin-left: auto; cursor: pointer; color: var(--muted); } .rule .x:hover { color: var(--danger); }

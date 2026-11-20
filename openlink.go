@@ -21,7 +21,10 @@ func (a *App) openLink(url string) {
 				if exec.Command("open", "-a", exe, url).Start() == nil {
 					return
 				}
-			} else if exec.Command(exe, url).Start() == nil { // a running browser adds a new tab
+			} else if exec.Command(exe, url).Start() == nil {
+				// Only the URL, no --new-window or profile flags: an already
+				// running Chrome/Edge takes it over and opens a new tab in its
+				// last active window instead of starting another instance.
 				return
 			}
 		}

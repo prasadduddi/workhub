@@ -73,11 +73,28 @@ func mailText(m mailItem) string {
 
 type mailStatus struct {
 	mu        sync.Mutex
-	LastCheck time.Time `json:"last_check"`
-	LastError string    `json:"last_error"`
-	Matched   int       `json:"matched"`  // matching mails in the last check
-	Captured  int       `json:"captured"` // total captured since start
-	Running   bool      `json:"running"`
+	LastCheck time.Time    `json:"last_check"`
+	LastError string       `json:"last_error"`
+	Matched   int          `json:"matched"`  // matching mails in the last check
+	Captured  int          `json:"captured"` // total captured since start
+	Running   bool         `json:"running"`
+	Newest    *mailSummary // newest mail in the folder at the last check
+	LastMatch *mailSummary // most recent mail from a watched sender
+}
+
+type mailSummary struct {
+	From     string    `json:"from"`
+	Address  string    `json:"address"`
+	Subject  string    `json:"subject"`
+	Received time.Time `json:"received"`
+	Captured bool      `json:"captured,omitempty"`
+}
+
+func summary(m *mailItem) *mailSummary {
+	if m == nil {
+		return nil
+	}
+	return &mailSummary{From: m.From, Address: m.Address, Subject: m.Subject, Received: m.Received}
 }
 
 func (a *App) mailWatcher() {
@@ -109,9 +126,10 @@ func (a *App) checkMail() {
 		since = time.Now().AddDate(0, 0, -max(ms.Lookback, 1))
 	}
 	started := time.Now()
-	items, err := fetchMail(ms.Folder, since)
+	items, top, err := fetchMail(ms.Folder, since)
 	matched, captured := 0, 0
 	newest := since
+	var lastMatch *mailSummary
 	if err == nil {
 		for _, m := range items {
 			if m.Received.After(newest) {
@@ -126,8 +144,13 @@ func (a *App) checkMail() {
 			if ms.KeepAll {
 				src = "outlook-all"
 			}
-			if clip, _ := a.store.Ingest(mailText(m), src, rule.Project); clip != nil {
+			clip, _ := a.store.Ingest(mailText(m), src, rule.Project)
+			if clip != nil {
 				captured++
+			}
+			if lastMatch == nil || m.Received.After(lastMatch.Received) {
+				lastMatch = summary(&m)
+				lastMatch.Captured = clip != nil
 			}
 			a.store.MarkMailSeen(m.ID)
 		}
@@ -141,6 +164,11 @@ func (a *App) checkMail() {
 	a.mail.LastError = ""
 	if err != nil {
 		a.mail.LastError = err.Error()
+	} else {
+		a.mail.Newest = summary(top)
+		if lastMatch != nil {
+			a.mail.LastMatch = lastMatch
+		}
 	}
 	a.mail.mu.Unlock()
 }
@@ -149,7 +177,8 @@ func (a *App) handleMailStatus(w http.ResponseWriter, r *http.Request) {
 	a.mail.mu.Lock()
 	defer a.mail.mu.Unlock()
 	writeJSON(w, map[string]any{"last_check": a.mail.LastCheck, "last_error": a.mail.LastError, "matched": a.mail.Matched,
-		"captured": a.mail.Captured, "running": a.mail.Running, "supported": mailSupported})
+		"captured": a.mail.Captured, "running": a.mail.Running, "supported": mailSupported,
+		"newest": a.mail.Newest, "last_match": a.mail.LastMatch, "folder": orDefault(a.store.Settings().Mail.Folder, "Inbox")})
 }
 
 func (a *App) handleMailCheck(w http.ResponseWriter, r *http.Request) {

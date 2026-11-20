@@ -2084,6 +2084,12 @@ const Mail = {
         : s.last_check && new Date(s.last_check).getFullYear() > 1971 ? `Last check ${new Date(s.last_check).toLocaleTimeString()} · ${s.matched} new matching mail · ${s.captured} captured since start`
         : c.enabled ? 'Waiting for first check…' : '';
       $('#mailStatus').style.color = s.last_error ? 'var(--danger)' : '';
+      // Proof the check really read Outlook: the newest mail in the folder, and the last matching one.
+      const line = (label, m, extra = '') => m ? `<div><span class="muted">${label}</span> <b>${esc(new Date(m.received).toLocaleString())}</b> · ${esc(m.from || '')}${m.address && m.address !== m.from ? ` &lt;${esc(m.address)}&gt;` : ''} · “${esc(m.subject || '(no subject)')}”${extra}</div>` : '';
+      $('#mailProof').innerHTML = s.supported && !s.last_error && s.last_check && new Date(s.last_check).getFullYear() > 1971
+        ? line(`Newest email in ${esc(s.folder)}:`, s.newest) + (s.newest ? '' : `<div class="muted">The ${esc(s.folder)} folder is empty.</div>`) +
+          (s.last_match ? line('Last email from a watched sender:', s.last_match, s.last_match.captured ? ' <span class="ok">✓ captured</span>' : ' <span class="muted">(no hosts/logins found in it)</span>') : '<div class="muted">No email from your watched senders yet.</div>')
+        : '';
     } catch { /* ignore */ }
   },
 };

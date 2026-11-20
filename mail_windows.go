@@ -19,12 +19,12 @@ const olFolderInbox = 6
 
 // fetchMail reads mail received after `since` from classic Outlook through its
 // COM interface (no admin rights needed). Outlook must already be running.
-func fetchMail(folder string, since time.Time) (out []mailItem, err error) {
+func fetchMail(folder string, since time.Time) (out []mailItem, newest *mailItem, err error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
 		if oe, ok := err.(*ole.OleError); !ok || oe.Code() != 1 { // S_FALSE: already initialised
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	defer ole.CoUninitialize()
@@ -36,12 +36,12 @@ func fetchMail(folder string, since time.Time) (out []mailItem, err error) {
 
 	unk, err := oleutil.GetActiveObject("Outlook.Application")
 	if err != nil {
-		return nil, errors.New("classic Outlook is not running (start Outlook; the new Outlook / Outlook on the web cannot be read by other programs)")
+		return nil, nil, errors.New("classic Outlook is not running (start Outlook; the new Outlook / Outlook on the web cannot be read by other programs)")
 	}
 	defer unk.Release()
 	app, err := unk.QueryInterface(ole.IID_IDispatch)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer app.Release()
 
@@ -63,7 +63,7 @@ func fetchMail(folder string, since time.Time) (out []mailItem, err error) {
 			folders.Release()
 			if err != nil {
 				cur.Release()
-				return nil, fmt.Errorf("Outlook folder %q not found", name)
+				return nil, nil, fmt.Errorf("Outlook folder %q not found", name)
 			}
 			cur.Release()
 			cur = next.ToIDispatch()
@@ -78,6 +78,14 @@ func fetchMail(folder string, since time.Time) (out []mailItem, err error) {
 	v, err := oleutil.CallMethod(items, "GetFirst")
 	for n := 0; err == nil && v != nil && v.VT == ole.VT_DISPATCH && n < 500; n++ {
 		it := v.ToIDispatch()
+		if newest == nil { // newest mail in the folder, shown as proof the check ran
+			newest = &mailItem{From: str(it, "SenderName"), Address: str(it, "SenderEmailAddress"), Subject: str(it, "Subject")}
+			if t, err := oleutil.GetProperty(it, "ReceivedTime"); err == nil {
+				if tv, ok := t.Value().(time.Time); ok {
+					newest.Received = tv
+				}
+			}
+		}
 		m, ok, stop := readItem(it, since)
 		it.Release()
 		if stop {
@@ -88,7 +96,7 @@ func fetchMail(folder string, since time.Time) (out []mailItem, err error) {
 		}
 		v, err = oleutil.CallMethod(items, "GetNext")
 	}
-	return out, nil
+	return out, newest, nil
 }
 
 // readItem reads one mail. stop is true once mail is older than `since`.
