@@ -38,6 +38,8 @@ type App struct {
 	token       string
 	sftp        *sftpManager
 	dbs         *dbManager
+	mail        mailStatus
+	mailNow     chan struct{}
 	jobs        *jobList
 
 	khMu     sync.Mutex
@@ -83,6 +85,7 @@ func main() {
 		token:     randomHex(16),
 		sftp:      newSFTPManager(),
 		dbs:       newDBManager(),
+		mailNow:   make(chan struct{}, 1),
 		jobs:      &jobList{},
 		backedUp:  map[string]bool{},
 	}
@@ -119,6 +122,7 @@ func main() {
 
 	go app.watchClipboard()
 	go app.syncBrowserBookmarks()
+	go app.mailWatcher()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -400,6 +404,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/local/pickfile", a.handlePickFile)
 	mux.HandleFunc("GET /api/local/places", a.handleLocalPlaces)
 	mux.HandleFunc("POST /api/links/check", a.handleCheckLinks)
+	mux.HandleFunc("POST /api/test", a.handleTestConnection)
+	mux.HandleFunc("GET /api/mail/status", a.handleMailStatus)
+	mux.HandleFunc("POST /api/mail/check", a.handleMailCheck)
 	mux.HandleFunc("POST /api/db/open", a.handleDBOpen)
 	mux.HandleFunc("POST /api/db/close", a.handleDBClose)
 	mux.HandleFunc("POST /api/db/exec", a.handleDBExec)
@@ -407,6 +414,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/db/tx", a.handleDBTx)
 	mux.HandleFunc("GET /api/db/objects", a.handleDBObjects)
 	mux.HandleFunc("GET /api/db/columns", a.handleDBColumns)
+	mux.HandleFunc("GET /api/db/tree", a.handleDBTree)
+	mux.HandleFunc("GET /api/db/ddl", a.handleDBDDL)
 
 	return a.guard(mux)
 }

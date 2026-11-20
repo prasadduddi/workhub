@@ -51,6 +51,7 @@
       <div class="seg" id="layout">
         <button data-l="cards" class="active">Cards</button><button data-l="table">Table</button>
       </div>
+      <label class="cardw muted tiny" title="Card width (Cards view)">▭ <input type="range" id="cardWidth" min="240" max="700" step="10"></label>
       <button id="newEntry" class="primary">+ New</button>
     </header>
     <div id="stats" class="stats"></div>
@@ -74,6 +75,22 @@
 
   <!-- CAPTURED -->
   <section id="view-inbox" class="view">
+    <details class="mailbox" id="mailPanel">
+      <summary>📧 Outlook monitoring <span id="mailBadge" class="muted tiny"></span></summary>
+      <div class="mail-body">
+        <label class="switch"><input type="checkbox" id="mailOn"><span></span> Watch Outlook for mail from these senders</label>
+        <div id="mailRules"></div>
+        <div class="row"><input id="mailMatch" placeholder="bob@client.com,  *@vendor.com,  or part of a name"><input id="mailProject" list="projectList" placeholder="File into project (optional)"><button id="mailAdd">Add sender</button></div>
+        <div class="row wrap">
+          <label class="muted tiny">Folder <input id="mailFolder" placeholder="Inbox  (or Inbox/Vendors)"></label>
+          <label class="muted tiny">Check every <select id="mailEvery"><option value="1">1 min</option><option value="2">2 min</option><option value="5">5 min</option><option value="15">15 min</option><option value="60">1 hour</option></select></label>
+          <label class="muted tiny">First check looks back <select id="mailBack"><option value="1">1 day</option><option value="7">7 days</option><option value="30">30 days</option></select></label>
+          <label class="check muted tiny"><input type="checkbox" id="mailKeepAll"> Keep emails with no hosts/logins too</label>
+        </div>
+        <div class="row"><button id="mailCheck">Check now</button><span id="mailStatus" class="muted tiny"></span></div>
+        <div class="muted tiny">Works with <b>classic Outlook</b> on Windows while it is running. Mail is only read — never moved, changed or sent.</div>
+      </div>
+    </details>
     <div class="paste-box">
       <textarea id="pasteText" placeholder="Paste anything here: emails, chat messages, wiki pages, connection strings…&#10;Hosts, IPs, ports, URLs, usernames and passwords are pulled out and filed automatically.  (Ctrl+Enter)"></textarea>
       <div class="row"><button id="pasteBtn" class="primary">Extract &amp; save</button><span id="pasteResult" class="muted"></span></div>
@@ -154,7 +171,7 @@
           <span class="fontctl" data-font="sql" title="SQL text size (or Ctrl + mouse wheel)"><button>A−</button><span></span><button>A+</button></span>
           <button id="sqlObjToggle" title="Show/hide tables">Tables</button>
         </div>
-        <div class="sql-grid">
+        <div class="sql-grid no-objects">
           <div class="sql-left">
             <div id="sqlEditorHost" class="sql-editor"></div>
             <div class="hsplit" id="sqlSplit" title="Drag to resize"></div>
@@ -241,6 +258,8 @@
       <label class="wide">URL<input name="url"></label>
       <label>Username<input name="username" autocomplete="off"></label>
       <label>Password<input name="password" autocomplete="off"></label>
+      <label id="dbNameRow">Service name / database<input name="dbname" placeholder="e.g. ORCLPDB1 or postgres"></label>
+      <label class="check" id="sidRow" title="Oracle: tick if this is a SID rather than a service name"><input type="checkbox" name="is_sid"> It's an Oracle SID</label>
       <label class="wide">Private key file (OpenSSH format)<input name="key_file" placeholder="C:\Users\me\.ssh\id_rsa"></label>
       <label class="wide">Tags (comma separated)<input name="tags"></label>
       <label class="wide">Extra (key=value per line)<textarea name="extra" rows="2"></textarea></label>
@@ -248,7 +267,7 @@
       <label class="check"><input type="checkbox" name="favorite"> Pin to top</label>
     </div>
     <div id="prevPw" class="muted tiny"></div>
-    <div class="row end"><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div>
+    <div class="row end"><button type="button" id="testConn">Test connection</button><span id="testResult" class="test-result"></span><span class="spacer"></span><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div>
   </form>
 </dialog>
 <datalist id="protoList"><option>ssh</option><option>postgres</option><option>https</option><option>http</option><option>rdp</option><option>oracle</option><option>postgres</option><option>mysql</option><option>sqlserver</option><option>ftp</option><option>smb</option><option>ldap</option></datalist>

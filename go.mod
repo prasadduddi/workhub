@@ -6,6 +6,7 @@ require (
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/fergusstrange/embedded-postgres v1.34.0
 	github.com/go-git/go-git/v5 v5.19.3
+	github.com/go-ole/go-ole v1.3.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/jlaffaye/ftp v0.2.4

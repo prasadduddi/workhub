@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -102,3 +103,101 @@ func TestPostgresQueryWindow(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+// TestPostgresTree checks the SQL page's object tree and DDL against a real,
+// temporary PostgreSQL server.
+func TestPostgresTree(t *testing.T) {
+	if testing.Short() {
+		t.Skip("needs a temporary PostgreSQL server")
+	}
+	pg := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
+		Port(54330).Username("tester").Password("pw").Database("app").
+		RuntimePath(t.TempDir()).CachePath(os.TempDir() + "/workhub-pg-cache"))
+	if err := pg.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer pg.Stop()
+	store, _ := OpenStore(t.TempDir())
+	a := &App{store: store, dbs: newDBManager()}
+	v, _ := store.SaveEntry(EntryInput{Host: "127.0.0.1", Port: 54330, Protocol: "postgres", Username: "tester", Password: ptr("pw"),
+		Extra: map[string]string{"database": "app"}})
+	rec := httptest.NewRecorder()
+	b, _ := json.Marshal(map[string]any{"id": v.ID})
+	a.handleDBOpen(rec, httptest.NewRequest("POST", "/", bytes.NewReader(b)))
+	var open map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &open)
+	sid := open["sid"].(string)
+	s, _ := a.dbs.get(sid)
+	for _, q := range []string{
+		"create table orders (id int primary key, customer text not null, total numeric(10,2) default 0)",
+		"create index orders_customer on orders (customer)",
+		"create view big_orders as select * from orders where total > 100",
+		"create function add1(i int) returns int language sql as 'select i + 1'",
+		"create function trg_fn() returns trigger language plpgsql as $$ begin return new; end $$",
+		"create trigger orders_audit before insert on orders for each row execute function trg_fn()",
+	} {
+		if _, err := s.db.Exec(q); err != nil {
+			t.Fatal(q, err)
+		}
+	}
+	tree := func(level, schema, typ, name string) []dbNode {
+		rec := httptest.NewRecorder()
+		a.handleDBTree(rec, httptest.NewRequest("GET", "/?sid="+sid+"&level="+level+"&schema="+schema+"&type="+url.QueryEscape(typ)+"&name="+url.QueryEscape(name), nil))
+		var out []dbNode
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil || rec.Code != 200 {
+			t.Fatalf("%s %s: %d %s", level, typ, rec.Code, rec.Body.String())
+		}
+		return out
+	}
+	labels := func(ns []dbNode) string {
+		var l []string
+		for _, n := range ns {
+			l = append(l, n.Label+"["+n.Detail+"]")
+		}
+		return strings.Join(l, ", ")
+	}
+	if root := tree("root", "", "", ""); root[0].Schema != "public" || !root[0].Open {
+		t.Fatalf("root: %+v", root)
+	}
+	if got := labels(tree("schema", "public", "", "")); !strings.Contains(got, "Tables[1]") || !strings.Contains(got, "Views[1]") ||
+		!strings.Contains(got, "Functions[2]") || !strings.Contains(got, "Triggers[1]") || !strings.Contains(got, "Indexes[2]") {
+		t.Fatalf("types: %s", got)
+	}
+	if got := labels(tree("type", "public", "TABLE", "")); got != "orders[]" {
+		t.Fatalf("tables: %s", got)
+	}
+	if got := labels(tree("cols", "public", "TABLE", "orders")); !strings.Contains(got, "customer[text not null]") {
+		t.Fatalf("columns: %s", got)
+	}
+	if got := labels(tree("idx", "public", "TABLE", "orders")); !strings.Contains(got, "orders_customer") || !strings.Contains(got, "primary") {
+		t.Fatalf("indexes: %s", got)
+	}
+	if got := labels(tree("cons", "public", "TABLE", "orders")); !strings.Contains(got, "PRIMARY KEY (id)") {
+		t.Fatalf("constraints: %s", got)
+	}
+	if got := labels(tree("trg", "public", "TABLE", "orders")); !strings.Contains(got, "orders_audit") {
+		t.Fatalf("triggers: %s", got)
+	}
+	if got := labels(tree("type", "public", "FUNCTION", "")); !strings.Contains(got, "add1(i integer)") {
+		t.Fatalf("functions: %s", got)
+	}
+	ddl := func(typ, name string) string {
+		rec := httptest.NewRecorder()
+		a.handleDBDDL(rec, httptest.NewRequest("GET", "/?sid="+sid+"&schema=public&type="+url.QueryEscape(typ)+"&name="+url.QueryEscape(name), nil))
+		var r map[string]string
+		json.Unmarshal(rec.Body.Bytes(), &r)
+		if rec.Code != 200 {
+			t.Fatalf("ddl %s: %s", name, rec.Body.String())
+		}
+		return r["ddl"]
+	}
+	if d := ddl("TABLE", "orders"); !strings.Contains(d, "customer text NOT NULL") || !strings.Contains(d, "PRIMARY KEY (id)") || !strings.Contains(d, "orders_customer") {
+		t.Fatalf("table ddl: %s", d)
+	}
+	if d := ddl("VIEW", "big_orders"); !strings.Contains(d, "CREATE OR REPLACE VIEW public.big_orders") {
+		t.Fatalf("view ddl: %s", d)
+	}
+	if d := ddl("FUNCTION", "add1(i integer)"); !strings.Contains(d, "CREATE OR REPLACE FUNCTION public.add1") {
+		t.Fatalf("function ddl: %s", d)
+	}
+}

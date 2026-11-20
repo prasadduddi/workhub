@@ -68,13 +68,14 @@ type RecentFile struct {
 }
 
 type Settings struct {
-	Workspace     string   `json:"workspace"`
-	Watch         bool     `json:"watch"`
-	CaptureAll    bool     `json:"capture_all"`
-	Project       string   `json:"project"`
-	OpenTabs      []string `json:"open_tabs"`
-	NoBrowserSync bool     `json:"no_browser_sync"`
-	Repos         []string `json:"repos"`
+	Workspace     string       `json:"workspace"`
+	Watch         bool         `json:"watch"`
+	CaptureAll    bool         `json:"capture_all"`
+	Project       string       `json:"project"`
+	OpenTabs      []string     `json:"open_tabs"`
+	NoBrowserSync bool         `json:"no_browser_sync"`
+	Repos         []string     `json:"repos"`
+	Mail          MailSettings `json:"mail"`
 }
 
 type State struct {
@@ -83,6 +84,8 @@ type State struct {
 	Notes    []*Note      `json:"notes"`
 	Recent   []RecentFile `json:"recent"`
 	LocalDir string       `json:"local_dir,omitempty"` // last folder in This PC
+	MailFrom time.Time    `json:"mail_since,omitzero"` // newest mail already checked
+	MailIDs  []string     `json:"mail_seen,omitempty"` // EntryIDs already captured
 	Settings Settings     `json:"settings"`
 }
 
@@ -492,6 +495,42 @@ func (s *Store) SetLastDir(id, dir string) {
 	}
 }
 
+func (s *Store) MailSince() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.st.MailFrom
+}
+
+func (s *Store) SetMailSince(t time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if t.After(s.st.MailFrom) {
+		s.st.MailFrom = t
+		s.dirty = true
+	}
+}
+
+func (s *Store) MailSeen(id string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, x := range s.st.MailIDs {
+		if x == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) MarkMailSeen(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.MailIDs = append(s.st.MailIDs, id)
+	if len(s.st.MailIDs) > 5000 {
+		s.st.MailIDs = s.st.MailIDs[len(s.st.MailIDs)-5000:]
+	}
+	s.dirty = true
+}
+
 func (s *Store) LocalDir() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -562,8 +601,11 @@ func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 	if project == "" {
 		project = s.st.Settings.Project
 	}
-	if len(findings) == 0 && source == "clipboard" && !s.st.Settings.CaptureAll {
+	if len(findings) == 0 && (source == "outlook" || (source == "clipboard" && !s.st.Settings.CaptureAll)) {
 		return nil, nil
+	}
+	if source == "outlook-all" {
+		source = "outlook"
 	}
 	now := time.Now()
 	clip := &Clip{ID: randomHex(8), Text: text, Source: source, Project: project, Created: now}

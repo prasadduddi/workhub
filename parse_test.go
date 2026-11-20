@@ -13,6 +13,8 @@ func TestParseSamples(t *testing.T) {
 		{"ssh cmd", "ssh -p 2201 oracle@dbsrv01", []Finding{{Host: "dbsrv01", Port: 2201, Username: "oracle", Protocol: "ssh"}}},
 		{"jdbc", "jdbc:oracle:thin:@//ora-dev.corp.com:1521/ORCLPDB", []Finding{{Host: "ora-dev.corp.com", Port: 1521, Protocol: "oracle", URL: "jdbc:oracle:thin:@//ora-dev.corp.com:1521/ORCLPDB", Extra: map[string]string{"service": "ORCLPDB"}}}},
 		{"noise", "see config.yaml and README.md, e.g. run main.py", nil},
+		{"email address is not a server", "Hi, mail ann.lee@vendor.com or bob@corp.co.uk for access", nil},
+		{"email plus real host", "From: Ann <ann@vendor.com>\nServer: db01.vendor.local", []Finding{{Host: "db01.vendor.local"}}},
 	}
 	for _, c := range cases {
 		got := Parse(c.text)

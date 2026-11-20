@@ -199,6 +199,8 @@ func parseChunk(s string) []Finding {
 	for _, m := range reUserAt.FindAllStringSubmatchIndex(masked, -1) {
 		user, host := masked[m[2]:m[3]], masked[m[4]:m[5]]
 		if !looksLikeLogin(s, host) {
+			// An e-mail address: hide it so its domain isn't taken for a server.
+			masked = blank(masked, m[0], m[1])
 			continue
 		}
 		f := Finding{Host: host, Username: user, Protocol: "ssh"}

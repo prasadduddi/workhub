@@ -92,7 +92,9 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .group-head { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
 .group-head h3 { margin: 0; font-size: 15px; }
 .group-head .n { color: var(--muted); font-size: 12px; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--card-w, 340px), 100%), 1fr)); gap: 10px; }
+.cardw { display: inline-flex; align-items: center; gap: 4px; }
+.cardw input { width: 90px; }
 .card { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
 .card.env-PROD { border-left-color: var(--prod); } .card.env-UAT { border-left-color: var(--uat); }
 .card.env-TEST { border-left-color: var(--test); } .card.env-STAGE { border-left-color: var(--stage); }
@@ -114,7 +116,10 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ulabel { font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 4px; padding: 1px 6px; margin-right: 6px; }
 .tag { font-size: 11px; color: var(--muted); }
 
-table.tbl { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: var(--radius); overflow: hidden; }
+table.tbl { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: var(--radius); table-layout: fixed; }
+.tbl td { overflow: hidden; text-overflow: ellipsis; }
+.colgrip { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; z-index: 2; }
+.colgrip:hover, .dragging .colgrip { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 .tbl th, .tbl td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
 .tbl th { background: var(--panel2); font-size: 12px; color: var(--muted); position: sticky; top: 0; }
 .tbl td { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
@@ -243,6 +248,17 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .obj-cols div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .obj-cols div:hover { color: var(--accent); }
 
+/* outlook monitoring */
+.mailbox { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; }
+.mailbox summary { cursor: pointer; font-weight: 600; }
+.mail-body { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
+.mail-body .row { margin-top: 0; }
+.mail-body .row.wrap { flex-wrap: wrap; gap: 12px; }
+.mail-body #mailMatch { flex: 2; } .mail-body #mailProject { flex: 1; }
+.rule { display: flex; gap: 8px; align-items: center; font: 13px var(--mono); padding: 3px 8px; background: var(--panel2); border-radius: 6px; }
+.rule .p { color: var(--muted); font-family: "Segoe UI", system-ui, sans-serif; font-size: 12px; }
+.rule .x { margin-left: auto; cursor: pointer; color: var(--muted); } .rule .x:hover { color: var(--danger); }
+
 /* captured */
 .paste-box textarea { width: 100%; min-height: 120px; font-family: var(--mono); resize: vertical; }
 .section-title { margin: 18px 0 8px; font-size: 14px; }
@@ -282,6 +298,9 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .tnode .n { color: var(--muted); font-size: 11px; margin-left: auto; }
 .tnode .live { color: var(--ok); font-size: 10px; }
 .tnode.folder .nm { font-weight: 600; }
+.tnode.dbn { font-size: 12.5px; padding-top: 2px; padding-bottom: 2px; }
+.tnode.dbn small { font-family: "Segoe UI", system-ui, sans-serif; }
+.tnode.dbn.bad .nm { color: var(--danger); }
 .tnode .badge { font-size: 9px; padding: 0 4px; }
 .ctx { position: fixed; z-index: 20; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.25); padding: 4px; min-width: 190px; }
 .ctx button { display: block; width: 100%; text-align: left; background: none; border: none; padding: 6px 10px; border-radius: 5px; }
@@ -415,6 +434,9 @@ dialog label.check { flex-direction: row; align-items: center; gap: 6px; }
 .chat-hints button { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
 .chat-input { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); }
 .chat-input textarea { flex: 1; resize: none; font-family: var(--mono); font-size: 12.5px; }
+
+.test-result { font-size: 12.5px; max-width: 330px; overflow-wrap: anywhere; }
+.test-result.ok { color: var(--ok); } .test-result.fail { color: var(--danger); }
 
 #toast { z-index: 30; position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; max-width: 80vw; }
 #toast.show { opacity: 1; }

@@ -271,6 +271,7 @@ function show(view) {
     if (stale.length) Bookmarks.check(stale);
   }
   if (view === 'sql') SQL.fit();
+  if (view === 'inbox') Mail.status();
   if (view === 'git') {
     Git.renderRepos();
     let last = ''; try { last = localStorage.getItem('gitRepo') || ''; } catch { /* ignore */ }
@@ -292,7 +293,7 @@ document.addEventListener('keydown', e => {
 async function refreshAll() {
   const [entries, clips, settings] = await Promise.all([api('GET', '/api/entries'), api('GET', '/api/clips'), api('GET', '/api/settings')]);
   S.entries = entries || []; S.clips = clips || []; S.settings = settings;
-  renderSettings(); renderFilters(); renderBoard(); renderClips(); Tree.render(); Bookmarks.render(); Notes.renderLists();
+  renderSettings(); renderFilters(); renderBoard(); renderClips(); Mail.render(); Tree.render(); Bookmarks.render(); Notes.renderLists();
 }
 
 async function poll() {
@@ -474,8 +475,11 @@ function svcHTML(e) {
   return `<div class="svc">${rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('')}<div class="svc-actions">${acts}</div></div>`;
 }
 
+// Table columns: drag a header edge to resize (shared by every group's table).
+const TABLE_COLS = [['Env', 95], ['Name', 170], ['Host', 190], ['Port', 64], ['Type', 80], ['URL', 280], ['User', 130], ['Password', 130], ['', 110]];
 function tableHTML(items) {
-  return `<table class="tbl"><thead><tr><th>Env</th><th>Name</th><th>Host</th><th>Port</th><th>Type</th><th>URL</th><th>User</th><th>Password</th><th></th></tr></thead><tbody>` +
+  return `<table class="tbl"><colgroup>${TABLE_COLS.map((c, i) => `<col style="width:var(--c${i}, ${c[1]}px)">`).join('')}</colgroup>
+    <thead><tr>${TABLE_COLS.map((c, i) => `<th>${c[0]}<span class="colgrip" data-col="${i}" title="Drag to resize · double-click to reset"></span></th>`).join('')}</tr></thead><tbody>` +
     items.map(e => `<tr>
       <td>${dot(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}</td>
       <td>${esc(e.name)}</td>
@@ -541,26 +545,61 @@ async function openEntryDialog(e) {
   const v = e || { project: S.settings.project };
   for (const k of ['name', 'project', 'host', 'port', 'protocol', 'env', 'url', 'username', 'key_file', 'notes']) f[k].value = v[k] || '';
   f.tags.value = (v.tags || []).join(', ');
-  f.extra.value = Object.entries(v.extra || {}).map(([k, x]) => `${k}=${x}`).join('\n');
+  const ex = { ...(v.extra || {}) };
+  f.dbname.value = ex.service || ex.service_name || ex.database || ex.db_name || ex.dbname || ex.sid || '';
+  f.is_sid.checked = !!ex.sid && !(ex.service || ex.service_name || ex.database);
+  for (const k of DB_KEYS) delete ex[k];
+  f.extra.value = Object.entries(ex).map(([k, x]) => `${k}=${x}`).join('\n');
+  $('#testResult').textContent = ''; $('#testResult').className = 'test-result';
+  dbFieldsVisible();
   f.favorite.checked = !!v.favorite;
   f.password.value = f.password.dataset.orig = e?.password || '';
   if (e?.prev_passwords?.length) $('#prevPw').textContent = 'Previous passwords: ' + e.prev_passwords.join('   ·   ');
   $('#entryDlg').showModal();
 }
 $('#newEntry').onclick = () => openEntryDialog(null);
-$('#entryDlg').addEventListener('close', async () => {
-  if ($('#entryDlg').returnValue !== 'save') return;
+const DB_KEYS = ['service', 'service_name', 'database', 'db_name', 'dbname', 'sid'];
+function dbFieldsVisible() {
+  const f = $('#entryForm'), p = f.protocol.value.trim().toLowerCase(), port = +f.port.value;
+  const isDB = ['oracle', 'postgres', 'postgresql'].includes(p) || (!p && [1521, 1522, 5432].includes(port));
+  $('#dbNameRow').style.display = isDB ? '' : 'none';
+  $('#sidRow').style.display = isDB && (p === 'oracle' || (!p && port !== 5432)) ? '' : 'none';
+}
+$('#entryForm').protocol.addEventListener('input', dbFieldsVisible);
+$('#entryForm').port.addEventListener('input', dbFieldsVisible);
+
+function entryFormBody() {
   const f = $('#entryForm');
   const extra = {};
   f.extra.value.split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) extra[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
+  const db = f.dbname.value.trim();
+  if (db && $('#dbNameRow').style.display !== 'none') {
+    const p = f.protocol.value.trim().toLowerCase();
+    extra[f.is_sid.checked ? 'sid' : (p === 'oracle' || (!p && +f.port.value !== 5432) ? 'service' : 'database')] = db;
+  }
   const body = {
     id: editing?.id || '', name: f.name.value, project: f.project.value, host: f.host.value, port: +f.port.value || 0,
     protocol: f.protocol.value, env: f.env.value, url: f.url.value, username: f.username.value, key_file: f.key_file.value,
     tags: f.tags.value.split(',').map(s => s.trim()).filter(Boolean), extra, notes: f.notes.value, favorite: f.favorite.checked,
   };
   if (f.password.value !== f.password.dataset.orig) body.password = f.password.value;
-  try { await api('POST', '/api/entries', body); toast('Saved'); poll(); } catch (err) { toast(err.message, true); }
+  return body;
+}
+$('#entryDlg').addEventListener('close', async () => {
+  if ($('#entryDlg').returnValue !== 'save') return;
+  try { await api('POST', '/api/entries', entryFormBody()); toast('Saved'); poll(); } catch (err) { toast(err.message, true); }
 });
+$('#testConn').onclick = async () => {
+  const out = $('#testResult'), btn = $('#testConn');
+  out.className = 'test-result'; out.textContent = 'Testing…'; btn.disabled = true;
+  try {
+    const r = await api('POST', '/api/test', entryFormBody());
+    out.className = 'test-result ' + (r.ok ? 'ok' : 'fail');
+    out.textContent = `${r.ok ? '✓' : '✗'} ${r.message} (${(r.ms / 1000).toFixed(1)}s)`;
+    if (editing?.id) poll();
+  } catch (err) { out.className = 'test-result fail'; out.textContent = '✗ ' + err.message; }
+  btn.disabled = false;
+};
 
 function askCreds(e) {
   return new Promise(resolve => {
@@ -925,8 +964,10 @@ const Tree = {
       const live = Term.tabs.some(t => t.entry.id === e.id && !t.closed) || Remote.entry?.id === e.id && Remote.sid || SQL.tabs.some(t => t.entry.id === e.id);
       const port = isFTP(e) ? (e.port || 21) : sshPort(e), def = isFTP(e) ? 21 : 22;
       const target = `${isFTP(e) ? e.protocol || 'ftp' : ''}${isFTP(e) ? '://' : ''}${e.username ? e.username + '@' : ''}${e.host}${port !== def ? ':' + port : ''}`;
+      const dbt = canDB(e) && SQL.tabs.find(t => t.entry.id === e.id);
       out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc(target)}">
         <span class="tw"></span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+      if (dbt) out += SQL.treeHTML(dbt, depth + 1);
     }
     return out;
   },
@@ -956,6 +997,7 @@ const Tree = {
       }
       const n = ev.target.closest('.tnode');
       if (!n) return;
+      if (n.dataset.dbk) return SQL.treeClick(n);
       if (n.dataset.key) {
         this.collapsed.has(n.dataset.key) ? this.collapsed.delete(n.dataset.key) : this.collapsed.add(n.dataset.key);
         return this.saveCollapsed();
@@ -964,6 +1006,8 @@ const Tree = {
       $$('.tnode.item').forEach(x => x.classList.toggle('sel', x.dataset.id === this.selected));
     });
     host.addEventListener('dblclick', ev => {
+      const dn = ev.target.closest('.tnode.dbn');
+      if (dn) return SQL.treeOpen(dn);
       const n = ev.target.closest('.tnode.item');
       if (n) this.activate(byId(n.dataset.id), mode);
     });
@@ -972,6 +1016,8 @@ const Tree = {
     });
     host.addEventListener('contextmenu', ev => {
       ev.preventDefault();
+      const dn = ev.target.closest('.tnode.dbn');
+      if (dn) return SQL.treeMenu(ev, dn);
       const n = ev.target.closest('.tnode');
       if (n?.dataset.id) { this.selected = n.dataset.id; this.render(); }
       this.menu(ev, n, mode);
@@ -1005,6 +1051,15 @@ const Tree = {
   saveCollapsed() {
     localStorage.setItem('treeCollapsed', JSON.stringify([...this.collapsed]));
     this.render();
+  },
+
+  showMenu(ev, items) {
+    const m = $('#ctxMenu');
+    m.innerHTML = items.map((it, i) => it === '-' ? '<hr>' : `<button data-i="${i}">${esc(it[0])}</button>`).join('');
+    m.hidden = false;
+    m.style.left = Math.min(ev.clientX, innerWidth - 210) + 'px';
+    m.style.top = Math.min(ev.clientY, innerHeight - m.offsetHeight - 8) + 'px';
+    m.onclick = c => { const b = c.target.closest('[data-i]'); if (b) { m.hidden = true; items[b.dataset.i][1](); } };
   },
 
   menu(ev, node, mode) {
@@ -1616,6 +1671,125 @@ const SQL = {
   fit() { /* layout is CSS-driven; kept for symmetry with the terminal */ },
 };
 
+// ---------- SQL object tree (under each connected database in the tree) ----------
+Object.assign(SQL, {
+  nodeKey(n) { return [n.level, n.schema || '', n.type || '', n.name || '', n.label].join('\u001f'); },
+
+  async loadKids(t, node) {
+    const k = node ? this.nodeKey(node) : 'root';
+    const q = node ? `&level=${encodeURIComponent(node.level)}&schema=${encodeURIComponent(node.schema || '')}&type=${encodeURIComponent(node.type || '')}&name=${encodeURIComponent(node.name || '')}` : '&level=root';
+    t.ot.loading.add(k); Tree.render();
+    try {
+      const kids = await api('GET', `/api/db/tree?sid=${t.sid}${q}`);
+      t.ot.kids.set(k, kids);
+      for (const c of kids) if (c.open) { t.ot.open.add(this.nodeKey(c)); this.loadKids(t, c); }
+    } catch (err) {
+      t.ot.kids.set(k, [{ level: 'leaf', label: '⚠ ' + err.message, leaf: true }]);
+    }
+    t.ot.loading.delete(k); Tree.render();
+  },
+
+  treeHTML(t, depth) {
+    if (!t.ot) { t.ot = { open: new Set(), kids: new Map(), loading: new Set(), nodes: new Map() }; this.loadKids(t, null); }
+    const icon = n => ({ schema: '🗄', schemas: '📁', type: '📂', cols: '▤', idx: '⚡', cons: '🔒', trg: '⚙' }[n.level]
+      || ({ TABLE: '▦', VIEW: '👁', 'MATERIALIZED VIEW': '👁', INDEX: '⚡', SEQUENCE: '#', SYNONYM: '↪', PROCEDURE: 'ƒ', FUNCTION: 'ƒ', PACKAGE: '📦', TRIGGER: '⚙', TYPE: 'T', COLUMN: '·' }[n.type] || '·'));
+    const walk = (kids, d) => kids.map(n => {
+      const k = this.nodeKey(n), open = t.ot.open.has(k);
+      t.ot.nodes.set(k, n);
+      let h = `<div class="tnode dbn ${n.bad ? 'bad' : ''}" style="padding-left:${8 + d * 14}px" data-dbk="${esc(k)}" data-sid="${t.sid}" title="${esc(n.detail || n.label)}">
+        <span class="tw">${n.leaf ? '' : open ? '▾' : '▸'}</span>${icon(n)} <span class="nm">${esc(n.label)}</span>${n.detail ? `<small>${esc(n.detail)}</small>` : ''}</div>`;
+      if (open) {
+        const sub = t.ot.kids.get(k);
+        h += sub ? walk(sub, d + 1) : `<div class="tnode dbn muted" style="padding-left:${8 + (d + 1) * 14}px">loading…</div>`;
+      }
+      return h;
+    }).join('');
+    const root = t.ot.kids.get('root');
+    return root ? walk(root, depth) : `<div class="tnode muted" style="padding-left:${8 + depth * 14}px">loading…</div>`;
+  },
+
+  tabOf(el) { return this.tabs.find(t => t.sid === el.dataset.sid); },
+
+  treeClick(el) {
+    const t = this.tabOf(el); if (!t) return;
+    if (this.active !== t) this.activate(t);
+    const k = el.dataset.dbk, n = t.ot.nodes.get(k);
+    if (!n || n.leaf) return;
+    if (t.ot.open.has(k)) t.ot.open.delete(k);
+    else { t.ot.open.add(k); if (!t.ot.kids.has(k)) return this.loadKids(t, n); }
+    Tree.render();
+  },
+
+  qualified(t, n) {
+    const q = s => /^[a-z_][a-z0-9_$]*$/.test(s) || (t.kind === 'oracle' && /^[A-Z_][A-Z0-9_$#]*$/.test(s)) ? s : `"${s}"`;
+    return `${q(n.schema)}.${q(n.name)}`;
+  },
+
+  // Double-click: preview rows of tables/views, load source of code objects, insert column names.
+  treeOpen(el) {
+    const t = this.tabOf(el), n = t?.ot.nodes.get(el.dataset.dbk);
+    if (!n) return;
+    if (this.active !== t) this.activate(t);
+    if (n.type === 'COLUMN') return this.insert(n.name);
+    if (n.level !== 'obj') return;
+    if (['TABLE', 'VIEW', 'MATERIALIZED VIEW', 'SYNONYM'].includes(n.type)) return this.preview(t, n);
+    if (['PROCEDURE', 'FUNCTION', 'PACKAGE', 'TRIGGER', 'TYPE', 'SEQUENCE', 'INDEX'].includes(n.type)) return this.showDDL(t, n);
+  },
+
+  runText(stmt) {
+    const cm = this.cm;
+    cm.setValue(cm.getValue().replace(/\s*$/, '') + '\n\n' + stmt + '\n');
+    const end = cm.getValue().length - 1;
+    cm.setSelection(cm.posFromIndex(end - stmt.length), cm.posFromIndex(end));
+    cm.scrollIntoView(null, 80);
+    this.run(false);
+  },
+
+  preview(t, n) {
+    const name = this.qualified(t, n);
+    this.runText(t.kind === 'oracle' ? `SELECT * FROM ${name} WHERE ROWNUM <= 100;` : `SELECT * FROM ${name} LIMIT 100;`);
+  },
+
+  async showDDL(t, n) {
+    toast('Loading source…');
+    try {
+      const r = await api('GET', `/api/db/ddl?sid=${t.sid}&schema=${encodeURIComponent(n.schema)}&type=${encodeURIComponent(n.type)}&name=${encodeURIComponent(n.name)}`);
+      const cm = this.cm, at = cm.lastLine() + 2;
+      cm.replaceRange((cm.getValue().trim() ? '\n\n' : '') + r.ddl + '\n', CodeMirror.Pos(cm.lastLine()));
+      cm.scrollIntoView(CodeMirror.Pos(Math.min(at, cm.lastLine()), 0), 60);
+      cm.setCursor(CodeMirror.Pos(Math.min(at, cm.lastLine()), 0));
+      cm.focus();
+    } catch (err) { toast(err.message, true); }
+  },
+
+  treeMenu(ev, el) {
+    const t = this.tabOf(el), n = t?.ot.nodes.get(el.dataset.dbk);
+    if (!n) return;
+    if (this.active !== t) this.activate(t);
+    const items = [];
+    if (n.level === 'obj') {
+      const name = this.qualified(t, n);
+      if (['TABLE', 'VIEW', 'MATERIALIZED VIEW', 'SYNONYM'].includes(n.type)) {
+        items.push(['Select first 100 rows', () => this.preview(t, n)],
+          ['Count rows', () => this.runText(`SELECT COUNT(*) FROM ${name};`)]);
+      }
+      if (n.type !== 'SYNONYM') items.push(['Show DDL / source', () => this.showDDL(t, n)]);
+      items.push('-', ['Insert name into editor', () => this.insert(name)], ['Copy name', () => copyText(name)]);
+    } else if (n.type === 'COLUMN') {
+      items.push(['Insert column name', () => this.insert(n.name)], ['Copy column name', () => copyText(n.name)]);
+    }
+    if (!n.leaf) {
+      if (items.length) items.push('-');
+      items.push(['Refresh', () => {
+        const k = this.nodeKey(n);
+        for (const key of [...t.ot.kids.keys()]) if (key === k || key.startsWith(k)) t.ot.kids.delete(key);
+        t.ot.open.add(k); this.loadKids(t, n);
+      }]);
+    }
+    if (items.length) Tree.showMenu(ev, items);
+  },
+});
+
 // SQL page events
 $('#sqlRun').onclick = () => SQL.run(false);
 $('#sqlScript').onclick = () => SQL.run(true);
@@ -1691,6 +1865,50 @@ $('#sqlCsv').onclick = () => {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 };
+
+// ---------- Outlook monitoring ----------
+const Mail = {
+  cfg() { return { enabled: false, rules: [], folder: '', minutes: 2, keep_all: false, lookback: 7, ...(S.settings.mail || {}) }; },
+  async save(patch) { await saveSettings({ mail: { ...this.cfg(), ...patch } }); this.render(); },
+  render() {
+    const c = this.cfg();
+    $('#mailOn').checked = c.enabled;
+    $('#mailRules').innerHTML = c.rules.map((r, i) => `<div class="rule">${esc(r.match)} <span class="p">→ ${esc(r.project || 'capture project')}</span><span class="x" data-rule="${i}" title="Remove">✕</span></div>`).join('')
+      || '<div class="muted tiny">No senders yet — add one below.</div>';
+    if (document.activeElement !== $('#mailFolder')) $('#mailFolder').value = c.folder;
+    $('#mailEvery').value = String(c.minutes || 2);
+    $('#mailBack').value = String(c.lookback || 7);
+    $('#mailKeepAll').checked = c.keep_all;
+    $('#mailBadge').textContent = c.enabled && c.rules.length ? `· on, ${c.rules.length} sender(s)` : '· off';
+  },
+  async status() {
+    try {
+      const s = await api('GET', '/api/mail/status');
+      const c = this.cfg();
+      $('#mailStatus').textContent = !s.supported ? 'Outlook monitoring runs on Windows with classic Outlook.'
+        : s.running ? 'Checking…'
+        : s.last_error ? '⚠ ' + s.last_error
+        : s.last_check && new Date(s.last_check).getFullYear() > 1971 ? `Last check ${new Date(s.last_check).toLocaleTimeString()} · ${s.matched} new matching mail · ${s.captured} captured since start`
+        : c.enabled ? 'Waiting for first check…' : '';
+      $('#mailStatus').style.color = s.last_error ? 'var(--danger)' : '';
+    } catch { /* ignore */ }
+  },
+};
+$('#mailOn').onchange = e => Mail.save({ enabled: e.target.checked }).then(() => e.target.checked && api('POST', '/api/mail/check'));
+$('#mailAdd').onclick = () => {
+  const m = $('#mailMatch').value.trim();
+  if (!m) return toast('Enter a sender address, *@domain or name', true);
+  Mail.save({ rules: [...Mail.cfg().rules, { match: m, project: $('#mailProject').value.trim() }] });
+  $('#mailMatch').value = ''; $('#mailProject').value = '';
+};
+$('#mailMatch').addEventListener('keydown', e => { if (e.key === 'Enter') $('#mailAdd').click(); });
+$('#mailRules').addEventListener('click', e => { const x = e.target.closest('[data-rule]'); if (x) Mail.save({ rules: Mail.cfg().rules.filter((_, i) => i !== +x.dataset.rule) }); });
+$('#mailFolder').onchange = e => Mail.save({ folder: e.target.value.trim() });
+$('#mailEvery').onchange = e => Mail.save({ minutes: +e.target.value });
+$('#mailBack').onchange = e => Mail.save({ lookback: +e.target.value });
+$('#mailKeepAll').onchange = e => Mail.save({ keep_all: e.target.checked });
+$('#mailCheck').onclick = async () => { await api('POST', '/api/mail/check'); $('#mailStatus').textContent = 'Checking…'; setTimeout(() => { Mail.status(); poll(); }, 3000); };
+setInterval(() => { if ($('#view-inbox').classList.contains('active')) Mail.status(); }, 10000);
 
 // ---------- local command prompts ----------
 let SHELLS = [];
@@ -2133,6 +2351,39 @@ $$('.with-tree').forEach(wt => {
       SQL.cm.refresh();
     }, { once: true });
   });
+}
+
+// Dashboard: resizable table columns and card width
+{
+  const board = $('#board');
+  const widths = store.get('colWidths', {});
+  for (const [i, w] of Object.entries(widths)) board.style.setProperty('--c' + i, w + 'px');
+  board.addEventListener('pointerdown', e => {
+    const grip = e.target.closest('.colgrip'); if (!grip) return;
+    e.preventDefault();
+    const i = grip.dataset.col, th = grip.parentElement, x0 = e.clientX, w0 = th.getBoundingClientRect().width;
+    grip.setPointerCapture(e.pointerId);
+    document.body.classList.add('dragging');
+    const move = ev => board.style.setProperty('--c' + i, clamp(w0 + ev.clientX - x0, 40, 900) + 'px');
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', () => {
+      grip.removeEventListener('pointermove', move);
+      document.body.classList.remove('dragging');
+      widths[i] = parseInt(board.style.getPropertyValue('--c' + i));
+      store.set('colWidths', widths);
+    }, { once: true });
+  });
+  board.addEventListener('dblclick', e => {
+    const grip = e.target.closest('.colgrip'); if (!grip) return;
+    board.style.removeProperty('--c' + grip.dataset.col);
+    delete widths[grip.dataset.col];
+    store.set('colWidths', widths);
+  });
+  const slider = $('#cardWidth');
+  const setCard = w => { board.style.setProperty('--card-w', w + 'px'); slider.value = w; };
+  setCard(store.get('cardW', 340));
+  slider.addEventListener('input', () => setCard(+slider.value));
+  slider.addEventListener('change', () => store.set('cardW', +slider.value));
 }
 
 // FileZilla: This PC vs server
