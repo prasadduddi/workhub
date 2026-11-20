@@ -323,6 +323,7 @@ setInterval(poll, 2500);
 function renderSettings() {
   $('#wsName').textContent = S.settings.workspace || 'Default';
   document.title = `WorkHub — ${S.settings.workspace || 'Default'}`;
+  if (window.whSetTitle && document.title !== window.lastTitle) { window.lastTitle = document.title; window.whSetTitle(document.title); }
   $('#watchToggle').checked = !!S.settings.watch;
   $('#captureAll').checked = !!S.settings.capture_all;
   $('#bmSync').checked = !S.settings.no_browser_sync;

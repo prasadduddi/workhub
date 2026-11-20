@@ -58,6 +58,8 @@ func runDesktop(url string, openLink func(string)) bool {
 	restoreWindow(hwnd)
 	// Web links open in the normal browser, not inside WorkHub.
 	_ = w.Bind("whOpenExternal", func(u string) error { openLink(u); return nil })
+	// The page reports its title ("WorkHub — <workspace>") for the taskbar.
+	_ = w.Bind("whSetTitle", func(t string) error { w.Dispatch(func() { w.SetTitle(t) }); return nil })
 	w.Init(`window.WH_DESKTOP = true;`)
 	w.Navigate(url)
 	w.Run()
