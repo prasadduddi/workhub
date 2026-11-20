@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode/utf16"
 	"unsafe"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 var (
@@ -280,3 +282,19 @@ var (
 	comdlg32         = syscall.NewLazyDLL("comdlg32.dll")
 	pGetOpenFileName = comdlg32.NewProc("GetOpenFileNameW")
 )
+
+// registryAppPath finds an installed program via the Windows "App Paths" key.
+func registryAppPath(exe string) string {
+	for _, root := range []registry.Key{registry.CURRENT_USER, registry.LOCAL_MACHINE} {
+		k, err := registry.OpenKey(root, `Software\Microsoft\Windows\CurrentVersion\App Paths\`+exe, registry.QUERY_VALUE)
+		if err != nil {
+			continue
+		}
+		p, _, err := k.GetStringValue("")
+		k.Close()
+		if err == nil && fileExists(p) {
+			return p
+		}
+	}
+	return ""
+}

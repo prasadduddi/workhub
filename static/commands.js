@@ -100,6 +100,10 @@ const CMD = (() => {
     const sv = (ctx.views || []).find(v => s.trim() === v.toLowerCase() || s.trim() === 'open ' + v.toLowerCase() || s.trim() === 'show ' + v.toLowerCase());
     if (sv) return [{ type: 'loadView', name: sv }];
 
+    // Desktop version: which browser opens links.
+    if ((m = s.match(/\b(open|launch|show)\s+(the\s+)?(links?|urls?|bookmarks?)\s+(in|with|using)\s+(google chrome|chrome|edge|microsoft edge|(?:the\s+)?default( browser)?|my default browser)\b/)))
+      return [{ type: 'linkBrowser', v: /chrome/.test(m[5]) ? 'chrome' : /edge/.test(m[5]) ? 'edge' : 'default' }];
+
     // ---- blocked sites (never imported or captured) ----
     const siteList = t => t.replace(/\b(and |or )?(also )?(other |similar |related |any )+(sites?|websites?|domains?|ones)\b/gi, ' ').replace(/\b(sites? like|websites? like|domains? like|like|such as|the|site|website|domain|from (syncing|sync|importing|import)|syncing|sync|importing|import)\b/gi, ' ')
       .split(/\s*(?:,|\band\b|\bor\b|&)\s*/i).map(x => x.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '')).filter(x => x.length >= 3);
@@ -404,6 +408,7 @@ const HELP = `Things you can say (in your own words — I understand synonyms an
 <b>Group</b>  "group all windows related to app-prod-01" · "create group Release with app-prod, ora-uat and jenkins" · "show group release" · "add pay-api to group payments" · "open all servers in group release" · "group tabs" · "list groups"
 <b>Block</b>  "block xhamster.com and similar sites" · "block facebook.com" · "unblock facebook.com" · "list blocked sites"
 <b>Properties</b>  "go to properties" · "go to json schemas" — then drop files/folders, paste screenshots, Format/Check/Validate JSON
+<b>Links</b>  "open links in chrome" · "open links in edge" · "open links in default browser" (desktop version)
 <b>Remember</b>  "save this view as Prod overview" · "open Prod overview" · "list my views" · "undo" · "reset"
 <b>Ask</b>  "how many prod servers" · "password for app-prod-01" · "user for jenkins"
 <b>Pages</b>  "go to filezilla" · "hide the sidebar" · "hide the tree" · "dark mode" · "bigger font in putty" · "font 16"
@@ -475,6 +480,11 @@ async function runCommand(text) {
         const hosts = new Set(list.map(e => e.host).filter(Boolean)).size;
         said.push(`${list.length} matching item${list.length === 1 ? '' : 's'} (${hosts} distinct host${hosts === 1 ? '' : 's'}).`); break;
       }
+      case 'linkBrowser':
+        await saveSettings({ link_browser: a.v });
+        said.push(`Links from the desktop version will open in ${a.v === 'default' ? 'your default browser' : a.v === 'chrome' ? 'Chrome (new tab)' : 'Edge (new tab)'}.` +
+          (window.WH_DESKTOP ? '' : ' (In the web version, links open in the browser you are using.)'));
+        break;
       case 'block': {
         const list = [...new Set([...(S.settings.blocked_sites || []), ...a.sites.map(x => x.toLowerCase())])];
         await saveSettings({ blocked_sites: list }); await poll();

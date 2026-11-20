@@ -101,7 +101,7 @@ func main() {
 		srv := &http.Server{Handler: app.recoveryRoutes()}
 		if isDesktop {
 			go srv.Serve(ln)
-			if runDesktop(url) {
+			if runDesktop(url, openBrowser) {
 				os.Exit(1)
 			}
 		}
@@ -147,7 +147,7 @@ func main() {
 		// Desktop version: own window; closing it stops WorkHub. Without
 		// WebView2 it carries on in the browser like the web version.
 		go func() { fatal("%v", srv.Serve(ln)) }()
-		if runDesktop(url) {
+		if runDesktop(url, app.openLink) {
 			app.shutdown()
 		}
 		openBrowser(url)
@@ -183,7 +183,7 @@ func listen(port int, dir string) (net.Listener, error) {
 		}
 		if url, ok := existingInstance(dir, port); ok {
 			fmt.Println("WorkHub is already running:", url)
-			if !isDesktop || !runDesktop(url) { // desktop: a window onto the running WorkHub
+			if !isDesktop || !runDesktop(url, (&App{}).openLink) { // desktop: a window onto the running WorkHub
 				openBrowser(url)
 			}
 			return nil, nil

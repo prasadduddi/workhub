@@ -72,3 +72,5 @@ func pickFile(startDir string) (string, bool, error) {
 	}
 	return strings.TrimSpace(string(out)), true, nil
 }
+
+func registryAppPath(exe string) string { return "" }

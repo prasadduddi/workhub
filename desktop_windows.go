@@ -42,7 +42,7 @@ func windowFile() string { return filepath.Join(filepath.Dir(defaultDataDir()), 
 // runDesktop shows url in a native window and returns when it is closed.
 // It returns false if WebView2 is not available (the caller then falls back
 // to the browser).
-func runDesktop(url string) bool {
+func runDesktop(url string, openLink func(string)) bool {
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		AutoFocus: true,
 		DataPath:  filepath.Join(filepath.Dir(defaultDataDir()), "webview2"),
@@ -57,7 +57,7 @@ func runDesktop(url string) bool {
 	hwnd := uintptr(w.Window())
 	restoreWindow(hwnd)
 	// Web links open in the normal browser, not inside WorkHub.
-	_ = w.Bind("whOpenExternal", func(u string) error { openBrowser(u); return nil })
+	_ = w.Bind("whOpenExternal", func(u string) error { openLink(u); return nil })
 	w.Init(`window.WH_DESKTOP = true;`)
 	w.Navigate(url)
 	w.Run()

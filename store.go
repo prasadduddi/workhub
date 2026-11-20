@@ -78,6 +78,7 @@ type Settings struct {
 	Repos         []string     `json:"repos"`
 	Groups        []Group      `json:"groups"`
 	BlockedSites  []string     `json:"blocked_sites"`
+	LinkBrowser   string       `json:"link_browser"` // desktop version: chrome (default), edge or default
 	Mail          MailSettings `json:"mail"`
 }
 
