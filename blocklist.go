@@ -16,6 +16,11 @@ var adultDomains = []string{
 	"brazzers", "realitykings", "bangbros", "naughtyamerica", "mofos", "digitalplayground", "fakehub",
 	"rule34", "e-hentai", "nhentai", "hanime", "fapello", "erome", "imagefap", "literotica", "adultfriendfinder",
 	"thisvid", "porn300", "pornone", "4tube", "fuq", "ixxx", "porndig", "vporn", "anysex", "sexvid", "xozilla",
+	"redwap", "youjizz", "xtube", "keezmovies", "slutload", "empflix", "tubegalore", "xtapes", "3movs", "daftsex", "sxyprn",
+	"xmoviesforyou", "fapster", "xbabe", "ashemaletube", "shemale", "tranny", "gaytube", "manyvids", "clips4sale", "iwara",
+	"luscious", "hentaihaven", "hitomi", "pururin", "javhd", "javlibrary", "jable", "missav", "supjav", "avgle", "xhamsterlive",
+	"camster", "flirt4free", "streamate", "imlive", "jerkmate", "adulttime", "pornpics", "sex", "xart", "metart", "playboy",
+	"hustler", "penthouse", "kink", "bdsm", "fetlife", "redgifs", "gfycatporn", "scrolller", "motherless", "heavy-r", "efukt",
 }
 
 var adultWords = []string{"porn", "xxx", "hentai", "nsfw", "camgirl", "escort"}
