@@ -58,7 +58,7 @@ func TestNameRules(t *testing.T) {
 	for _, e := range st.Entries() {
 		names[e.Host] = e.Name
 	}
-	if names["pay-bat-01.corp.local"] != "Batch – pay-bat-01.corp.local" || names["pay-tpp-02.corp.local"] != "Touchpoint – pay-tpp-02.corp.local" || names["other.corp.local"] != "other.corp.local" {
+	if names["pay-bat-01.corp.local"] != "Batch – pay-bat-01.corp.local-ops" || names["pay-tpp-02.corp.local"] != "Touchpoint – pay-tpp-02.corp.local" || names["other.corp.local"] != "other.corp.local" {
 		t.Fatalf("%v", names)
 	}
 	// A name the user typed is kept; new captures are named straight away.
@@ -77,7 +77,7 @@ func TestNameRules(t *testing.T) {
 		if e.Host == "pay-bat-01.corp.local" && e.Name != "My batch box" {
 			t.Fatalf("user's name changed: %q", e.Name)
 		}
-		if e.Host == "crm-app-01.corp.local" && e.Name != "App/Picasso – crm-app-01.corp.local" {
+		if e.Host == "crm-app-01.corp.local" && e.Name != "App/Picasso – crm-app-01.corp.local-x" {
 			t.Fatalf("new capture: %q", e.Name)
 		}
 	}

@@ -65,7 +65,7 @@ func TestJDBC(t *testing.T) {
 	s, _ := OpenStore(t.TempDir())
 	_, es := s.Ingest("jdbc:oracle:thin:scott/tiger@dbhost01:1522:ORCL", "clipboard", "")
 	e, _ := s.Entry(es[0].ID)
-	if dbKind(e) != "oracle" || e.Name != "dbhost01 / ORCL" {
+	if dbKind(e) != "oracle" || e.Name != "dbhost01-scott / ORCL" {
 		t.Fatalf("entry %+v", e)
 	}
 	if name, sid := dbName(e); name != "ORCL" || !sid {

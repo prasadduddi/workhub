@@ -72,3 +72,22 @@ func TestTidyClipsMergesDuplicatesAndTokens(t *testing.T) {
 		t.Fatalf("entries after tidy: %+v", s.st.Entries)
 	}
 }
+
+func TestHostUserNames(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	s.Ingest("ssh deploy@srv-07.test.example.com\nssh oracle@srv-07.test.example.com", "paste", "")
+	s.mu.Lock()
+	old := &Entry{ID: "o1", Host: "srv-08.test.example.com", Username: "ops", Name: "srv-08.test.example.com"}
+	s.st.Entries = append(s.st.Entries, old)
+	s.applyNameRules()
+	s.mu.Unlock()
+	names := map[string]bool{}
+	for _, e := range s.st.Entries {
+		names[e.Name] = true
+	}
+	for _, want := range []string{"srv-07.test.example.com-deploy", "srv-07.test.example.com-oracle", "srv-08.test.example.com-ops"} {
+		if !names[want] {
+			t.Errorf("missing name %q in %v", want, names)
+		}
+	}
+}

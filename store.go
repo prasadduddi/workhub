@@ -1132,7 +1132,8 @@ func ruleLabel(rules []NameRule, e *Entry) string {
 func (s *Store) applyNameRules() {
 	for _, e := range s.st.Entries {
 		base := defaultName(e)
-		auto := e.Name == "" || e.Name == base || e.Name == e.Host || strings.HasSuffix(e.Name, " – "+base)
+		old := legacyName(e) // automatic names from before host-user naming
+		auto := e.Name == "" || e.Name == base || e.Name == e.Host || strings.HasSuffix(e.Name, " – "+base) || e.Name == old || strings.HasSuffix(e.Name, " – "+old)
 		if !auto {
 			continue
 		}
@@ -1172,22 +1173,37 @@ func inferEnv(s string) string {
 	}
 }
 
+// defaultName: logins are named host-user (several users on one server stay
+// apart), databases host-user / service.
 func defaultName(e *Entry) string {
+	host := e.Host
+	if host != "" && e.Username != "" {
+		host += "-" + e.Username
+	}
 	if db := orDefault(e.Extra["service"], orDefault(e.Extra["sid"], e.Extra["database"])); db != "" && e.Host != "" && dbKind(*e) != "" {
-		return e.Host + " / " + db
+		return host + " / " + db
 	}
 	if job := jenkinsJob(e.URL); job != "" {
 		return "Jenkins – " + job
 	}
 	switch {
 	case e.Host != "":
-		return e.Host
+		return host
 	case e.URL != "":
 		return e.URL
 	case e.Username != "":
 		return "Credential: " + e.Username
 	}
 	return "Untitled"
+}
+
+// legacyName is the automatic name older versions gave (host, host / db).
+func legacyName(e *Entry) string {
+	u := e.Username
+	e.Username = ""
+	n := defaultName(e)
+	e.Username = u
+	return n
 }
 
 // jenkinsJob reads the job from a Jenkins link:
