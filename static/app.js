@@ -1550,8 +1550,8 @@ const Tree = {
         if (t) items.push(['Reconnect', () => SQL.reconnect(t)], ['Disconnect', () => SQL.close(t)]);
         else items.push(['Connect and show tables', () => SQL.toggleConn(e)]);
       }
-      if (canSSH(e)) items.push(['Open in PuTTY', () => Term.open(e)]);
-      if (canFiles(e)) items.push([`Open in FileZilla (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
+      if (canSSH(e)) items.push(['Open SSH terminal', () => Term.open(e)]);
+      if (canFiles(e)) items.push([`Open in FTP (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
       if (External.items(e).length) items.push('-', ...External.items(e));
       if (canSSH(e) && e.extra?.tunnels) {
         const off = e.extra.tunnels_off === '1', auto = e.extra.tunnels_auto === '1';

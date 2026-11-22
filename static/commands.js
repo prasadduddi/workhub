@@ -528,7 +528,7 @@ async function runCommand(text) {
       case 'treeGroup': {
         for (const t of a.trees) { try { localStorage.setItem('treeGroup_' + t, a.v); } catch { /* ignore */ } }
         Tree.render(); show({ ssh: 'terminal', sftp: 'files', db: 'sql' }[a.trees[0]]);
-        said.push(`${{ ssh: 'PuTTY', sftp: 'FileZilla', db: 'SQL' }[a.trees[0]]} servers grouped by ${TREE_GROUPS[a.v].toLowerCase()}.`);
+        said.push(`${{ ssh: 'SSH', sftp: 'FTP', db: 'SQL' }[a.trees[0]]} servers grouped by ${TREE_GROUPS[a.v].toLowerCase()}.`);
         break;
       }
       case 'nameRule': {

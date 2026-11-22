@@ -11,7 +11,7 @@ PORT=47950
 export PATH="$HOME/sdk/go/bin:$PATH"
 
 stop() {
-  for f in "$SIM"/*.pid; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; done
+  for f in "$SIM"/*.pid; do [ -f "$f" ] && { kill "$(cat "$f")" 2>/dev/null || true; }; rm -f "$f"; done
   return 0
 }
 case "$1" in
