@@ -2868,3 +2868,21 @@ for (const [obj, fn] of [[Term, 'open'], [Remote, 'connect'], [SQL, 'open']]) {
   const orig = obj[fn].bind(obj);
   obj[fn] = (e, ...rest) => { markSearched(e); return orig(e, ...rest); };
 }
+
+// Backups window
+async function showBackups() {
+  const r = await api('GET', '/api/backups').catch(err => (toast(err.message, true), null));
+  if (!r) return;
+  $('#backupFolder').textContent = r.folder;
+  $('#backupList').innerHTML = r.backups.map((b, i) => `<div class="grow"><span>${i === 0 ? '<b>' : ''}${esc(fmtDateTime(b.when))}${i === 0 ? '</b> (latest)' : ''}</span><span class="spacer"></span><span class="muted tiny">${fmtSize(b.size)} · ${esc(b.name)}</span></div>`).join('')
+    || '<div class="muted tiny" style="padding:8px">No backups yet — one is made at start-up when there is data.</div>';
+  if (!$('#backupDlg').open) $('#backupDlg').showModal();
+}
+$('#backupBtn').onclick = showBackups;
+$('#backupClose').onclick = () => $('#backupDlg').close();
+$('#backupReveal').onclick = () => api('POST', '/api/backups/reveal').catch(err => toast(err.message, true));
+$('#backupNow').onclick = async () => {
+  $('#backupNow').disabled = true;
+  try { const r = await api('POST', '/api/backups'); toast('Backup made: ' + r.name); await showBackups(); } catch (err) { toast(err.message, true); }
+  $('#backupNow').disabled = false;
+};

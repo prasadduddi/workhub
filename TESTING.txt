@@ -95,3 +95,4 @@ v1.6 checks
   [ ] First start of a new version: "What's new" pops up; tick "Don't show again" → gone until the next version; ✨ What's new & tips in the left menu reopens it
   [ ] Jump server → Edit → tick "Start when WorkHub starts": tunnel opens at start-up (green ⇄ in the tree) and comes back if the network drops
   [ ] Most used / most recent first: Dashboard, search results, Bookmarks, Groups; ★ Most used at the top of PuTTY/FileZilla/SQL trees; SQL tree shows service names
+  [ ] 🛟 Backups…: a dated zip appears next to the data folder at start-up (when data changed); Back up now; Open backup folder

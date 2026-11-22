@@ -135,6 +135,7 @@ func main() {
 	go app.mailWatcher()
 	go app.jiraWatcher()
 	go app.tunnelKeeper()
+	go app.backupWatcher()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -517,6 +518,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/work/{id}/word", a.handleWorkWord)
 	mux.HandleFunc("PUT /api/work/{id}/blocks/{bid}", a.handleWorkBlock)
 	mux.HandleFunc("DELETE /api/work/{id}/blocks/{bid}", a.handleWorkBlockDelete)
+	mux.HandleFunc("GET /api/backups", a.handleBackupsList)
+	mux.HandleFunc("POST /api/backups", a.handleBackupNow)
+	mux.HandleFunc("POST /api/backups/reveal", a.handleBackupReveal)
 	mux.HandleFunc("GET /api/tips", a.handleTipsGet)
 	mux.HandleFunc("POST /api/tips", a.handleTipsHide)
 	mux.HandleFunc("GET /api/ref", a.handleRefTree)

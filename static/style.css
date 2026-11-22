@@ -356,6 +356,10 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .tchip.on { background: var(--ok); color: #fff; }
 .tnode .rlabel { font-size: 10.5px; border-radius: 4px; padding: 0 5px; background: var(--panel2); color: var(--muted); margin-left: 4px; }
 
+#backupDlg { width: min(560px, 94vw); }
+.backup-list { max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.backup-list .grow { padding: 5px 8px; border-top: 1px solid var(--border); } .backup-list .grow:first-child { border-top: 0; }
+
 /* what's new */
 #whatsNewDlg { width: min(680px, 94vw); max-height: 86vh; display: flex; flex-direction: column; }
 #whatsNewDlg:not([open]) { display: none; }

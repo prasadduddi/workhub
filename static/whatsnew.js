@@ -11,6 +11,8 @@ const RELEASES = [
     ['🗂', 'Group servers', 'PuTTY, FileZilla and SQL trees: the Group by box (Env, App, Domain, Type, My groups, User). Or tell the chat “group putty by app”.', 'terminal'],
     ['🔀', 'Tunnels without PuTTY', 'Copy an “ssh -N -L1522:dbhost:1521 user@jump” command and WorkHub sets up the tunnel on the jump server. Set it up or switch it off in PuTTY → right-click the jump server → Edit (Tunnels, Use tunnels, Start when WorkHub starts). Running tunnels show ⇄ in green; SQL Developer, DBeaver etc. can use localhost:PORT too.', 'terminal'],
     ['🧩', 'Jenkins job names', 'Jenkins links show their job (Folder › job #build), so identical “Dashboard [Jenkins]” bookmarks are easy to tell apart.', 'bookmarks'],
+    ['🛟', 'Automatic backups', 'A dated zip of your data when WorkHub starts and every morning — only if something changed. Kept next to your data folder; the newest 30 are kept. See 🛟 Backups… in the left menu.', ''],
+    ['★', 'Most used first', 'Things you open, connect to or find by searching most often — and most recently — come first everywhere, with a “★ Most used” section in the server trees. A sort or grouping you choose still wins.', 'dashboard'],
     ['🖱', 'Ctrl+Click → new Chrome window', 'Desktop version: a click opens a new tab in your Chrome; Ctrl+Click opens a new Chrome window.', ''],
   ] },
   { v: '1.6', title: 'Jira and SSH tunnels', items: [
