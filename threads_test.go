@@ -22,7 +22,8 @@ func TestThreads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.EditPost(old.ID, p.ID, "<p>Deployed to UAT at 10:00</p>"); err != nil {
+	h := "<p>Deployed to UAT at 10:00</p>"
+	if err := s.EditPost(old.ID, p.ID, &h, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Captures go to the active thread; its Word copy hides saved passwords.
@@ -46,5 +47,40 @@ func TestThreads(t *testing.T) {
 	}
 	if w, _ = s.GetWorkItem(old.ID); len(w.Posts) != 2 {
 		t.Fatalf("delete: %d posts", len(w.Posts))
+	}
+}
+
+func TestThreadRepliesAndPins(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	w := s.SaveWorkItem(WorkItem{Title: "CM-9"})
+	top, _ := s.AddPost(w.ID, Post{Kind: "note", HTML: "<p>Plan</p>"})
+	r1, err := s.AddPost(w.ID, Post{Kind: "note", HTML: "<p>Agreed</p>", Parent: top.ID})
+	if err != nil || r1.Parent != top.ID {
+		t.Fatalf("reply: %v %+v", err, r1)
+	}
+	r2, _ := s.AddPost(w.ID, Post{Kind: "note", HTML: "<p>Me too</p>", Parent: r1.ID})
+	if r2.Parent != top.ID {
+		t.Fatal("a reply to a reply should answer the original post")
+	}
+	if _, err := s.AddPost(w.ID, Post{Kind: "note", Parent: "nope"}); err == nil {
+		t.Fatal("reply to a missing post accepted")
+	}
+	pin := true
+	if err := s.EditPost(w.ID, top.ID, nil, &pin); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetWorkItem(w.ID)
+	if !got.Posts[0].Pinned || got.Posts[0].HTML != "<p>Plan</p>" {
+		t.Fatalf("pin changed the text or didn't stick: %+v", got.Posts[0])
+	}
+	doc := s.threadHTML(got)
+	if !strings.Contains(doc, "📌") || !strings.Contains(doc, "↳ reply") {
+		t.Fatalf("Word copy lacks pin/replies: %s", doc)
+	}
+	if err := s.DeletePost(w.ID, top.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.GetWorkItem(w.ID); len(got.Posts) != 0 {
+		t.Fatalf("replies left behind: %d", len(got.Posts))
 	}
 }

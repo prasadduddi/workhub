@@ -18,10 +18,12 @@ import (
 type Post struct {
 	ID     string    `json:"id"`
 	At     time.Time `json:"at"`
-	Kind   string    `json:"kind"`           // note, capture, entry
-	HTML   string    `json:"html,omitempty"` // note: rich text (sanitised by the page)
-	Text   string    `json:"text,omitempty"` // capture: the copied text
-	Ref    string    `json:"ref,omitempty"`  // capture: clip id; entry: entry id
+	Kind   string    `json:"kind"`             // note, capture, entry
+	HTML   string    `json:"html,omitempty"`   // note: rich text (sanitised by the page)
+	Text   string    `json:"text,omitempty"`   // capture: the copied text
+	Ref    string    `json:"ref,omitempty"`    // capture: clip id; entry: entry id
+	Parent string    `json:"parent,omitempty"` // a reply: the post it answers (one level)
+	Pinned bool      `json:"pinned,omitempty"` // shown at the top of the thread
 	Edited time.Time `json:"edited,omitzero"`
 }
 
@@ -65,6 +67,20 @@ func (s *Store) AddPost(id string, p Post) (Post, error) {
 		return Post{}, errors.New("thread not found")
 	}
 	p.ID = randomHex(8)
+	if p.Parent != "" { // replies are one level deep: a reply to a reply answers its post
+		var parent *Post
+		for _, x := range w.Posts {
+			if x.ID == p.Parent {
+				parent = x
+			}
+		}
+		if parent == nil {
+			return Post{}, errors.New("the post being answered was deleted")
+		}
+		if parent.Parent != "" {
+			p.Parent = parent.Parent
+		}
+	}
 	if p.At.IsZero() || p.At.After(time.Now()) {
 		p.At = time.Now()
 		w.Updated = p.At
@@ -79,7 +95,8 @@ func (s *Store) AddPost(id string, p Post) (Post, error) {
 	return p, nil
 }
 
-func (s *Store) EditPost(id, pid, h string) error {
+// EditPost changes a note's text (h != nil) and/or its pin (pin != nil).
+func (s *Store) EditPost(id, pid string, h *string, pin *bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	w := s.workItem(id)
@@ -88,7 +105,12 @@ func (s *Store) EditPost(id, pid, h string) error {
 	}
 	for _, p := range w.Posts {
 		if p.ID == pid {
-			p.HTML, p.Edited = h, time.Now()
+			if h != nil {
+				p.HTML, p.Edited = *h, time.Now()
+			}
+			if pin != nil {
+				p.Pinned = *pin
+			}
 			s.changed()
 			return nil
 		}
@@ -103,14 +125,22 @@ func (s *Store) DeletePost(id, pid string) error {
 	if w == nil {
 		return errors.New("thread not found")
 	}
-	for i, p := range w.Posts {
-		if p.ID == pid {
-			w.Posts = append(w.Posts[:i], w.Posts[i+1:]...)
-			s.changed()
-			return nil
+	n := len(w.Posts)
+	keep := w.Posts[:0]
+	for _, p := range w.Posts {
+		if p.ID != pid && p.Parent != pid { // a post goes with its replies
+			keep = append(keep, p)
 		}
 	}
-	return errors.New("post not found")
+	if len(keep) == n {
+		return errors.New("post not found")
+	}
+	for i := len(keep); i < n; i++ {
+		w.Posts[i] = nil
+	}
+	w.Posts = keep
+	s.changed()
+	return nil
 }
 
 // captureToThread adds copied text to the thread chosen as "Capturing to"
@@ -141,8 +171,29 @@ func (s *Store) threadHTML(w WorkItem) string {
 	}
 	s.mu.RUnlock()
 	var b strings.Builder
+	replies := map[string][]*Post{}
+	var top []*Post
 	for _, p := range w.Posts {
-		b.WriteString("<p><b>" + p.At.Local().Format("Mon 2 Jan 2006 15:04") + "</b></p>")
+		if p.Parent != "" {
+			replies[p.Parent] = append(replies[p.Parent], p)
+		} else {
+			top = append(top, p)
+		}
+	}
+	var order []*Post
+	for _, p := range top {
+		order = append(order, p)
+		order = append(order, replies[p.ID]...)
+	}
+	for _, p := range order {
+		head := p.At.Local().Format("Mon 2 Jan 2006 15:04")
+		if p.Parent != "" {
+			head = "↳ reply · " + head
+		}
+		if p.Pinned {
+			head = "📌 " + head
+		}
+		b.WriteString("<p><b>" + head + "</b></p>")
 		switch p.Kind {
 		case "capture":
 			t := p.Text
@@ -180,7 +231,7 @@ func (a *App) handlePostAdd(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, errors.New("kind must be note, capture or entry"))
 		return
 	}
-	p, err := a.store.AddPost(r.PathValue("id"), Post{Kind: in.Kind, HTML: in.HTML, Text: in.Text, Ref: in.Ref, At: in.At})
+	p, err := a.store.AddPost(r.PathValue("id"), Post{Kind: in.Kind, HTML: in.HTML, Text: in.Text, Ref: in.Ref, At: in.At, Parent: in.Parent, Pinned: in.Pinned})
 	if err != nil {
 		writeErr(w, 404, err)
 		return
@@ -191,13 +242,14 @@ func (a *App) handlePostAdd(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handlePostEdit(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		HTML string `json:"html"`
+		HTML   *string `json:"html"`
+		Pinned *bool   `json:"pinned"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, 400, err)
 		return
 	}
-	if err := a.store.EditPost(r.PathValue("id"), r.PathValue("pid"), in.HTML); err != nil {
+	if err := a.store.EditPost(r.PathValue("id"), r.PathValue("pid"), in.HTML, in.Pinned); err != nil {
 		writeErr(w, 404, err)
 		return
 	}

@@ -42,7 +42,7 @@ function sanitizeHTML(html) {
 }
 
 const Work = {
-  list: [], current: null,
+  list: [], current: null, replyTo: '', openReplies: new Set(),
 
   async loadList() {
     this.list = (await api('GET', '/api/work').catch(() => [])) || [];
@@ -116,6 +116,7 @@ const Work = {
         <button data-tact="word" title="Open the Word copy (kept in the work-items folder)">Open in Word</button>
         <button data-tact="more" class="icon more" title="More">⋯</button>
       </div>
+      ${this.pinsHTML(w)}
       <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
       <div class="tcompose">
         <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Write a note… paste a screenshot (Win+Shift+S, then Ctrl+V) or drop files. Enter posts · Shift+Enter new line"></div>
@@ -125,19 +126,40 @@ const Work = {
   },
   scrollEnd() { const el = $('#tposts'); if (el) el.scrollTop = el.scrollHeight; },
 
+  // Pinned posts as chips under the header; clicking one jumps to it.
+  pinsHTML(w) {
+    const pins = (w.posts || []).filter(p => p.pinned);
+    if (!pins.length) return '';
+    const label = p => {
+      if (p.kind === 'entry') { const e = byId(p.ref); return e ? '🖥 ' + e.name : '🖥 (deleted)'; }
+      if (p.kind === 'capture') return '📋 ' + (p.text || '').split('\n')[0].slice(0, 50);
+      const t = new DOMParser().parseFromString(p.html || '', 'text/html').body.textContent.trim();
+      return t ? '📝 ' + t.slice(0, 50) + (t.length > 50 ? '…' : '') : (/<img/.test(p.html || '') ? '🖼 Screenshot' : '📝 Note');
+    };
+    return `<div class="tpins"><span class="muted tiny">📌 Pinned</span>${pins.map(p => `<button class="tpin" data-gopost="${p.id}" title="Show it">${esc(label(p))}</button>`).join('')}</div>`;
+  },
+
   postsHTML(w) {
     if (!w.posts?.length) return '<div class="muted tiny" style="padding:16px">Nothing here yet. Write the first note below.</div>';
+    const replies = {};
+    for (const p of w.posts) if (p.parent) (replies[p.parent] ||= []).push(p);
     let day = '';
     const dayName = d => { const t = new Date(); const y = new Date(Date.now() - 864e5);
       return d.toDateString() === t.toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); };
-    return w.posts.map(p => {
-      const at = new Date(p.at), d = dayName(at);
-      const sep = d !== day ? `<div class="tday"><span>${esc((day = d))}</span></div>` : '';
-      const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return sep + `<div class="tpost k-${p.kind}" data-post="${p.id}"><div class="tmeta"><span class="tkind">${{ note: '📝', capture: '📋', entry: '🖥' }[p.kind] || '📝'}</span>
-        <span class="ttime" title="${esc(at.toLocaleString())}">${time}</span>${p.kind === 'capture' ? '<span class="muted tiny">captured</span>' : ''}${p.edited ? '<span class="muted tiny">(edited)</span>' : ''}
-        <span class="tacts">${p.kind === 'note' ? '<button class="icon" data-pact="edit" title="Edit">✎</button>' : ''}<button class="icon more" data-pact="more" title="More">⋯</button></span></div>
+    const one = (p, isReply) => {
+      const at = new Date(p.at), time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `<div class="tpost k-${p.kind} ${isReply ? 'reply' : ''} ${p.pinned ? 'pinned' : ''}" data-post="${p.id}"><div class="tmeta"><span class="tkind">${{ note: '📝', capture: '📋', entry: '🖥' }[p.kind] || '📝'}</span>
+        <span class="ttime" title="${esc(at.toLocaleString())}">${isReply && at.toDateString() !== new Date().toDateString() ? esc(at.toLocaleDateString()) + ' ' : ''}${time}</span>${p.kind === 'capture' ? '<span class="muted tiny">captured</span>' : ''}${p.edited ? '<span class="muted tiny">(edited)</span>' : ''}${p.pinned ? '<span class="tpinned" title="Pinned to the top">📌</span>' : ''}
+        <span class="tacts"><button class="icon" data-pact="reply" title="Reply">💬</button>${p.kind === 'note' ? '<button class="icon" data-pact="edit" title="Edit">✎</button>' : ''}<button class="icon more" data-pact="more" title="More: pin, copy, delete">⋯</button></span></div>
         <div class="tbody">${this.postBody(p)}</div></div>`;
+    };
+    return w.posts.filter(p => !p.parent).map(p => {
+      const d = dayName(new Date(p.at));
+      const sep = d !== day ? `<div class="tday"><span>${esc((day = d))}</span></div>` : '';
+      const rs = replies[p.id] || [], all = this.openReplies.has(p.id) || rs.length <= 3, shown = all ? rs : rs.slice(-2);
+      const box = this.replyTo === p.id ? `<div class="treplybox"><div class="tbox rbox" contenteditable="true" data-reply="${p.id}" data-placeholder="Reply… Enter sends · Shift+Enter new line · Esc cancels"></div><button class="primary" data-pact="sendreply" data-parent="${p.id}">Reply</button></div>` : '';
+      const more = !all ? `<a href="#" class="tmore" data-allreplies="${p.id}">Show all ${rs.length} replies</a>` : '';
+      return sep + one(p) + (rs.length || box ? `<div class="treplies">${more}${shown.map(r => one(r, true)).join('')}${box}${rs.length && !box ? `<a href="#" class="tmore" data-replyto="${p.id}">💬 Reply</a>` : ''}</div>` : '');
     }).join('');
   },
 
@@ -159,9 +181,33 @@ const Work = {
   async post(kind, fields, threadId) {
     const id = threadId || this.current?.id; if (!id) return;
     const p = await api('POST', `/api/work/${id}/posts`, { kind, ...fields });
-    if (this.current?.id === id) { this.current.posts = [...(this.current.posts || []), p].sort((a, b) => new Date(a.at) - new Date(b.at)); this.render(); this.scrollEnd(); }
+    if (this.current?.id === id) {
+      this.current.posts = [...(this.current.posts || []), p].sort((a, b) => new Date(a.at) - new Date(b.at));
+      this.render();
+      if (p.parent) this.flash(p.id); else this.scrollEnd();
+    }
     this.loadList();
     return p;
+  },
+
+  flash(pid) {
+    const el = $(`#tposts [data-post="${pid}"]`); if (!el) return;
+    el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600);
+  },
+  openReply(pid) {
+    this.replyTo = pid; this.render();
+    const b = $(`#tposts [data-reply="${pid}"]`); if (b) { b.scrollIntoView({ block: 'nearest' }); b.focus(); }
+  },
+  async sendReply(pid) {
+    const box = $(`#tposts [data-reply="${pid}"]`); if (!box) return;
+    if (!box.textContent.trim() && !box.querySelector('img')) return;
+    const html = sanitizeHTML(box.innerHTML);
+    this.replyTo = '';
+    try { await this.post('note', { html, parent: pid }); } catch (err) { toast(err.message, true); }
+  },
+  async pin(p, on) {
+    await api('PUT', `/api/work/${this.current.id}/posts/${p.id}`, { pinned: on }).catch(err => toast(err.message, true));
+    p.pinned = on; this.render(); toast(on ? 'Pinned to the top of the thread' : 'Unpinned');
   },
 
   async send() {
@@ -238,6 +284,9 @@ page.addEventListener('input', e => { if (e.target.id === 'workTitle') Work.save
 page.addEventListener('change', e => { if (e.target.id === 'workStatus') Work.saveHeader(); });
 page.addEventListener('keydown', e => {
   if (e.target.id === 'tbox' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); Work.send(); }
+  const rb = e.target.closest?.('.rbox');
+  if (rb && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); Work.sendReply(rb.dataset.reply); }
+  if (rb && e.key === 'Escape') { Work.replyTo = ''; Work.render(); }
   if (e.target.closest?.('.tbody[contenteditable]') && e.key === 'Escape') Work.render();
 });
 page.addEventListener('click', async e => {
@@ -262,12 +311,17 @@ page.addEventListener('click', async e => {
         await api('DELETE', '/api/work/' + w.id); Work.current = null; await Work.loadList(); Work.show();
       }]]));
   }
+  const go = e.target.closest('[data-gopost]'); if (go) return Work.flash(go.dataset.gopost);
+  const allr = e.target.closest('[data-allreplies]'); if (allr) { e.preventDefault(); Work.openReplies.add(allr.dataset.allreplies); return Work.render(); }
+  const rto = e.target.closest('[data-replyto]'); if (rto) { e.preventDefault(); return Work.openReply(rto.dataset.replyto); }
+  const sr = e.target.closest('[data-pact=sendreply]'); if (sr) return Work.sendReply(sr.dataset.parent);
   const conn = e.target.closest('[data-tconn]');
   if (conn) { const x = byId(conn.dataset.id); return x && ({ ssh: () => Term.open(x), sql: () => SQL.open(x), open: () => openURL(x) })[conn.dataset.tconn](); }
   const ent = e.target.closest('[data-tentry]'); if (ent) return showDetails(byId(ent.dataset.tentry));
   const postEl = e.target.closest('[data-post]'), pact = e.target.closest('[data-pact]')?.dataset.pact;
   if (postEl && pact) {
     const p = w.posts.find(x => x.id === postEl.dataset.post); if (!p) return;
+    if (pact === 'reply') return Work.openReply(p.parent || p.id);
     if (pact === 'edit') {
       const body = postEl.querySelector('.tbody');
       body.contentEditable = 'true'; body.classList.add('editing'); body.focus();
@@ -282,12 +336,19 @@ page.addEventListener('click', async e => {
     }
     if (pact === 'more') {
       const r = e.target.closest('[data-pact]').getBoundingClientRect();
-      return setTimeout(() => Tree.showMenu({ clientX: r.left - 140, clientY: r.bottom }, [
+      const kids = w.posts.filter(x => x.parent === p.id);
+      return setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
+        [p.pinned ? '📌 Unpin' : '📌 Pin to the top', () => Work.pin(p, !p.pinned)],
+        ['💬 Reply', () => Work.openReply(p.parent || p.id)],
         ['Copy text', () => copyText(p.text || postEl.querySelector('.tbody').innerText)],
-        ['Delete post', async () => {
+        [kids.length ? `Delete post and its ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'}` : 'Delete post', async () => {
           await api('DELETE', `/api/work/${w.id}/posts/${p.id}`);
-          w.posts = w.posts.filter(x => x !== p); Work.render(); Work.loadList();
-          toast('Post deleted', false, async () => { await Work.post(p.kind, { html: p.html, text: p.text, ref: p.ref, at: p.at }, w.id); toast('Restored'); });
+          w.posts = w.posts.filter(x => x !== p && x.parent !== p.id); Work.render(); Work.loadList();
+          toast(kids.length ? `Post and ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'} deleted` : 'Post deleted', false, async () => {
+            const back = await Work.post(p.kind, { html: p.html, text: p.text, ref: p.ref, at: p.at, parent: p.parent, pinned: p.pinned }, w.id);
+            for (const k of kids) await Work.post(k.kind, { html: k.html, text: k.text, ref: k.ref, at: k.at, parent: back.id, pinned: k.pinned }, w.id);
+            toast('Restored');
+          });
         }]]));
     }
   }
@@ -300,7 +361,7 @@ page.addEventListener('dblclick', e => { const img = e.target.closest('.tposts i
 // Paste into the composer (or a post being edited): screenshots → stored and
 // shown inline; formatted text kept (cleaned); links made clickable.
 page.addEventListener('paste', async e => {
-  const box = e.target.closest('#tbox, .tbody[contenteditable=true]'); if (!box) return;
+  const box = e.target.closest('#tbox, .rbox, .tbody[contenteditable=true]'); if (!box) return;
   const cd = e.clipboardData;
   const imgs = [...(cd?.items || [])].filter(i => i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean);
   const html = cd?.getData('text/html') || '';
