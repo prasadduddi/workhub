@@ -30,7 +30,8 @@ type lockConf struct {
 	Hash    string `json:"hash"`
 	RecSalt string `json:"rec_salt"`
 	RecHash string `json:"rec_hash"`
-	Minutes int    `json:"minutes"` // lock after this many idle minutes; 0 = only on start-up and "Lock now"
+	Minutes int    `json:"minutes"`         // lock after this many idle minutes; 0 = only on start-up and "Lock now"
+	Email   string `json:"email,omitempty"` // where "Forgot PIN" sends a code (the user's own address)
 }
 
 type lockState struct {
@@ -38,6 +39,21 @@ type lockState struct {
 	locked   bool
 	fails    int
 	waitTill time.Time
+	mailSalt string // emailed reset code: hash and expiry, kept only in memory
+	mailHash string
+	mailTill time.Time
+	mailSent time.Time
+}
+
+var reEmail = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+// maskEmail shows enough to recognise the address: j***@example.com.
+func maskEmail(e string) string {
+	at := strings.Index(e, "@")
+	if at < 1 {
+		return ""
+	}
+	return e[:1] + strings.Repeat("*", min(at-1, 6)) + e[at:]
 }
 
 var rePIN = regexp.MustCompile(`^\d{4,8}$`)
@@ -103,12 +119,12 @@ func normRecovery(s string) string {
 }
 
 // setPIN stores a new PIN and a new recovery code, which is returned once.
-func (a *App) setPIN(pin string, minutes int) (string, error) {
+func (a *App) setPIN(pin string, minutes int, email string) (string, error) {
 	if !rePIN.MatchString(pin) {
 		return "", errors.New("the PIN must be 4 to 8 digits")
 	}
 	rec := newRecoveryCode()
-	c := lockConf{Salt: newSalt(), RecSalt: newSalt(), Minutes: minutes}
+	c := lockConf{Salt: newSalt(), RecSalt: newSalt(), Minutes: minutes, Email: email}
 	c.Hash, c.RecHash = pinHash(c.Salt, pin), pinHash(c.RecSalt, normRecovery(rec))
 	return rec, a.saveLockConf(&c)
 }
@@ -156,7 +172,11 @@ func (a *App) lockAllowed(path string) bool {
 
 func (a *App) handleLockStatus(w http.ResponseWriter, r *http.Request) {
 	c, ok := a.lockConf()
-	writeJSON(w, map[string]any{"enabled": ok, "locked": a.isLocked(), "minutes": c.Minutes, "file": a.lockFile()})
+	out := map[string]any{"enabled": ok, "locked": a.isLocked(), "minutes": c.Minutes, "email_hint": maskEmail(a.resetEmail())}
+	if !a.isLocked() {
+		out["email"] = a.resetEmail() // the full address only while unlocked (settings)
+	}
+	writeJSON(w, out)
 }
 
 func (a *App) handleLockNow(w http.ResponseWriter, r *http.Request) {
@@ -187,10 +207,16 @@ func (a *App) handleLockSet(w http.ResponseWriter, r *http.Request) {
 		Current string `json:"current"`
 		PIN     string `json:"pin"`
 		Minutes int    `json:"minutes"`
+		Email   string `json:"email"`
 		Remove  bool   `json:"remove"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, 400, err)
+		return
+	}
+	in.Email = strings.TrimSpace(in.Email)
+	if in.Email != "" && !reEmail.MatchString(in.Email) {
+		writeErr(w, 400, errors.New("that email address doesn't look right"))
 		return
 	}
 	if c, ok := a.lockConf(); ok {
@@ -206,8 +232,8 @@ func (a *App) handleLockSet(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, map[string]any{"enabled": false})
 			return
-		case in.PIN == "": // only the minutes
-			c.Minutes = in.Minutes
+		case in.PIN == "": // only the minutes / email
+			c.Minutes, c.Email = in.Minutes, in.Email
 			if err := a.saveLockConf(&c); err != nil {
 				writeErr(w, 500, err)
 				return
@@ -216,7 +242,7 @@ func (a *App) handleLockSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	rec, err := a.setPIN(strings.TrimSpace(in.PIN), in.Minutes)
+	rec, err := a.setPIN(strings.TrimSpace(in.PIN), in.Minutes, in.Email)
 	if err != nil {
 		writeErr(w, 400, err)
 		return
@@ -230,6 +256,7 @@ func (a *App) handleLockRecover(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Code string `json:"code"`
 		PIN  string `json:"pin"`
+		Via  string `json:"via"` // "email" or "" (recovery code)
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, 400, err)
@@ -240,14 +267,59 @@ func (a *App) handleLockRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c, _ := a.lockConf()
-	if err := a.tryCode(func(c lockConf) bool { return checkHash(c.RecSalt, c.RecHash, normRecovery(in.Code)) }); err != nil {
-		writeErr(w, 403, errors.New(strings.Replace(err.Error(), "wrong PIN", "wrong recovery code", 1)))
+	check, what := func(c lockConf) bool { return checkHash(c.RecSalt, c.RecHash, normRecovery(in.Code)) }, "wrong recovery code"
+	if in.Via == "email" {
+		what = "wrong or expired code"
+		check = func(lockConf) bool { // runs under a.lock.mu (tryCode)
+			ok := a.lock.mailHash != "" && time.Now().Before(a.lock.mailTill) && checkHash(a.lock.mailSalt, a.lock.mailHash, strings.TrimSpace(in.Code))
+			if ok {
+				a.lock.mailHash = "" // one use only
+			}
+			return ok
+		}
+	}
+	if err := a.tryCode(check); err != nil {
+		writeErr(w, 403, errors.New(strings.Replace(err.Error(), "wrong PIN", what, 1)))
 		return
 	}
-	rec, err := a.setPIN(strings.TrimSpace(in.PIN), c.Minutes)
+	rec, err := a.setPIN(strings.TrimSpace(in.PIN), c.Minutes, c.Email)
 	if err != nil {
 		writeErr(w, 500, err)
 		return
 	}
 	writeJSON(w, map[string]any{"locked": false, "recovery": rec})
+}
+
+// handleLockEmail: "Forgot PIN" → email me a code. A 6-digit code valid for
+// 15 minutes is sent to the address saved with the PIN (never one typed on the
+// lock screen), at most once a minute.
+func (a *App) handleLockEmail(w http.ResponseWriter, r *http.Request) {
+	_, ok := a.lockConf()
+	to := a.resetEmail()
+	if !ok || to == "" {
+		writeErr(w, 400, errors.New("no email address in your profile — use the recovery code"))
+		return
+	}
+	a.lock.mu.Lock()
+	if time.Since(a.lock.mailSent) < time.Minute {
+		a.lock.mu.Unlock()
+		writeErr(w, 429, errors.New("a code was just sent — check your email (and junk folder), or wait a minute"))
+		return
+	}
+	b := make([]byte, 4)
+	rand.Read(b)
+	code := fmt.Sprintf("%06d", (uint32(b[0])<<24|uint32(b[1])<<16|uint32(b[2])<<8|uint32(b[3]))%1_000_000)
+	a.lock.mailSalt = newSalt()
+	a.lock.mailHash, a.lock.mailTill, a.lock.mailSent = pinHash(a.lock.mailSalt, code), time.Now().Add(15*time.Minute), time.Now()
+	a.lock.mu.Unlock()
+	host, _ := os.Hostname()
+	body := fmt.Sprintf("Your WorkHub PIN reset code is: %s\n\nIt works once, for 15 minutes, on %s.\nIf you didn't ask for it, someone tried to reset your WorkHub PIN on that computer.\n", code, orDefault(host, "your computer"))
+	if err := sendMail(to, "WorkHub PIN reset code", body); err != nil {
+		a.lock.mu.Lock()
+		a.lock.mailHash, a.lock.mailSent = "", time.Time{}
+		a.lock.mu.Unlock()
+		writeErr(w, 502, err)
+		return
+	}
+	writeJSON(w, map[string]string{"sent_to": maskEmail(to)})
 }

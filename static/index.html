@@ -36,6 +36,7 @@
     <button id="whatsNewBtn" class="ghost" title="New features in this version, and tips">✨ What's new &amp; tips</button>
     <div id="appVersion" class="muted tiny"></div>
     <div id="dataDir" class="muted tiny"></div>
+    <button id="profileBtn" class="ghost" title="Your profile">👤 <span id="profileName">Your profile</span></button>
     <button id="lockBtn" class="ghost" title="Lock WorkHub with your PIN (Ctrl+L)">🔒 Lock</button>
     <button id="extBtn" class="ghost" title="Where PuTTY, FileZilla, DBeaver and SQL Developer are, for “Open in…”">↗ Programs…</button>
     <button id="backupBtn" class="ghost" title="Automatic backups (at start-up and every morning, when something changed)">🛟 Backups…</button>
@@ -364,14 +365,29 @@
       <div><button id="lockForgot" class="linklike">Forgot PIN?</button></div>
     </div>
     <div id="lockRecover" hidden>
-      <div class="muted tiny">Type the recovery code you saved when you set the PIN, and choose a new PIN.</div>
+      <button id="lockEmailBtn" hidden>✉ Email me a code</button>
+      <div id="lockRecHint" class="muted tiny"></div>
       <input id="lockCode" autocomplete="off" placeholder="Recovery code, e.g. ABCD-EFGH-JKLM">
       <input id="lockNew" type="password" inputmode="numeric" autocomplete="off" placeholder="New PIN (4–8 digits)" maxlength="8">
       <button id="lockRecoverGo" class="primary">Set new PIN and unlock</button>
-      <div><button id="lockBack" class="linklike">Back</button></div>
+      <div><button id="lockSwitch" class="linklike"></button> · <button id="lockBack" class="linklike">Back</button></div>
     </div>
     <div id="lockMsg" class="lockmsg"></div>
   </div>
+</dialog>
+<dialog id="profileDlg">
+  <h3>👤 Your profile</h3>
+  <div class="muted tiny">Your own details, kept only on this PC (shared by all your workspaces). Your email is where a PIN reset code is sent, and it's used as your Jira login when that is empty.</div>
+  <div class="grid2">
+    <label>Name<input id="pfName" autocomplete="name"></label>
+    <label>Email<input id="pfEmail" type="email" autocomplete="email"></label>
+    <label>Phone<input id="pfPhone" autocomplete="tel"></label>
+    <label>Work user ID / login<input id="pfUser" autocomplete="off"></label>
+    <label>Team<input id="pfTeam"></label>
+    <label>Role<input id="pfRole"></label>
+  </div>
+  <label>Notes<textarea id="pfNotes" rows="3"></textarea></label>
+  <div class="row end" style="margin-top:10px"><button id="pfCopy" title="Copy your details to paste into emails or forms">Copy my details</button><span class="spacer"></span><button id="pfCancel">Close</button><button id="pfSave" class="primary">Save</button></div>
 </dialog>
 <dialog id="pinDlg">
   <h3>🔒 PIN lock</h3>
@@ -383,6 +399,7 @@
   <label>Lock after no use for
     <select id="pinMinutes"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="0">Never (only when WorkHub starts or “Lock now”)</option></select></label>
   </div>
+  <div id="pinEmailHint" class="muted tiny" style="margin-top:8px"></div>
   <div id="pinRec" class="pinrec" hidden></div>
   <div class="row end" style="margin-top:10px"><button id="pinRemove" class="danger">Remove PIN</button><span class="spacer"></span><button id="pinCancel">Close</button><button id="pinSave" class="primary">Save</button></div>
 </dialog>

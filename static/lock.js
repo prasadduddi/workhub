@@ -4,17 +4,18 @@
 // server to lock after the chosen minutes without mouse or keyboard use.
 
 const Lock = {
-  enabled: false, minutes: 0, last: Date.now(), shown: false,
+  enabled: false, minutes: 0, last: Date.now(), shown: false, emailHint: '', email: '', via: '',
 
   async init() {
     const r = await fetch('/api/lock').then(x => x.json()).catch(() => null);
     if (!r) return;
-    this.enabled = r.enabled; this.minutes = r.minutes;
+    this.enabled = r.enabled; this.minutes = r.minutes; this.emailHint = r.email_hint || ''; this.email = r.email || '';
     if (r.locked) this.show();
   },
 
   show() {
     if (this.shown) return;
+    fetch('/api/lock').then(x => x.json()).then(r => { this.emailHint = r.email_hint || ''; }).catch(() => {});
     this.shown = true;
     $$('dialog[open]').forEach(d => d !== $('#lockDlg') && d.close());
     $('#ctxMenu').hidden = true;
@@ -32,10 +33,26 @@ const Lock = {
     if (typeof Jira !== 'undefined') Jira.load();
   },
 
-  mode(recover) {
+  // Forgot PIN: an emailed code (to the profile email) or the recovery code.
+  mode(recover, via) {
     $('#lockMain').hidden = recover; $('#lockRecover').hidden = !recover;
     $('#lockMsg').textContent = '';
+    if (recover) {
+      this.via = via || (this.emailHint ? 'email' : 'code');
+      const email = this.via === 'email';
+      $('#lockEmailBtn').hidden = !email;
+      $('#lockEmailBtn').textContent = `✉ Email me a code (to ${this.emailHint})`;
+      $('#lockRecHint').textContent = email ? 'A 6-digit code is sent from your Outlook to your profile email. Type it below with a new PIN.' : 'Type the recovery code you saved when you set the PIN, and choose a new PIN.';
+      $('#lockCode').placeholder = email ? 'Code from the email (6 digits)' : 'Recovery code, e.g. ABCD-EFGH-JKLM';
+      $('#lockSwitch').textContent = email ? 'Use the recovery code instead' : (this.emailHint ? 'Email me a code instead' : '');
+      $('#lockSwitch').hidden = !this.emailHint;
+    }
     (recover ? $('#lockCode') : $('#lockPin')).focus();
+  },
+
+  async emailCode() {
+    try { const r = await this.post('/api/lock/email', {}); $('#lockMsg').textContent = ''; $('#lockRecHint').textContent = `Code sent to ${r.sent_to} — it works once, for 15 minutes. Check junk mail too.`; $('#lockCode').focus(); }
+    catch (err) { $('#lockMsg').textContent = err.message; }
   },
 
   async post(url, body) {
@@ -52,7 +69,7 @@ const Lock = {
 
   async recover() {
     try {
-      const r = await this.post('/api/lock/recover', { code: $('#lockCode').value, pin: $('#lockNew').value });
+      const r = await this.post('/api/lock/recover', { code: $('#lockCode').value, pin: $('#lockNew').value, via: this.via === 'email' ? 'email' : '' });
       this.hide();
       this.showRecovery(r.recovery, true);
     } catch (err) { $('#lockMsg').textContent = err.message; }
@@ -76,6 +93,9 @@ const Lock = {
     $('#pinRec').hidden = true; $('#pinFields').hidden = false; $('#pinSave').hidden = false;
     ['#pinCur', '#pinNew', '#pinNew2'].forEach(s => ($(s).value = ''));
     $('#pinMinutes').value = String(on ? this.minutes : 10);
+    $('#pinEmailHint').innerHTML = this.email
+      ? `Forgot PIN: a code can be emailed to <b>${esc(this.email)}</b> (from your 👤 profile), or use the recovery code.`
+      : 'Tip: add your email in 👤 <b>Profile</b> so “Forgot PIN” can email you a code. Without it, only the recovery code works.';
     $('#pinDlg').showModal();
   },
 
@@ -109,6 +129,8 @@ const Lock = {
 $('#lockGo').onclick = () => Lock.unlock();
 $('#lockPin').addEventListener('keydown', e => { if (e.key === 'Enter') Lock.unlock(); });
 $('#lockForgot').onclick = () => Lock.mode(true);
+$('#lockEmailBtn').onclick = () => Lock.emailCode();
+$('#lockSwitch').onclick = () => Lock.mode(true, Lock.via === 'email' ? 'code' : 'email');
 $('#lockBack').onclick = () => Lock.mode(false);
 $('#lockRecoverGo').onclick = () => Lock.recover();
 $('#lockNew').addEventListener('keydown', e => { if (e.key === 'Enter') Lock.recover(); });
@@ -124,3 +146,34 @@ setInterval(() => {
   if (Lock.enabled && Lock.minutes > 0 && !Lock.shown && Date.now() - Lock.last > Lock.minutes * 60000) Lock.lockNow();
 }, 15000);
 Lock.init();
+
+// 👤 Profile: the user's own details.
+const Profile = {
+  data: {},
+  async load() {
+    this.data = await api('GET', '/api/profile').catch(() => ({})) || {};
+    $('#profileName').textContent = this.data.name || 'Your profile';
+  },
+  async open() {
+    await this.load();
+    const d = this.data;
+    [['#pfName', 'name'], ['#pfEmail', 'email'], ['#pfPhone', 'phone'], ['#pfUser', 'user_id'], ['#pfTeam', 'team'], ['#pfRole', 'role'], ['#pfNotes', 'notes']].forEach(([s, k]) => ($(s).value = d[k] || ''));
+    $('#profileDlg').showModal();
+  },
+  body() {
+    return { name: $('#pfName').value, email: $('#pfEmail').value, phone: $('#pfPhone').value, user_id: $('#pfUser').value, team: $('#pfTeam').value, role: $('#pfRole').value, notes: $('#pfNotes').value };
+  },
+  async save() {
+    try { this.data = await api('PUT', '/api/profile', this.body()); $('#profileName').textContent = this.data.name || 'Your profile'; $('#profileDlg').close(); toast('Profile saved'); Lock.init(); }
+    catch (err) { toast(err.message, true); }
+  },
+  text() {
+    const b = this.body();
+    return [['Name', b.name], ['Email', b.email], ['Phone', b.phone], ['User ID', b.user_id], ['Team', b.team], ['Role', b.role]].filter(([, v]) => v.trim()).map(([k, v]) => `${k}: ${v.trim()}`).join('\n');
+  },
+};
+$('#profileBtn').onclick = () => Profile.open();
+$('#pfSave').onclick = () => Profile.save();
+$('#pfCancel').onclick = () => $('#profileDlg').close();
+$('#pfCopy').onclick = () => copyText(Profile.text(), 'Your details copied');
+Profile.load();

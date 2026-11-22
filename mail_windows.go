@@ -149,3 +149,38 @@ func mustDisp(v *ole.VARIANT, err error) *ole.IDispatch {
 	}
 	return v.ToIDispatch()
 }
+
+// sendMail sends a plain message through classic Outlook (used for the PIN
+// reset code). Outlook must be running; the message goes from your own account.
+func sendMail(to, subject, body string) (err error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
+		if oe, ok := err.(*ole.OleError); !ok || oe.Code() != 1 {
+			return err
+		}
+	}
+	defer ole.CoUninitialize()
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("Outlook error: %v", r)
+		}
+	}()
+	unk, err := oleutil.GetActiveObject("Outlook.Application")
+	if err != nil {
+		return errors.New("classic Outlook is not running — start Outlook and try again, or use the recovery code")
+	}
+	defer unk.Release()
+	app, err := unk.QueryInterface(ole.IID_IDispatch)
+	if err != nil {
+		return err
+	}
+	defer app.Release()
+	item := mustDisp(oleutil.CallMethod(app, "CreateItem", 0)) // olMailItem
+	defer item.Release()
+	oleutil.MustPutProperty(item, "To", to)
+	oleutil.MustPutProperty(item, "Subject", subject)
+	oleutil.MustPutProperty(item, "Body", body)
+	_, err = oleutil.CallMethod(item, "Send")
+	return err
+}

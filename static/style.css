@@ -643,3 +643,5 @@ dialog.lockscreen::backdrop { background: var(--bg); }
 .pinrec { margin-top: 10px; padding: 10px; border: 2px dashed var(--accent); border-radius: 8px; }
 .pinrec code { font-size: 20px; letter-spacing: 2px; user-select: all; }
 [hidden] { display: none !important; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 10px 0; }
+@media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
