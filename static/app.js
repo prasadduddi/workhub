@@ -400,7 +400,19 @@ function show(view) {
     if (!Git.repo && Git.repos().length) Git.open(Git.repos().includes(last) ? last : Git.repos()[0]);
   }
 }
-$('#nav').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) show(b.dataset.view); });
+$('#nav').addEventListener('click', e => {
+  const b = e.target.closest('button[data-view]'); if (!b) return;
+  // Clicking the page you are on again (SSH, FTP, SQL, Tasks…) switches the
+  // sidebar between icons only and full size.
+  if (b.classList.contains('active') && WORK_VIEWS.includes(b.dataset.view) && !document.body.classList.contains('side-top')) {
+    const collapsed = document.body.classList.contains('side-collapsed');
+    if (collapsed) { document.body.classList.remove('side-collapsed'); S.autoSide = false; S.userSide = true; $('#sideToggle').textContent = '«'; }
+    else { S.userSide = false; roomForWork(); }
+    setTimeout(() => { fitActiveTerm(); window.dispatchEvent(new Event('resize')); }, 50);
+    return;
+  }
+  show(b.dataset.view);
+});
 $('#navSearch').onclick = () => { show('dashboard'); $('#search').focus(); $('#search').select(); };
 
 document.addEventListener('keydown', e => {

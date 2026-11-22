@@ -158,7 +158,7 @@ const HELP_TOPICS = [
     'To restore: quit, unzip a backup into an empty folder, start WorkHub and pick it with ☰ → Data location…'] },
   { t: 'Menu on the left or at the top', k: 'menu sidebar top left layout move collapse icons room wide', v: '', s: [
     'The ▭ button at the top of the menu (or ☰ → Menu at the top) moves it into a bar across the top; again to move it back.',
-    'On SSH, FTP, SQL, Tasks and other tree pages the sidebar shrinks to icons; » expands it.'] },
+    'On SSH, FTP, SQL, Tasks and other tree pages the sidebar shrinks to icons; click that page’s icon again (or ») to bring it back to full size.'] },
   { t: 'Light or dark theme', k: 'theme dark light mode colours', v: '', s: ['☰ → Theme: follow Windows, light or dark.'] },
   { t: 'Keyboard shortcuts', k: 'keyboard shortcuts keys hotkey ctrl', v: '', s: [
     'Ctrl+K search · Ctrl+J assistant · Ctrl+L lock · Ctrl+B sidebar · F1 help.',

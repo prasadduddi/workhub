@@ -6,6 +6,7 @@
 const RELEASES = [
   { v: '1.9.1', title: 'Jira issues fix, Help', items: [
     ['👤', 'All your Jira issues', 'Jira → 👤 Add my issues (and the automatic check every 15 minutes) now adds everything assigned to you — open issues under 📂 In progress, done ones under ✅ Completed. Fixed: with “Sign in with browser” on Jira Cloud no issues were found.', 'jira'],
+    ['↔', 'Click again to toggle the sidebar', 'On SSH, FTP, SQL, Tasks and the other tree pages, clicking the page’s icon again switches the sidebar between icons only and full size.', ''],
     ['❓', 'Help', 'F1 or ☰ → Help: how-to topics with steps and a Show me button. Or ask the assistant (Ctrl+J) “how do I …?” — it answers with the steps.', ''],
   ] },
   { v: '1.9', title: 'Task threads, smarter search, tidier layout', items: [
