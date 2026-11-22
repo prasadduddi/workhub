@@ -528,6 +528,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/db/tree", a.handleDBTree)
 	mux.HandleFunc("GET /api/work", a.handleWorkList)
 	mux.HandleFunc("POST /api/work", a.handleWorkSave)
+	mux.HandleFunc("POST /api/work/import", a.handleWorkImport)
 	mux.HandleFunc("GET /api/work/{id}", a.handleWorkGet)
 	mux.HandleFunc("DELETE /api/work/{id}", a.handleWorkDelete)
 	mux.HandleFunc("POST /api/work/{id}/blocks", a.handleWorkAdd)
@@ -535,6 +536,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/work/{id}/doc", a.handleWorkDoc) // sendBeacon on tab close
 	mux.HandleFunc("POST /api/work/{id}/files", a.handleWorkFile)
 	mux.HandleFunc("POST /api/work/{id}/word", a.handleWorkWord)
+	mux.HandleFunc("POST /api/work/{id}/markdown", a.handleWorkMarkdown)
 	mux.HandleFunc("PUT /api/work/{id}/blocks/{bid}", a.handleWorkBlock)
 	mux.HandleFunc("DELETE /api/work/{id}/blocks/{bid}", a.handleWorkBlockDelete)
 	mux.HandleFunc("POST /api/work/{id}/posts", a.handlePostAdd)

@@ -270,8 +270,28 @@ const linkHTML = u => { const label = linkLabel(u); return `${label ? `<b>${esc(
 setTimeout(() => Work.loadList().then(() => { if ($('#search').value.trim()) renderBoard(); }), 600);
 setInterval(() => Work.loadList(), 5 * 60 * 1000);
 
+// Word documents → threads (one each); the first one opens.
+Work.importWord = async files => {
+  files = [...files].filter(f => /\.docx?$/i.test(f.name));
+  if (!files.length) return toast('Pick Word documents (.docx)', true);
+  const fd = new FormData(); files.forEach(f => fd.append('file', f, f.name));
+  toast(`Importing ${files.length} document(s)…`);
+  const r = await fetch('/api/work/import', { method: 'POST', body: fd }).then(x => x.json()).catch(err => ({ problems: [err.message] }));
+  const made = r.threads || [];
+  await Work.loadList();
+  if (made.length) await Work.open(made[0].id);
+  if (r.problems?.length) toast(`${made.length ? `Imported ${made.length}. ` : ''}${r.problems.join(' · ')}`, true);
+  else toast(`Imported ${made.length} document(s) as task threads`);
+};
+
 // ---- events ----
 $('#workNew').onclick = () => Work.create();
+$('#workImport').onclick = () => $('#workImportFile').click();
+$('#workImportFile').onchange = e => { Work.importWord(e.target.files); e.target.value = ''; };
+const side = $('.tasks-side');
+side.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); side.classList.add('dragover'); } });
+side.addEventListener('dragleave', e => { if (e.target === side) side.classList.remove('dragover'); });
+side.addEventListener('drop', e => { if (!e.dataTransfer.files.length) return; e.preventDefault(); side.classList.remove('dragover'); Work.importWord(e.dataTransfer.files); });
 $('#workSearch').addEventListener('input', () => Work.renderList());
 $('#workList').addEventListener('click', e => { const li = e.target.closest('[data-work]'); if (li) Work.open(li.dataset.work); });
 $('#captureThread')?.addEventListener('click', e => {
@@ -304,7 +324,16 @@ page.addEventListener('click', async e => {
   if (act === 'more') {
     const r = e.target.closest('[data-tact]').getBoundingClientRect();
     return setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
-      ['Open the work-items folder', () => page.querySelector('[data-tact=word]') && api('POST', `/api/work/${w.id}/word?what=folder`).catch(err => toast(err.message, true))],
+      ['⬇ Export as Markdown (.md, screenshots beside it)', async () => {
+        try { const r = await api('POST', `/api/work/${w.id}/markdown`); toast(`Saved ${r.path.split(/[\\/]/).pop()}${r.files ? ` and ${r.files} file(s)` : ''} in the work-items folder`); }
+        catch (err) { toast(err.message, true); }
+      }],
+      ['📋 Copy as Markdown', async () => {
+        try { const r = await api('POST', `/api/work/${w.id}/markdown?what=copy`); await copyText(r.markdown, 'Thread copied as Markdown — paste it into Jira, Confluence or Teams'); }
+        catch (err) { toast(err.message, true); }
+      }],
+      '-',
+      ['Open the work-items folder', () => api('POST', `/api/work/${w.id}/word?what=folder`).catch(err => toast(err.message, true))],
       ['Delete this thread…', async () => {
         if (!confirm(`Delete the thread "${w.title}" and everything in it?`)) return;
         if (w.id === Work.active()) await saveSettings({ active_thread: '' });
