@@ -4,7 +4,7 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
-  { v: '1.8', title: 'Task threads, organise and find faster, Jira browser sign-in', items: [
+  { v: '1.9', title: 'Task threads, smarter search, tidier layout', items: [
     ['🧵', 'Tasks: a thread per task (replaces work items)', 'Tasks in the sidebar: one thread per ticket or change. Post notes, paste screenshots (Win+Shift+S, Ctrl+V), drop files. Press 📥 Capture here and everything the clipboard watcher catches lands in the thread too. Right-click any server or capture → Add to task thread. Your old work items are threads now, with their page as the first post; the Word copy is kept up to date.', 'tasks'],
     ['🔎', 'Search at the top right, everywhere', 'One search box sits at the top right of every page (Ctrl+K from anywhere). Typing shows the results on the dashboard; keys, filters and recent searches drop down under it.', 'dashboard'],
     ['⇡', 'Menu at the top or on the left', 'The ▭ button at the top of the menu (or ☰ → Menu at the top) moves the menu into a bar across the top of the window — and back. Remembered.', ''],
@@ -37,6 +37,8 @@ const RELEASES = [
     ['🔎', 'Smarter search', 'Best match first (exact host or IP on top). Naming-rule labels are searched too (“batch uat”), and acmebat01 finds acme-bat-01. Filters: env:prod type:db user:ops app:batch port:1521 has:password no:env is:fail -word.', 'dashboard'],
     ['⌨', 'Search from the keyboard', 'In the search box: ↑/↓ choose a result, Enter connects or opens it, Shift+Enter shows details, Alt+P / Alt+U / Alt+H / Alt+J copy password, user, host, JDBC or URL.', 'dashboard'],
     ['⚠', 'Needs attention', 'Connections missing a user, password, environment or service name, or whose last login failed, show a ⚠ — click it to fill in. The ⚠ tile on the dashboard lists them all (needs:attention).', 'dashboard'],
+  ] },
+  { v: '1.8', title: 'Jira browser sign-in, macros, Open in', items: [
     ['🔑', 'Jira: Sign in with browser (Desktop version)', 'Jira settings → Sign-in type “Sign in with browser”: log in to Jira in a small window with your normal login (SSO too) — no token needed. WorkHub keeps the session alive and signs in again by itself when it can.', 'jira'],
     ['▶', 'Run macros', 'Edit an SSH connection → “Commands to run after connecting” (one per line) and tick Run macros: they are typed in one by one each time the session connects.', 'terminal'],
     ['↗', 'Open in the real programs from more places', 'Right-click a search result or a connection in the tree: Open in PuTTY / FileZilla for servers, SQL Developer (Oracle) or DBeaver for databases. The Edit dialog has the same buttons.', 'dashboard'],
