@@ -279,6 +279,7 @@ function show(view) {
   if (view === 'inbox') Mail.status();
   if (view === 'groups') Groups.render();
   if (view === 'props') Props.load();
+  if (view === 'ref') Ref.load();
   if (view === 'jira') Jira.load();
   if (view === 'git') {
     Git.renderRepos();

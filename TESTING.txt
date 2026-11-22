@@ -86,3 +86,5 @@ v1.6 checks
   [ ] PuTTY / FileZilla / SQL: the "Group by" box next to the filter (Folders, Env, App, Domain / subnet, Type, My groups, User)
       or chat "group putty by app", "group sql connections by env"
   [ ] Copy an  ssh -N -L1522:<db host>:1521 user@<jump host>  command → an SSH connection with that tunnel appears
+  [ ] Folders (replaces Properties): + adds a folder, + New file, Upload / drop files and whole folders, edit with Ctrl+S,
+      JSON Format/Check/Validate; old Properties content is under "From Properties"; files are plain files in <data>\reference

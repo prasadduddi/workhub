@@ -338,6 +338,15 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .wdoc pre, .wdoc code { font-family: var(--mono); background: var(--panel2); border-radius: 4px; } .wdoc pre { padding: 8px 10px; white-space: pre-wrap; }
 .wdoc input[type=checkbox] { transform: translateY(1px); margin-right: 4px; }
 
+/* folders (reference files) */
+.refwhere { padding: 6px 8px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+#refDetail { display: flex; flex-direction: column; min-height: 0; }
+.refeditor { flex: 1; min-height: 300px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.refeditor .CodeMirror { height: 100%; }
+.refimg { max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius); }
+.rrow { cursor: pointer; } .rrow:hover { background: var(--panel2); }
+.tnode.rnode.drop { outline: 2px dashed var(--accent); outline-offset: -2px; }
+
 /* jira */
 .jira-layout { display: grid; grid-template-columns: minmax(320px, 40%) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
 #jiraDlg { width: min(520px, 94vw); } #jiraDlg label { margin-bottom: 8px; }
