@@ -4,7 +4,8 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
-  { v: '1.8', title: 'Macros, Open in, quicker folders', items: [
+  { v: '1.8', title: 'Jira browser sign-in, macros, Open in', items: [
+    ['🔑', 'Jira: Sign in with browser (Desktop version)', 'Jira settings → Sign-in type “Sign in with browser”: log in to Jira in a small window with your normal login (SSO too) — no token needed. WorkHub keeps the session alive and signs in again by itself when it can.', 'jira'],
     ['▶', 'Run macros', 'Edit an SSH connection → “Commands to run after connecting” (one per line) and tick Run macros: they are typed in one by one each time the session connects.', 'terminal'],
     ['↗', 'Open in the real programs from more places', 'Right-click a search result or a connection in the tree: Open in PuTTY / FileZilla for servers, SQL Developer (Oracle) or DBeaver for databases. The Edit dialog has the same buttons.', 'dashboard'],
     ['☰', 'Menu at the top of the sidebar', '☰ next to WorkHub: Check for updates & install, profile, lock, programs, backups… — and a green “⬆ install” button appears there when a new version is out.', ''],

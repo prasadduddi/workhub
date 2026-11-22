@@ -9,6 +9,7 @@ const Jira = {
   async load() {
     const [list, c] = await Promise.all([api('GET', '/api/jira').catch(() => []), api('GET', '/api/jira/config').catch(() => ({}))]);
     this.issues = list || []; this.cfg = c.config || {}; this.hasToken = !!c.has_token;
+    if (this.cfg.mode === 'browser') this.session = await api('GET', '/api/jira/browser').catch(() => ({}));
     this.render();
     if ($('#search').value.trim()) renderBoard(); // main search shows Jira issues too
     if (typeof Cal !== 'undefined') Cal.render(); // CM windows
@@ -18,8 +19,9 @@ const Jira = {
   prBadge(s) { return s ? `<span class="prs ${s.toLowerCase()}">${esc(s.toLowerCase())}</span>` : ''; },
 
   render() {
-    const ready = this.cfg?.base_url && this.hasToken;
+    const browser = this.cfg?.mode === 'browser', ready = this.cfg?.base_url && (this.hasToken || browser);
     $('#jiraSetupHint').hidden = !!ready;
+    $('#jiraSignBtn').hidden = !(browser && this.session?.available && this.session.checked && !this.session.signed_in);
     const q = $('#jiraFilter').value.trim().toLowerCase();
     const list = this.issues.filter(j => !q || [j.key, j.summary, j.status, j.assignee, ...j.prs.map(p => p.name + ' ' + p.repo), ...j.children.map(c => c.key + ' ' + c.summary)].join(' ').toLowerCase().includes(q));
     const prefix = this.cfg?.child_prefix || 'CM-';
@@ -89,12 +91,51 @@ const Jira = {
     $('#jiraAddBtn').disabled = false;
   },
 
+  modeRows() {
+    const m = $('#jiraMode').value;
+    $('#jiraUserRow').hidden = m === 'server' || m === 'browser';
+    $('#jiraTokenRow').hidden = m === 'browser';
+    $('#jiraBrowserRow').hidden = m !== 'browser';
+    if (m === 'browser') this.showSession();
+  },
+  showSession() {
+    const s = this.session || {}, el = $('#jiraSignState');
+    if (!window.WH_DESKTOP && !s.available) { el.textContent = 'Only in WorkHub-Desktop.exe — the web version needs a token.'; $('#jiraSignIn').disabled = true; return; }
+    $('#jiraSignIn').disabled = false;
+    el.textContent = s.signed_in ? `✅ Signed in${s.name ? ' as ' + s.name : ''}${s.since ? ' since ' + new Date(s.since).toLocaleString() : ''}` : s.checked ? 'Not signed in' : '';
+  },
+
+  // Opens the Jira window and waits (up to 10 minutes) for the login.
+  async signIn() {
+    const base = (this.cfg?.mode === 'browser' && this.cfg.base_url) || $('#jiraUrl').value.trim();
+    if (!base) return toast('Enter the Jira address first', true);
+    if ($('#jiraDlg').open && ($('#jiraMode').value !== this.cfg?.mode || $('#jiraUrl').value.trim() !== this.cfg?.base_url))
+      await api('PUT', '/api/jira/config', { base_url: $('#jiraUrl').value.trim(), mode: 'browser', user: '', token: '', child_prefix: $('#jiraPrefix').value.trim() || 'CM-' });
+    try { await api('POST', '/api/jira/browser', {}); } catch (err) { return toast(err.message, true); }
+    $('#jiraSignState').textContent = '⏳ Waiting for you to log in in the Jira window…';
+    clearTimeout(this.signTimer);
+    const until = Date.now() + 10 * 60e3;
+    const poll = async () => {
+      const s = await api('GET', '/api/jira/browser?check=1').catch(() => ({}));
+      if (s.signed_in) {
+        this.session = s; this.showSession();
+        await api('POST', '/api/jira/browser', { hide: true }).catch(() => {});
+        toast(`Signed in to Jira${s.name ? ' as ' + s.name : ''} — loading your issues…`);
+        await api('POST', '/api/jira/refresh', {}).catch(() => {}); api('POST', '/api/jira/mine').catch(() => {});
+        return this.load();
+      }
+      if (Date.now() < until) this.signTimer = setTimeout(poll, 4000);
+      else { $('#jiraSignState').textContent = 'Not signed in yet — press the button again when ready'; }
+    };
+    this.signTimer = setTimeout(poll, 5000);
+  },
+
   settings() {
     const c = this.cfg || {}, d = $('#jiraDlg');
     $('#jiraUrl').value = c.base_url || ''; $('#jiraMode').value = c.mode || 'cloud'; $('#jiraUser').value = c.user || '';
     $('#jiraToken').value = ''; $('#jiraToken').placeholder = this.hasToken ? '(saved — leave blank to keep)' : 'API token / personal access token';
     $('#jiraPrefix').value = c.child_prefix || 'CM-';
-    $('#jiraUserRow').hidden = $('#jiraMode').value === 'server';
+    this.modeRows();
     d.returnValue = '';
     d.showModal();
   },
@@ -113,7 +154,9 @@ $('#jiraMine').onclick = async () => {
 // Loaded at start too, so the main search finds Jira issues; kept fresh.
 Jira.load(); setInterval(() => Jira.load(), 5 * 60 * 1000);
 $('#jiraRefreshAll').onclick = async () => { toast('Refreshing from Jira…'); Jira.issues = await api('POST', '/api/jira/refresh', {}).catch(err => (toast(err.message, true), Jira.issues)); Jira.render(); };
-$('#jiraMode').onchange = e => ($('#jiraUserRow').hidden = e.target.value === 'server');
+$('#jiraMode').onchange = () => Jira.modeRows();
+$('#jiraSignIn').onclick = () => Jira.signIn();
+$('#jiraSignBtn').onclick = () => Jira.signIn();
 $('#jiraDlg').addEventListener('close', async () => {
   if ($('#jiraDlg').returnValue !== 'save') return;
   await api('PUT', '/api/jira/config', { base_url: $('#jiraUrl').value.trim(), mode: $('#jiraMode').value, user: $('#jiraUser').value.trim(), token: $('#jiraToken').value, child_prefix: $('#jiraPrefix').value.trim() || 'CM-' });

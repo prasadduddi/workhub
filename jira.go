@@ -23,7 +23,7 @@ import (
 
 type JiraConfig struct {
 	BaseURL     string   `json:"base_url"`
-	Mode        string   `json:"mode"`  // cloud (email + API token), server (personal access token), basic
+	Mode        string   `json:"mode"`  // cloud (email + API token), server (personal access token), basic, browser (Desktop: signed-in window)
 	User        string   `json:"user"`  // email or username
 	Token       string   `json:"token"` // never sent to the page
 	ChildPrefix string   `json:"child_prefix"`
@@ -164,6 +164,9 @@ type jiraClient struct {
 }
 
 func (c *jiraClient) get(path string, out any) error {
+	if c.cfg.Mode == "browser" {
+		return c.browserGet(path, out)
+	}
 	req, _ := http.NewRequest("GET", c.cfg.BaseURL+path, nil)
 	req.Header.Set("Accept", "application/json")
 	switch c.cfg.Mode {
@@ -423,8 +426,8 @@ func searchMine(cfg JiraConfig) ([]string, error) {
 // addMine adds my completed issues not tracked yet (or removed by the user).
 func (a *App) addMine() (int, error) {
 	cfg := a.store.JiraConfig()
-	if cfg.BaseURL == "" || cfg.Token == "" {
-		return 0, errors.New("set up Jira first (address and token in Jira settings)")
+	if !jiraReady(cfg) {
+		return 0, errors.New("set up Jira first (address and sign-in in Jira settings)")
 	}
 	keys, err := searchMine(cfg)
 	if err != nil {
@@ -456,7 +459,7 @@ func (a *App) jiraWatcher() {
 	for range time.Tick(15 * time.Minute) {
 		if c := a.store.JiraConfig(); c.BaseURL != "" {
 			a.refreshJira()
-			if !c.NoMine && c.Token != "" {
+			if !c.NoMine && jiraReady(c) {
 				if _, err := a.addMine(); err != nil {
 					log.Println("jira: my completed issues:", err)
 				}
@@ -483,7 +486,7 @@ func (a *App) handleJiraConfigPut(w http.ResponseWriter, r *http.Request) {
 	a.store.SetJiraConfig(c)
 	go func() {
 		a.refreshJira()
-		if c := a.store.JiraConfig(); !c.NoMine && c.Token != "" {
+		if c := a.store.JiraConfig(); !c.NoMine && jiraReady(c) {
 			_, _ = a.addMine()
 		}
 	}()

@@ -269,6 +269,7 @@
       <input id="jiraFilter" type="search" placeholder="Filter…" style="width:180px">
       <button id="jiraMine" title="Add every issue assigned to you that is done (also checked every 15 minutes)">✅ Add my completed</button>
       <button id="jiraRefreshAll" title="Re-read all issues from Jira (also happens every 15 minutes)">↻ Refresh all</button>
+      <button id="jiraSignBtn" class="primary" hidden title="Your Jira session ended — sign in again">🔑 Sign in to Jira</button>
       <button id="jiraSettings">Jira settings…</button>
     </header>
     <div id="jiraSetupHint" class="gsec" hidden>First, <a href="#" id="jiraSetupLink">set up Jira</a>: your Jira address and a token. Pasting an issue link fills in the address for you.</div>
@@ -494,9 +495,13 @@
   <form method="dialog">
     <h3>Jira settings (this workspace)</h3>
     <label>Jira address<input id="jiraUrl" placeholder="https://yourcompany.atlassian.net  or  https://jira.company.com"></label>
-    <label>Sign-in type<select id="jiraMode"><option value="cloud">Jira Cloud — email + API token</option><option value="server">Jira Server / Data Center — personal access token</option><option value="basic">Username + password</option></select></label>
+    <label>Sign-in type<select id="jiraMode"><option value="cloud">Jira Cloud — email + API token</option><option value="server">Jira Server / Data Center — personal access token</option><option value="basic">Username + password</option><option value="browser">Sign in with browser — your normal Jira login, SSO too (Desktop version)</option></select></label>
     <label id="jiraUserRow">Email / username<input id="jiraUser" autocomplete="off"></label>
-    <label>Token / password<input id="jiraToken" type="password" autocomplete="new-password"></label>
+    <label id="jiraTokenRow">Token / password<input id="jiraToken" type="password" autocomplete="new-password"></label>
+    <div id="jiraBrowserRow" class="gsec" hidden>
+      <div class="row"><button type="button" id="jiraSignIn" class="primary">🔑 Sign in with browser…</button><span id="jiraSignState" class="muted"></span></div>
+      <div class="muted tiny">A Jira window opens: log in as you normally do (SSO / MFA). WorkHub notices when you're in and hides the window — closing it is fine too. Tick “Remember me” / “Stay signed in” if the login page offers it. WorkHub keeps the session alive while it runs and signs in again by itself when it can.</div>
+    </div>
     <label>Show sub-tasks and linked issues whose key starts with<input id="jiraPrefix" placeholder="CM-"></label>
     <div class="muted tiny">Jira Cloud: create an API token at id.atlassian.com → Security → API tokens. Jira Server/DC: your profile → Personal Access Tokens. The token is stored encrypted and never shown again.</div>
     <div class="row end"><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div>
