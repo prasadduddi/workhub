@@ -613,3 +613,5 @@ dialog.detail-dlg { width: min(760px, 96vw); }
 .svc[data-detail], tr[data-detail] { cursor: pointer; }
 tr[data-detail]:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .tblwrap { overflow-x: auto; max-width: 100%; }
+.ext-rows { display: grid; gap: 10px; margin-top: 10px; }
+.ext-rows .found { font-size: 11px; overflow-wrap: anywhere; }

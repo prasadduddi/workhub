@@ -36,6 +36,7 @@
     <button id="whatsNewBtn" class="ghost" title="New features in this version, and tips">✨ What's new &amp; tips</button>
     <div id="appVersion" class="muted tiny"></div>
     <div id="dataDir" class="muted tiny"></div>
+    <button id="extBtn" class="ghost" title="Where PuTTY, DBeaver and SQL Developer are, for “Open in…”">↗ Programs…</button>
     <button id="backupBtn" class="ghost" title="Automatic backups (at start-up and every morning, when something changed)">🛟 Backups…</button>
     <button id="importBtn" class="ghost" title="Bring in data from an older WorkHub folder">Import data…</button>
     <button id="dataLocBtn" class="ghost" title="Choose where this workspace keeps its data">Data location…</button>
@@ -349,6 +350,12 @@
   <h3 id="detailTitle"></h3>
   <div id="detailBody" class="detail-grid"></div>
   <div class="row end" style="margin-top:12px"><span id="detailActs" class="row"></span><span class="spacer"></span><button id="detailCopyAll">Copy all</button><button id="detailClose" class="primary">Close</button></div>
+</dialog>
+<dialog id="extDlg">
+  <h3>↗ Program locations</h3>
+  <div class="muted tiny">Used by “Open in PuTTY / DBeaver / SQL Developer”. Leave a box empty to let WorkHub find the program (a running copy, usual install folders, or an unzipped copy in your user folder, Downloads, Desktop or C:\Tools).</div>
+  <div id="extRows" class="ext-rows"></div>
+  <div class="row end" style="margin-top:10px"><button id="extCancel">Cancel</button><button id="extSave" class="primary">Save</button></div>
 </dialog>
 <dialog id="backupDlg">
   <h3>🛟 Backups</h3>

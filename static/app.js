@@ -635,6 +635,7 @@ function svcHTML(e) {
     canFiles(e) && `<button class="icon" data-act="sftp" data-id="${e.id}">${isFTP(e) ? 'FTP' : 'SFTP'}</button>`,
     canDB(e) && `<button class="icon" data-act="sql" data-id="${e.id}">SQL</button>`,
     e.url && `<button class="icon" data-act="open" data-id="${e.id}">Open</button>`,
+    External.items(e).length && `<button class="icon" data-act="ext" data-id="${e.id}" title="Open in the real PuTTY / SQL Developer / DBeaver">Open in ↗</button>`,
     `<button class="icon" data-act="details" data-id="${e.id}">Details</button>`,
     `<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
     `<button class="icon danger" data-act="del" data-id="${e.id}">Delete</button>`,
@@ -676,6 +677,7 @@ $('#board').addEventListener('click', async ev => {
   try {
     switch (b.dataset.act) {
       case 'details': return showDetails(e);
+      case 'ext': { const r = b.getBoundingClientRect(); return setTimeout(() => Tree.showMenu({ clientX: r.left, clientY: r.bottom }, [...External.items(e), '-', ['Program locations…', () => External.settings()]])); }
       case 'ssh': return Term.open(e);
       case 'sftp': return Remote.connect(e);
       case 'sql': return SQL.open(e);
@@ -692,6 +694,47 @@ $('#board').addEventListener('click', async ev => {
     }
   } catch (err) { toast(err.message, true); }
 });
+
+// "Open in…" the real PuTTY / DBeaver / SQL Developer (paths: ↗ Programs…).
+const External = {
+  // Menu items for an entry: [label, fn]; databases offer SQL Developer first for Oracle, DBeaver for PostgreSQL.
+  items(e) {
+    const out = [];
+    if (canSSH(e)) out.push(['Open in PuTTY (the real one) ↗', () => this.open(e, 'putty')]);
+    if (canDB(e)) {
+      const sd = ['Open in SQL Developer ↗', () => this.open(e, 'sqldev')], db = ['Open in DBeaver ↗', () => this.open(e, 'dbeaver')];
+      out.push(...(dbKindOf(e) === 'oracle' ? [sd, db] : [db]));
+    }
+    return out;
+  },
+  async open(e, tool) {
+    if (tool === 'sqldev' && e.password) await copyText(e.password, 'Password copied');
+    try {
+      const r = await api('POST', '/api/external/open', { id: e.id, tool });
+      if (tool === 'sqldev') {
+        const svc = dbService(e);
+        toast(`SQL Developer opening. ${r.note} Host ${e.host} · port ${e.port || 1521} · ${svc?.sid ? 'SID' : 'service'} ${svc?.name || '?'} · user ${e.username || '?'}`);
+      } else toast(`${r.program} opening… ${r.note || ''}`);
+    } catch (err) {
+      toast(err.message, true);
+      if (/wasn't found/.test(err.message)) this.settings();
+    }
+  },
+  async settings() {
+    const list = await api('GET', '/api/external');
+    $('#extRows').innerHTML = list.map(t => `<label>${esc(t.name)} (${esc(t.exe)})
+      <input data-ext="${t.key}" value="${esc(t.set || '')}" placeholder="${esc(t.found ? 'Found: ' + t.found : 'Not found — paste the full path to ' + t.exe)}">
+      <span class="found muted">${t.found ? '✓ Using ' + esc(t.found) : '✗ Not found on this PC'}</span></label>`).join('');
+    $('#extDlg').showModal();
+  },
+};
+$('#extBtn').onclick = () => External.settings();
+$('#extCancel').onclick = () => $('#extDlg').close();
+$('#extSave').onclick = async () => {
+  const body = {}; $$('#extRows [data-ext]').forEach(i => (body[i.dataset.ext] = i.value));
+  try { await api('POST', '/api/external/paths', body); $('#extDlg').close(); toast('Program locations saved'); }
+  catch (err) { toast(err.message, true); }
+};
 
 // Where details came from, in words.
 const SOURCE_NAMES = { clipboard: 'Copied (clipboard)', paste: 'Pasted into WorkHub', outlook: 'Outlook email', chrome: 'Chrome bookmark', edge: 'Edge bookmark',
@@ -724,14 +767,17 @@ function showDetails(e) {
   $('#detailBody').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span><button class="icon" data-copy="${esc(v)}">Copy</button>`).join('');
   $('#detailActs').innerHTML = [
     canSSH(e) && ['ssh', 'SSH'], canFiles(e) && ['sftp', isFTP(e) ? 'FTP' : 'SFTP'], canDB(e) && ['sql', 'SQL'], e.url && !/^jdbc:/i.test(e.url) && ['open', 'Open'], ['edit', 'Edit'],
-  ].filter(Boolean).map(([a, t]) => `<button data-dact="${a}">${t}</button>`).join('');
+  ].filter(Boolean).map(([a, t]) => `<button data-dact="${a}">${t}</button>`).join('') + External.items(e).map(([t], i) => `<button data-dext="${i}">${esc(t.replace('Open in ', '').replace(' (the real one)', ''))}</button>`).join('');
   showDetails.entry = e;
   $('#detailDlg').showModal();
 }
 $('#detailDlg').addEventListener('click', ev => {
   const c = ev.target.closest('[data-copy]'); if (c) return copyText(c.dataset.copy);
+  const x = ev.target.closest('[data-dext]');
+  if (x) { $('#detailDlg').close(); return External.items(showDetails.entry)[x.dataset.dext][1](); }
   const a = ev.target.closest('[data-dact]'); if (!a) return;
-  const e = showDetails.entry; $('#detailDlg').close();
+  const e = showDetails.entry;
+  $('#detailDlg').close();
   ({ ssh: () => Term.open(e), sftp: () => Remote.connect(e), sql: () => SQL.open(e), open: () => openURL(e), edit: () => openEntryDialog(e) })[a.dataset.dact]();
 });
 $('#detailCopyAll').onclick = () => copyText(showDetails.text);
@@ -1407,6 +1453,7 @@ const Tree = {
         else items.push(['Connect and show tables', () => SQL.toggleConn(e)]);
       }
       if (canSSH(e)) items.push(['Open in PuTTY', () => Term.open(e)]);
+      if (External.items(e).length) items.push(...External.items(e));
       if (canSSH(e) && e.extra?.tunnels) {
         const off = e.extra.tunnels_off === '1', auto = e.extra.tunnels_auto === '1';
         items.push('-', [off ? '☐ Tunnels switched off — switch on' : '☑ Tunnels on — switch off', async () => {
