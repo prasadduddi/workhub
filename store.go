@@ -45,6 +45,7 @@ type Entry struct {
 	Folder        string            `json:"folder,omitempty"`       // browser bookmark folder, e.g. "Edge › Favorites bar › Infra"
 	Source        string            `json:"source,omitempty"`       // "edge"/"chrome" when it came from browser bookmarks
 	Hidden        bool              `json:"hidden,omitempty"`       // removed by the user but kept so it isn't imported again
+	Unsorted      bool              `json:"unsorted,omitempty"`     // captured, not yet looked at (the Unsorted inbox)
 	Status        string            `json:"status,omitempty"`       // last connection/link check: "ok" or "fail"
 	StatusAt      time.Time         `json:"status_at,omitzero"`
 	StatusMsg     string            `json:"status_msg,omitempty"`
@@ -109,6 +110,13 @@ type Settings struct {
 	LinkBrowser   string       `json:"link_browser"` // desktop version: chrome (default), edge or default
 	Mail          MailSettings `json:"mail"`
 	NameRules     []NameRule   `json:"name_rules,omitempty"` // e.g. -BAT- → Batch (this workspace only)
+	Saved         []SavedQuery `json:"saved_searches,omitempty"`
+}
+
+// SavedQuery is a search kept in the sidebar, e.g. "PROD Batch" = env:prod app:batch.
+type SavedQuery struct {
+	Name  string `json:"name"`
+	Query string `json:"query"`
 }
 
 // NameRule names servers and links whose host name contains Match.
@@ -403,6 +411,7 @@ func (s *Store) SaveEntry(in EntryInput) (EntryView, error) {
 	e.Extra = in.Extra
 	e.Notes = in.Notes
 	e.Favorite = in.Favorite
+	e.Unsorted = false // saved by the user: sorted
 	e.Name = strings.TrimSpace(in.Name)
 	if e.Name == "" {
 		e.Name = defaultName(e)
@@ -773,7 +782,7 @@ func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 		k := entryKey(f.Host, f.Port, f.Username, f.URL)
 		e := index[k]
 		if e == nil {
-			e = &Entry{ID: randomHex(8), Project: project, Created: now}
+			e = &Entry{ID: randomHex(8), Project: project, Created: now, Unsorted: true}
 			s.st.Entries = append(s.st.Entries, e)
 			index[k] = e
 		}

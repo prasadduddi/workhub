@@ -699,3 +699,21 @@ tr.kbsel > td { outline: none; background: color-mix(in srgb, var(--accent) 12%,
 tr.picked > td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .clipsrc { grid-column: 1 / -1; margin-top: 8px; }
 .clipsrc pre { white-space: pre-wrap; max-height: 220px; overflow: auto; background: var(--panel2); padding: 8px; border-radius: 6px; font-size: 12px; }
+/* Organising: inbox, app × environment grid, saved searches */
+.inboxrow { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; background: color-mix(in srgb, #2f7de1 10%, transparent); font-size: 12.5px; }
+.stat.inbox { text-align: left; cursor: pointer; font: inherit; color: inherit; border: 1px solid color-mix(in srgb, #2f7de1 45%, transparent); }
+.stat.inbox b { color: #2f7de1; }
+.appgrid th:first-child { text-align: left; white-space: nowrap; }
+.appgrid td { vertical-align: top; }
+.appgrid td.gap { color: var(--muted); background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--muted) 8%, transparent) 6px 7px); text-align: center; }
+.mchip { display: inline-flex; align-items: center; gap: 3px; margin: 2px 4px 2px 0; padding: 1px 7px; border-radius: 10px; background: var(--panel2); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.mchip:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.mchip.kbsel { outline: 2px solid var(--accent); }
+.saved-list { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; }
+.saved-head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 4px 12px 2px; }
+.saved-list button { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border: 0; background: none; border-radius: 8px; text-align: left; cursor: pointer; color: inherit; font: inherit; font-size: 14px; }
+.saved-list button:hover { background: var(--panel2); }
+.saved-list button.active { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.saved-list .sv { width: 20px; text-align: center; color: #e0a800; }
+.saved-list .count { margin-left: auto; font-size: 11px; color: var(--muted); }
+body.side-collapsed .saved-head { display: none; }

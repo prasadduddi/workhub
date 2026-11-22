@@ -457,7 +457,7 @@ function renderFilters() {
 // env:prod type:db user:ops app:batch port:1521 has:password no:env is:fail
 // needs:attention. Typing acmebat01 also finds acme-bat-01.
 const SEARCH_KEYS = /^(env|type|user|app|port|host|project|in|tag|has|no|is|needs):(.+)$/;
-let lastQuery = ['', null];
+let lastQuery = [null, null];
 function parseQuery(q) {
   if (lastQuery[0] === q) return lastQuery[1];
   const out = { words: [], filters: [] };
@@ -504,7 +504,7 @@ function filterOK(e, { k, v }) {
     case 'has': return HAS[v] ? HAS[v](e) : has(searchText(e));
     case 'no': return HAS[v] ? !HAS[v](e) : !has(searchText(e));
     case 'is': return { ok: e.status === 'ok', working: e.status === 'ok', fail: e.status === 'fail', failed: e.status === 'fail', untested: !e.status,
-      pinned: !!e.favorite, fav: !!e.favorite, used: !!e.last_used, stale: !!staleDays(e), old: !!staleDays(e) }[v] ?? (e.env || '').toLowerCase() === v;
+      pinned: !!e.favorite, fav: !!e.favorite, used: !!e.last_used, stale: !!staleDays(e), old: !!staleDays(e), unsorted: !!e.unsorted, new: !!e.unsorted }[v] ?? (e.env || '').toLowerCase() === v;
     case 'needs': return v === 'attention' || v === 'fix' ? problems(e).length > 0 : problems(e).some(([p]) => p.startsWith(v));
   }
   return true;
@@ -707,9 +707,70 @@ function renderStats(list) {
   const fix = S.entries.filter(e => problems(e).length).length;
   $('#stats').innerHTML = stats.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('')
     + `<button class="stat act" id="retestBtn" title="Try every connection shown (SSH, SFTP/FTP, databases) with its saved login and update ✓ / ✗"><b>↻</b><span>Re-test ${list.filter(isConn).length} connections</span></button>`
+    + ((n => n ? `<button class="stat inbox" data-find="is:unsorted" title="New captures you haven't looked at yet — each with a suggested folder"><b>📥 ${n}</b><span>New to sort</span></button>` : '')(S.entries.filter(e => e.unsorted).length))
     + (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing (user, password, environment, service name) or a failed login — click to list them"><b>⚠ ${fix}</b><span>Need attention</span></button>` : '');
   $('#inboxCount').textContent = capturedToday || '';
 }
+
+// ---------- organising ----------
+// Where a new capture probably belongs: the folder (and environment) most
+// used by servers in the same domain or with the same naming-rule label.
+function suggestPlace(e) {
+  const dom = serverDomain(e), rl = ruleLabel(e.host) || ruleLabel(e.url);
+  const like = S.entries.filter(x => x !== e && !x.unsorted && isConn(x) === isConn(e) && !x.folder); // servers with servers; not browser bookmarks
+  const near = like.filter(x => e.host && serverDomain(x) === dom && dom !== 'Short names');
+  const peers = near.length ? near : rl ? like.filter(x => (ruleLabel(x.host) || ruleLabel(x.url)) === rl) : [];
+  const top = vals => Object.entries(vals.filter(Boolean).reduce((m, v) => (m[v] = (m[v] || 0) + 1, m), {})).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+  const project = top(peers.map(x => x.project)) || e.project, env = e.env || top(near.map(x => x.env));
+  return project !== e.project || (env || '') !== (e.env || '') ? { project, env } : null;
+}
+function unsortedRow(e) {
+  const sg = suggestPlace(e);
+  return `<span class="inboxrow">📥 New capture${sg ? ` — belongs in <b>${esc(sg.project)}</b>${sg.env ? ' · ' + esc(sg.env) : ''}?` : ''}
+    <button class="icon primary" data-act="accept" data-id="${e.id}">${sg ? '✓ Move there' : '✓ Looks right'}</button>${sg ? `<button class="icon" data-act="keep" data-id="${e.id}">Keep in ${esc(e.project)}</button>` : ''}<button class="icon" data-act="edit" data-id="${e.id}">Edit…</button></span>`;
+}
+async function sortEntry(e, accept) {
+  const sg = accept && suggestPlace(e);
+  await api('POST', '/api/entries', { ...entryInput(e), password: e.password, ...(sg ? { project: sg.project, env: sg.env } : {}) });
+}
+
+// App × environment: one row per application, one column per environment.
+const GRID_ENVS = ['DEV', 'SIT', 'TEST', 'QA', 'UAT', 'STAGE', 'PREPROD', 'PROD', 'DR'];
+function gridHTML(list) {
+  list = list.filter(isConn); // servers and databases; web links stay in Cards / Table
+  if (!list.length) return '<div class="empty">No servers or databases here — the grid shows connections; links are in Cards and Table.</div>';
+  const appOf = e => ruleLabel(e.host) || ruleLabel(e.url) || serverApp(e);
+  const rank = v => { const i = GRID_ENVS.indexOf(v); return v ? (i < 0 ? 50 : i) : 99; };
+  const envs = [...new Set(list.map(e => e.env || ''))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  const rows = {};
+  list.forEach(e => ((rows[appOf(e)] ||= {})[e.env || ''] ||= []).push(e));
+  const names = Object.keys(rows).sort((a, b) => LAST_GROUPS.has(a) - LAST_GROUPS.has(b) || a.localeCompare(b));
+  const chip = e => `<span class="mchip" data-detail="${e.id}" title="${esc([e.name, e.host || e.url, e.username].filter(Boolean).join('\n'))}">${dot(e)} ${canDB(e) ? '🛢' : isConn(e) ? '🖥' : '🔗'} ${esc((e.host || linkLabel(e.url) || e.name || '').split('.')[0])}</span>`;
+  const gaps = names.reduce((n, a) => n + envs.filter(v => v && !rows[a][v]).length, 0);
+  return `<div class="group"><div class="group-head"><h3>Applications × environments</h3><span class="n">${names.length} apps</span>${gaps ? `<span class="muted tiny">· ${gaps} empty cells: an app with no server known in that environment</span>` : ''}</div>
+    <div class="tblwrap"><table class="tbl appgrid"><thead><tr><th>Application</th>${envs.map(v => `<th>${v ? `<span class="badge ${esc(v)}">${esc(v)}</span>` : 'No environment'}</th>`).join('')}</tr></thead><tbody>
+    ${names.map(a => `<tr><th${ruleStyle(a)}><span class="rlabel"${(c => c ? ` style="--lc:${c}"` : '')(ruleColor(a))}>${esc(a)}</span></th>${envs.map(v => `<td class="${rows[a][v] ? '' : 'gap'}">${(rows[a][v] || []).sort(byUsage).map(chip).join('') || (v ? '—' : '')}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+
+// Saved searches: kept per workspace, listed in the sidebar with a count.
+const Saved = {
+  all() { return S.settings?.saved_searches || []; },
+  async put(list) { await saveSettings({ saved_searches: list }); this.render(); },
+  render() {
+    const q = $('#search').value.trim().toLowerCase();
+    $('#saveSearchBtn').hidden = !q || this.all().some(x => x.query.toLowerCase() === q);
+    $('#savedSearches').innerHTML = this.all().length ? `<div class="saved-head nl">Saved searches</div>` + this.all().map((x, i) =>
+      `<button data-saved="${i}" class="${x.query.toLowerCase() === q ? 'active' : ''}" title="${esc(x.query)}"><span class="ni sv">★</span><span class="nl">${esc(x.name)}</span><span class="count">${S.entries.filter(e => matches(e, x.query.toLowerCase())).length || ''}</span></button>`).join('') : '';
+  },
+  async save() {
+    const q = $('#search').value.trim(); if (!q) return;
+    const name = prompt('Name for this search (shown in the sidebar):', q.replace(/\b\w+:/g, '').trim() || q); if (!name?.trim()) return;
+    await this.put([...this.all().filter(x => x.name !== name.trim()), { name: name.trim(), query: q }]);
+    toast(`Saved “${name.trim()}” — it's in the sidebar`);
+  },
+  run(i) { const x = this.all()[i]; if (!x) return; show('dashboard'); $('#search').value = x.query; S.kbSel = 0; renderBoard(); },
+};
 
 function renderBoard() {
   renderViewChips();
@@ -721,7 +782,7 @@ function renderBoard() {
     return;
   }
   const jira = jiraMatches($('#search').value);
-  if (!list.length && !jira.length) { board.innerHTML = '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); return; }
+  if (!list.length && !jira.length) { board.innerHTML = '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); Saved.render(); return; }
   const keyOf = {
     env: e => e.env || 'No environment', protocol: e => e.protocol || 'other', status: e => ({ ok: 'Working', fail: 'Failed' }[e.status] || 'Not tried'),
     host: e => e.host || e.url || e.name, none: () => 'All', project: e => e.project || 'General',
@@ -729,9 +790,13 @@ function renderBoard() {
   const groups = {};
   list.forEach(e => (groups[keyOf(e)] ||= []).push(e));
   S.kbList = list; S.kbSel = Math.min(S.kbSel || 0, list.length - 1);
+  Saved.render();
   const fixNote = S.fixes ? `<div class="fuzzy-note">No exact match — showing ${Object.entries(S.fixes).map(([a, b]) => `<b>${esc(b)}</b> for “${esc(a)}”`).join(', ')}. <a href="#" data-usefix>Use this spelling</a></div>` : '';
+  const inbox = list.filter(e => e.unsorted), sortable = inbox.filter(suggestPlace).length;
+  const inboxNote = /\bis:(unsorted|new)\b/.test($('#search').value) && inbox.length ? `<div class="fuzzy-note">📥 ${inbox.length} new capture(s) to sort. ${sortable ? `<button class="primary" data-acceptall>✓ Move all ${sortable} to their suggested folders</button>` : ''} <button data-keepall>Keep all where they are</button></div>` : '';
+  if (S.layout === 'grid') { board.innerHTML = fixNote + inboxNote + gridHTML(list) + jiraResultsHTML(jira); markKbSel(); Bulk.bar(); return; }
   // Searching: the group holding the best match comes first (Object keys keep list order).
-  board.innerHTML = fixNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
+  board.innerHTML = fixNote + inboxNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
     const items = groups[g];
     const body = S.layout === 'table' ? tableHTML(items) : cardsHTML(items);
     return `<div class="group"><div class="group-head"><h3>${esc(g)}</h3><span class="n">${items.length}</span>
@@ -808,6 +873,7 @@ function svcHTML(e) {
   const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, e.name !== e.host ? ruleName(e) : '', warnChip(e),
     staleDays(e) && `<span class="stalechip" title="Not used, tested or captured for ${staleDays(e)} days — still right? Test it or delete it">💤 ${staleDays(e)} days</span>`].filter(Boolean).join(' ');
   if (label) rows.push(['', label]);
+  if (e.unsorted) rows.push(['', unsortedRow(e)]);
   if (e.url) rows.push(['URL', `${linkLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span>` : ''}<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a> <button class="icon" data-copy="${esc(e.url)}">copy</button>`]);
   const jdbc = !/^jdbc:/i.test(e.url || '') && jdbcURL(e);
   if (jdbc) rows.push(['JDBC', `<span class="copy" data-copy="${esc(jdbc)}" title="Copy">${esc(jdbc)}</span> <button class="icon" data-copy="${esc(jdbc)}">copy</button>`]);
@@ -881,6 +947,7 @@ $('#board').addEventListener('click', async ev => {
       case 'sql': return SQL.open(e);
       case 'open': return openURL(e);
       case 'edit': return openEntryDialog(e);
+      case 'accept': case 'keep': await sortEntry(e, b.dataset.act === 'accept'); return poll();
       case 'del':
         if (!confirm(`Delete ${e.name}?`)) return;
         await api('DELETE', `/api/entries/${e.id}`); return poll();
@@ -1055,6 +1122,23 @@ $('#board').addEventListener('click', ev => {
   $('#search').value = $('#search').value.split(/\s+/).map(w => S.fixes?.[w.toLowerCase()] || w).join(' ');
   renderBoard();
 }, true);
+$('#board').addEventListener('click', async ev => {
+  const all = ev.target.closest('[data-acceptall], [data-keepall]'); if (!all) return;
+  const accept = 'acceptall' in all.dataset, list = S.kbList.filter(e => e.unsorted && (!accept || suggestPlace(e)));
+  let n = 0; for (const e of list) { try { await sortEntry(e, accept); n++; } catch (err) { toast(err.message, true); } }
+  toast(accept ? `Moved ${n} to their suggested folders` : `Kept ${n} where they are`); poll();
+});
+$('#saveSearchBtn').onclick = () => Saved.save();
+$('#savedSearches').addEventListener('click', ev => { const b = ev.target.closest('[data-saved]'); if (b) Saved.run(+b.dataset.saved); });
+$('#savedSearches').addEventListener('contextmenu', ev => {
+  const b = ev.target.closest('[data-saved]'); if (!b) return;
+  ev.preventDefault();
+  const i = +b.dataset.saved, list = Saved.all(), x = list[i];
+  Tree.showMenu(ev, [
+    ['Rename…', () => { const n = prompt('Name:', x.name); if (n?.trim()) Saved.put(list.map((y, j) => j === i ? { ...y, name: n.trim() } : y)); }],
+    ['Change the search…', () => { const q = prompt('Search (words and filters like env:prod app:batch):', x.query); if (q?.trim()) Saved.put(list.map((y, j) => j === i ? { ...y, query: q.trim() } : y)); }],
+    ['Delete', () => Saved.put(list.filter((_, j) => j !== i))]]);
+});
 // Desktop version: Ctrl+Alt+W anywhere in Windows brings WorkHub up with the search box ready.
 window.whHotkey = () => { show('dashboard'); $('#search').focus(); $('#search').select(); Recent.render(); };
 

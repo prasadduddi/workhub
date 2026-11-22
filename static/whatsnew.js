@@ -4,7 +4,10 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
-  { v: '1.8', title: 'Smarter search, Jira browser sign-in, macros', items: [
+  { v: '1.8', title: 'Organise and find faster, Jira browser sign-in, macros', items: [
+    ['▤', 'Applications × environments grid', 'Dashboard → ▤ Grid: one row per application, one column per environment (DEV, UAT, PROD…). Click a server for details; empty cells show where no server is known.', 'dashboard'],
+    ['★', 'Saved searches', 'Type a search (e.g. env:prod app:batch), press ☆ Save search: it stays in the sidebar with a live count. Right-click to rename, change or delete.', 'dashboard'],
+    ['📥', 'New captures to sort', 'Newly captured servers are marked 📥 with a suggested folder (where their neighbours live). One click moves them, or keep them where they are. The 📥 tile lists them all.', 'dashboard'],
     ['⌨', 'Ctrl+Alt+W from anywhere (Desktop version)', 'Press Ctrl+Alt+W in any program: WorkHub comes to the front with the search box ready — type, Enter, connected.', 'dashboard'],
     ['✍', 'Forgiving search and recent searches', 'Small typos still find things (“uta” → UAT, “jenkns” → Jenkins). Your last searches appear under the search box, one click to run again.', 'dashboard'],
     ['☑', 'Change many at once', 'Table view: tick rows (or a whole group), then set the environment, move to a folder, add a tag, re-test or delete them together.', 'dashboard'],
