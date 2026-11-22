@@ -44,6 +44,18 @@ ISSUES = {
 }
 MINE_DONE = ["PAY-101", "PAY-088", "OPS-61"]
 
+# CM change issues with an implementation window (times relative to today, so
+# the demo calendar always has some).
+import datetime as _dt
+def _at(days, hour, minute=0):
+    d = _dt.datetime.now().astimezone().replace(hour=hour, minute=minute, second=0, microsecond=0) + _dt.timedelta(days=days)
+    return d.strftime("%Y-%m-%dT%H:%M:%S.000%z")
+CM = {
+    "CM-4411": ("PROD release 4.2.1", "Scheduled", _at(2, 21), _at(2, 23, 30)),
+    "CM-4420": ("Certificate renewal window", "Approved", _at(6, 19), _at(6, 20)),
+    "CM-4390": ("PROD release 4.1.7", "Closed", _at(-10, 21), _at(-10, 22)),
+}
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def send(self, obj, code=200):
@@ -56,6 +68,10 @@ class H(BaseHTTPRequestHandler):
         parts = u.path.split("/")
         if u.path in ("/rest/api/3/search/jql", "/rest/api/2/search"):
             return self.send({"issues": [{"key": k} for k in MINE_DONE], "total": len(MINE_DONE)})
+        if u.path.startswith("/rest/api/2/issue/CM-") and parts[5] in CM:
+            summary, status, start, end = CM[parts[5]]
+            return self.send({"key": parts[5], "names": {"summary": "Summary", "customfield_10501": "Planned start", "customfield_10502": "Planned end"},
+                "fields": {"summary": summary, "status": {"name": status}, "customfield_10501": start, "customfield_10502": end}})
         if u.path.startswith("/rest/api/2/issue/"):
             key = parts[5]
             if key not in ISSUES:

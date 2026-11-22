@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A pretend Jira answering like the real REST API.
@@ -34,6 +35,9 @@ func fakeJira(t *testing.T) *httptest.Server {
 		case r.URL.Path == "/rest/api/2/issue/PAY-90" || r.URL.Path == "/rest/api/2/issue/PAY-91":
 			json.NewEncoder(w).Encode(map[string]any{"id": "9", "key": r.URL.Path[len("/rest/api/2/issue/"):], "fields": map[string]any{
 				"summary": "Old work", "status": map[string]any{"name": "Closed", "statusCategory": map[string]any{"key": "done"}}, "resolutiondate": "2026-10-01T10:00:00.000+0000"}})
+		case r.URL.Path == "/rest/api/2/issue/CM-4411":
+			json.NewEncoder(w).Encode(map[string]any{"names": map[string]string{"customfield_1": "Planned start", "customfield_2": "Planned end", "summary": "Summary"},
+				"fields": map[string]any{"customfield_1": "2026-12-01T22:00:00.000+0000", "customfield_2": "2026-12-01T23:30:00.000+0000", "summary": "Prod release"}})
 		case r.URL.Path == "/rest/dev-status/latest/issue/summary":
 			json.NewEncoder(w).Encode(map[string]any{"summary": map[string]any{"pullrequest": map[string]any{"byInstanceType": map[string]any{"GitHub": map[string]any{"count": 1}}}}})
 		case r.URL.Path == "/rest/dev-status/latest/issue/detail" && r.URL.Query().Get("applicationType") == "GitHub":
@@ -70,6 +74,11 @@ func TestJira(t *testing.T) {
 	}
 	if strings.Join(keys, ",") != "CM-4411(implements)" { // PAY-124 "CM- deploy…" is not a CM- issue
 		t.Fatalf("CM- children: %v", keys)
+	}
+	if c := j.Children[len(j.Children)-1]; c.Start == "" || c.End == "" {
+		t.Fatalf("CM window not read: %+v", c)
+	} else if st, _ := time.Parse(time.RFC3339, c.Start); !st.Equal(time.Date(2026, 12, 1, 22, 0, 0, 0, time.UTC)) {
+		t.Fatalf("CM start %s", c.Start)
 	}
 	if bad := fetchJira(JiraConfig{BaseURL: srv.URL, Mode: "server", Token: "wrong"}, "PAY-123"); !strings.Contains(bad.Error, "401") {
 		t.Fatalf("bad token error: %q", bad.Error)

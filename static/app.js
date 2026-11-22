@@ -343,6 +343,7 @@ function show(view) {
   if (view === 'props') Props.load();
   if (view === 'ref') Ref.load();
   if (view === 'jira') Jira.load();
+  if (view === 'cal') Cal.load();
   if (view === 'git') {
     Git.renderRepos();
     let last = ''; try { last = localStorage.getItem('gitRepo') || ''; } catch { /* ignore */ }

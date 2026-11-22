@@ -26,7 +26,7 @@ const CMD = (() => {
   const PAGES = {
     dashboard: ['dashboard', 'home', 'overview', 'main page', 'start'], bookmarks: ['bookmarks', 'bookmark page', 'favourites page', 'links page'],
     inbox: ['captured', 'capture', 'captures', 'inbox', 'clips', 'capture history', 'clipboard history', 'outlook'],
-    terminal: ['putty', 'terminal', 'terminals', 'ssh page', 'console'], jira: ['jira', 'jira page', 'tickets', 'pull requests', 'prs'], files: ['filezilla', 'file manager', 'files', 'sftp page', 'ftp page', 'transfers'],
+    terminal: ['putty', 'terminal', 'terminals', 'ssh page', 'console'], jira: ['jira', 'jira page', 'tickets', 'pull requests', 'prs'], cal: ['calendar', 'diary', 'schedule', 'agenda', 'meetings', 'events', 'reminders', 'cm windows', 'change windows'], files: ['filezilla', 'file manager', 'files', 'sftp page', 'ftp page', 'transfers'],
     sql: ['sql', 'sql page', 'query window', 'database page', 'db page', 'sql developer'], git: ['git', 'repos', 'repositories', 'source control'],
     notes: ['notepad', 'notepad++', 'notes', 'editor', 'note'], ref: ['folders', 'folder tree', 'reference', 'reference files', 'properties', 'properties page', 'property files', 'configs', 'config files', 'json schemas', 'schemas', 'yaml files', 'app docs'],
   };

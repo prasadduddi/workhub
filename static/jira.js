@@ -11,6 +11,7 @@ const Jira = {
     this.issues = list || []; this.cfg = c.config || {}; this.hasToken = !!c.has_token;
     this.render();
     if ($('#search').value.trim()) renderBoard(); // main search shows Jira issues too
+    if (typeof Cal !== 'undefined') Cal.render(); // CM windows
   },
   persist() { try { localStorage.setItem('jiraOpen', JSON.stringify([...this.open])); } catch { /* ignore */ } },
 

@@ -137,6 +137,7 @@ type State struct {
 	WorkItems  []*WorkItem  `json:"work_items,omitempty"`        // Notepad++ work item pages
 	Jira       JiraConfig   `json:"jira"`
 	JiraIssues []*JiraIssue `json:"jira_issues,omitempty"`
+	Events     []*Event     `json:"events,omitempty"` // Calendar
 	Settings   Settings     `json:"settings"`
 }
 

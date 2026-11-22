@@ -16,3 +16,7 @@ func fetchMail(folder string, since time.Time) ([]mailItem, *mailItem, error) {
 func sendMail(to, subject, body string) error {
 	return errors.New("sending the code needs classic Outlook on Windows — use the recovery code")
 }
+
+func outlookEvents(from, to time.Time) ([]OutlookEvent, error) {
+	return nil, errors.New("Outlook meetings are shown on Windows with classic Outlook running")
+}

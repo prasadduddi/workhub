@@ -184,3 +184,76 @@ func sendMail(to, subject, body string) (err error) {
 	_, err = oleutil.CallMethod(item, "Send")
 	return err
 }
+
+// outlookEvents reads meetings from the default Outlook calendar, with
+// recurring meetings expanded, between from and to.
+func outlookEvents(from, to time.Time) (out []OutlookEvent, err error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
+		if oe, ok := err.(*ole.OleError); !ok || oe.Code() != 1 {
+			return nil, err
+		}
+	}
+	defer ole.CoUninitialize()
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("Outlook error: %v", r)
+		}
+	}()
+	unk, err := oleutil.GetActiveObject("Outlook.Application")
+	if err != nil {
+		return nil, errors.New("classic Outlook is not running — start it to see your meetings here")
+	}
+	defer unk.Release()
+	app, err := unk.QueryInterface(ole.IID_IDispatch)
+	if err != nil {
+		return nil, err
+	}
+	defer app.Release()
+	ns := mustDisp(oleutil.CallMethod(app, "GetNamespace", "MAPI"))
+	defer ns.Release()
+	cal := mustDisp(oleutil.CallMethod(ns, "GetDefaultFolder", 9)) // olFolderCalendar
+	defer cal.Release()
+	items := mustDisp(oleutil.GetProperty(cal, "Items"))
+	defer items.Release()
+	oleutil.MustPutProperty(items, "IncludeRecurrences", true)
+	oleutil.MustCallMethod(items, "Sort", "[Start]")
+	// Month names keep the filter independent of the Windows date format.
+	f := func(t time.Time) string { return t.Format("2 January 2006 15:04") }
+	v, rerr := oleutil.CallMethod(items, "Restrict", fmt.Sprintf("[Start] < '%s' AND [End] > '%s'", f(to), f(from)))
+	if rerr != nil {
+		us := func(t time.Time) string { return t.Format("01/02/2006 03:04 PM") }
+		if v, rerr = oleutil.CallMethod(items, "Restrict", fmt.Sprintf("[Start] < '%s' AND [End] > '%s'", us(to), us(from))); rerr != nil {
+			return nil, rerr
+		}
+	}
+	found := v.ToIDispatch()
+	defer found.Release()
+	it := mustDispOrNil(oleutil.CallMethod(found, "GetFirst"))
+	for n := 0; it != nil && n < 2000; n++ {
+		ev := OutlookEvent{Subject: str(it, "Subject"), Location: str(it, "Location"), Organizer: str(it, "Organizer")}
+		if p, err := oleutil.GetProperty(it, "Start"); err == nil {
+			ev.Start, _ = p.Value().(time.Time)
+		}
+		if p, err := oleutil.GetProperty(it, "End"); err == nil {
+			ev.End, _ = p.Value().(time.Time)
+		}
+		if p, err := oleutil.GetProperty(it, "AllDayEvent"); err == nil {
+			ev.AllDay, _ = p.Value().(bool)
+		}
+		it.Release()
+		if !ev.Start.IsZero() && ev.Start.Before(to) && ev.End.After(from) {
+			out = append(out, ev)
+		}
+		it = mustDispOrNil(oleutil.CallMethod(found, "GetNext"))
+	}
+	return out, nil
+}
+
+func mustDispOrNil(v *ole.VARIANT, err error) *ole.IDispatch {
+	if err != nil || v == nil || v.VT == ole.VT_EMPTY || v.VT == ole.VT_NULL {
+		return nil
+	}
+	return v.ToIDispatch()
+}

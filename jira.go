@@ -45,7 +45,9 @@ type JiraChild struct {
 	Status   string `json:"status"`
 	Type     string `json:"type"`
 	URL      string `json:"url"`
-	Relation string `json:"relation"` // sub-task or the link name
+	Relation string `json:"relation"`        // sub-task or the link name
+	Start    string `json:"start,omitempty"` // CM implementation window, from the CM issue's planned start/end fields
+	End      string `json:"end,omitempty"`
 }
 
 type JiraIssue struct {
@@ -259,7 +261,7 @@ func fetchJira(cfg JiraConfig, key string) JiraIssue {
 	}
 	for _, st := range f.Subtasks {
 		if wanted(st.Key, st.Fields.Summary) {
-			j.Children = append(j.Children, JiraChild{st.Key, st.Fields.Summary, st.Fields.Status.Name, st.Fields.IssueType.Name, cfg.BaseURL + "/browse/" + st.Key, "sub-task"})
+			j.Children = append(j.Children, JiraChild{st.Key, st.Fields.Summary, st.Fields.Status.Name, st.Fields.IssueType.Name, cfg.BaseURL + "/browse/" + st.Key, "sub-task", "", ""})
 		}
 	}
 	for _, l := range f.IssueLinks {
@@ -268,8 +270,12 @@ func fetchJira(cfg JiraConfig, key string) JiraIssue {
 			other, rel = l.InwardIssue, l.Type.Inward
 		}
 		if other != nil && wanted(other.Key, other.Fields.Summary) {
-			j.Children = append(j.Children, JiraChild{other.Key, other.Fields.Summary, other.Fields.Status.Name, other.Fields.IssueType.Name, cfg.BaseURL + "/browse/" + other.Key, rel})
+			j.Children = append(j.Children, JiraChild{other.Key, other.Fields.Summary, other.Fields.Status.Name, other.Fields.IssueType.Name, cfg.BaseURL + "/browse/" + other.Key, rel, "", ""})
 		}
+	}
+
+	for i := range j.Children {
+		j.Children[i].Start, j.Children[i].End = cmWindow(c, j.Children[i].Key)
 	}
 
 	// Pull requests from the development panel (GitHub, Bitbucket, GitLab…).
@@ -542,4 +548,49 @@ func (a *App) handleJiraMine(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleJiraRemove(w http.ResponseWriter, r *http.Request) {
 	a.store.removeJiraIssue(r.PathValue("key"))
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// Field names that hold a change's implementation window, best first. Jira
+// sites name them differently (Jira Service Management uses "Planned start").
+var (
+	reCMStart = []*regexp.Regexp{regexp.MustCompile(`(?i)implementation start|start of implementation`), regexp.MustCompile(`(?i)planned start`),
+		regexp.MustCompile(`(?i)(change|scheduled|window) start`), regexp.MustCompile(`(?i)^start (date|time)`)}
+	reCMEnd = []*regexp.Regexp{regexp.MustCompile(`(?i)implementation (end|finish)|end of implementation`), regexp.MustCompile(`(?i)planned (end|finish)`),
+		regexp.MustCompile(`(?i)(change|scheduled|window) (end|finish|completion)`), regexp.MustCompile(`(?i)^end (date|time)|^due date`)}
+)
+
+// cmWindow reads a CM issue's planned start and end (RFC 3339), if it has them.
+func cmWindow(c *jiraClient, key string) (start, end string) {
+	var r struct {
+		Names  map[string]string `json:"names"`
+		Fields map[string]any    `json:"fields"`
+	}
+	if c.get("/rest/api/2/issue/"+url.PathEscape(key)+"?expand=names&fields=*all", &r) != nil {
+		return "", ""
+	}
+	pick := func(res []*regexp.Regexp) string {
+		for _, re := range res {
+			for id, name := range r.Names {
+				if !re.MatchString(name) {
+					continue
+				}
+				if v, ok := r.Fields[id].(string); ok && v != "" {
+					if t, ok := parseJiraTime(v); ok {
+						return t.Format(time.RFC3339)
+					}
+				}
+			}
+		}
+		return ""
+	}
+	return pick(reCMStart), pick(reCMEnd)
+}
+
+func parseJiraTime(v string) (time.Time, bool) {
+	for _, layout := range []string{"2006-01-02T15:04:05.000-0700", "2006-01-02T15:04:05-0700", time.RFC3339, "2006-01-02T15:04", "2006-01-02"} {
+		if t, err := time.ParseInLocation(layout, v, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
