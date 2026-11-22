@@ -360,6 +360,7 @@ CodeMirror.commands.duplicateLine = cm => {
 // Calendar bring it back (» expands it any time).
 const WORK_VIEWS = ['terminal', 'files', 'sql', 'tasks', 'ref', 'jira', 'groups', 'notes', 'git'];
 function roomForWork() {
+  if (document.body.classList.contains('side-top')) return; // a bar across the top takes no room from the tree
   if (S.userSide || document.body.classList.contains('side-collapsed')) return;
   document.body.classList.add('side-collapsed'); S.autoSide = true;
   $('#sideToggle').textContent = '»';
@@ -3474,13 +3475,16 @@ applySideTop((() => { try { return localStorage.getItem('sideTop') === '1'; } ca
 $('#sideFlip').onclick = () => {
   const top = !document.body.classList.contains('side-top');
   try { localStorage.setItem('sideTop', top ? '1' : '0'); } catch { /* ignore */ }
+  S.autoSide = false; S.userSide = false;
   applySideTop(top);
+  applySide();
 };
 
 // Narrow windows (under 1000px) show the sidebar as icons only.
 const narrowWin = matchMedia('(max-width: 1000px)');
 const applySide = () => {
-  document.body.classList.toggle('side-collapsed', narrowWin.matches || store.get('sideCollapsed', false));
+  const top = document.body.classList.contains('side-top'); // at the top: icons only on narrow windows
+  document.body.classList.toggle('side-collapsed', narrowWin.matches || (!top && store.get('sideCollapsed', false)));
   if ($('#sideToggle')) $('#sideToggle').textContent = document.body.classList.contains('side-collapsed') ? '»' : '«';
 };
 applySide();
