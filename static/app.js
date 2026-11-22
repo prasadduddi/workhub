@@ -629,6 +629,7 @@ function svcHTML(e) {
   Object.entries(e.extra || {}).forEach(([k, v]) => rows.push([esc(k), `<span class="copy" data-copy="${esc(v)}">${esc(v)}</span>`]));
   if (e.tags?.length) rows.push(['Tags', `<span class="tag">${e.tags.map(esc).join(', ')}</span>`]);
   if (e.notes) rows.push(['Notes', `<span class="muted">${esc(e.notes)}</span>`]);
+  if (captureText(e)) rows.push(['Captured', `<span class="muted tiny">${esc(captureText(e))}</span>`]);
   const acts = [
     canSSH(e) && `<button class="icon" data-act="ssh" data-id="${e.id}">SSH</button>`,
     canFiles(e) && `<button class="icon" data-act="sftp" data-id="${e.id}">${isFTP(e) ? 'FTP' : 'SFTP'}</button>`,
@@ -642,7 +643,7 @@ function svcHTML(e) {
 }
 
 // Table columns: drag a header edge to resize (shared by every group's table).
-const TABLE_COLS = [['Env', 95], ['Name', 170], ['Host', 190], ['Port', 64], ['Type', 80], ['URL', 280], ['User', 130], ['Password', 130], ['', 110]];
+const TABLE_COLS = [['Env', 95], ['Name', 170], ['Host', 190], ['Port', 64], ['Type', 80], ['URL', 280], ['User', 130], ['Password', 130], ['Captured', 170], ['', 110]];
 function tableHTML(items) {
   const cell = [
     e => `${dot(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`,
@@ -653,13 +654,14 @@ function tableHTML(items) {
     e => `${linkLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span> ` : ''}${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a>` : jdbcURL(e) ? `<span class="copy" data-copy="${esc(jdbcURL(e))}" title="Copy">${esc(jdbcURL(e))}</span>` : ''}`,
     e => `<span class="copy" data-copy="${esc(e.username)}">${esc(e.username)}</span>`,
     e => `<span class="copy" data-copy="${esc(e.password)}">${esc(e.password)}</span>`,
+    e => `<span class="muted tiny">${esc(captureText(e))}</span>`,
     e => `${canSSH(e) ? `<button class="icon" data-act="ssh" data-id="${e.id}">SSH</button> ` : ''}${canDB(e) ? `<button class="icon" data-act="sql" data-id="${e.id}">SQL</button> ` : ''}<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
   ];
   const hidden = S.view.hideCols.map(h => h.toLowerCase());
   const cols = TABLE_COLS.map((c, i) => i).filter(i => !hidden.includes((TABLE_COLS[i][0] || 'actions').toLowerCase()));
-  return `<table class="tbl"><colgroup>${cols.map(i => `<col style="width:var(--c${i}, ${TABLE_COLS[i][1]}px)">`).join('')}</colgroup>
+  return `<div class="tblwrap"><table class="tbl"><colgroup>${cols.map(i => `<col style="width:var(--c${i}, ${TABLE_COLS[i][1]}px)">`).join('')}</colgroup>
     <thead><tr>${cols.map(i => `<th>${TABLE_COLS[i][0]}<span class="colgrip" data-col="${i}" title="Drag to resize · double-click to reset"></span></th>`).join('')}</tr></thead><tbody>` +
-    items.map(e => `<tr data-detail="${e.id}" title="Click for full details">${cols.map(i => `<td>${cell[i](e)}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
+    items.map(e => `<tr data-detail="${e.id}" title="Click for full details">${cols.map(i => `<td>${cell[i](e)}</td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
 }
 
 $('#board').addEventListener('click', async ev => {
@@ -691,6 +693,15 @@ $('#board').addEventListener('click', async ev => {
   } catch (err) { toast(err.message, true); }
 });
 
+// Where details came from, in words.
+const SOURCE_NAMES = { clipboard: 'Copied (clipboard)', paste: 'Pasted into WorkHub', outlook: 'Outlook email', chrome: 'Chrome bookmark', edge: 'Edge bookmark',
+  bookmark: 'Browser bookmark', screenshot: 'Screenshot', manual: 'Added by hand', note: 'From a note', import: 'Imported' };
+const sourceName = c => (SOURCE_NAMES[c.source] || c.source || 'Unknown') + (c.detail ? ` (${c.detail})` : '');
+// The latest capture, or for older entries what we know: bookmark source or when it was added.
+const lastCapture = e => e.captures?.at(-1) || (e.created ? { at: e.created, source: e.source || '' } : null);
+const shortWhen = t => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const captureText = e => (c => c ? `${shortWhen(c.at)} · ${c.source ? sourceName(c) : 'source not recorded'}` : '')(lastCapture(e));
+
 // Full details of one connection in a pop-up: every field with its own Copy button.
 function showDetails(e) {
   if (!e) return;
@@ -700,11 +711,13 @@ function showDetails(e) {
     ['Environment', e.env], ['Project', e.project], ['Naming rule', ruleLabel(e.host || e.url)],
     ['URL', e.url], ['JDBC', /^jdbc:/i.test(e.url || '') ? '' : jdbcURL(e)],
     [svc?.sid ? 'SID' : dbKindOf(e) === 'postgres' ? 'Database' : 'Service name', svc?.name],
-    ['Username', e.username], ['Password', e.password], ['Previous passwords', (e.prev_passwords || []).join('\n')],
+    ['Username', e.username], ['Password', e.password], [e.status === 'ok' ? 'Other passwords' : 'Previous passwords', (e.prev_passwords || []).join('\n')],
     ['Key file', e.key_file], ['Last folder', e.last_dir],
     ...Object.entries(e.extra || {}).filter(([k]) => !DB_KEYS.includes(k)).map(([k, v]) => [k, v]),
     ['Tags', (e.tags || []).join(', ')], ['Notes', e.notes],
-    ['Last used', when(e.last_used)], ['Added', when(e.created)], ['Status', e.status ? `${e.status === 'ok' ? 'Worked' : 'Failed'} · ${when(e.status_at)}${e.status_msg ? '\n' + e.status_msg : ''}` : ''],
+    ['Last used', when(e.last_used)],
+    ...(e.captures?.length ? e.captures.slice().reverse().map((c, i) => [i ? 'Also captured' : 'Captured', `${when(c.at)} · ${sourceName(c)}`]) : [['Captured', captureText(e)]]),
+    ['Status', e.status ? `${e.status === 'ok' ? 'Worked' : 'Failed'} · ${when(e.status_at)}${e.status_msg ? '\n' + e.status_msg : ''}` : ''],
   ].filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '');
   showDetails.text = rows.map(([k, v]) => `${k}: ${v}`).join('\n');
   $('#detailTitle').innerHTML = `${ruleName(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`;

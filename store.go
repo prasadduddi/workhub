@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -47,6 +48,31 @@ type Entry struct {
 	Status        string            `json:"status,omitempty"`       // last connection/link check: "ok" or "fail"
 	StatusAt      time.Time         `json:"status_at,omitzero"`
 	StatusMsg     string            `json:"status_msg,omitempty"`
+	Captures      []Capture         `json:"captures,omitempty"` // when and where the details came from, oldest first
+}
+
+// Capture records one time the details were captured: Source is "clipboard",
+// "paste", "outlook", "chrome", "edge", "screenshot", "manual", "note"…;
+// Detail adds e.g. the bookmark folder.
+type Capture struct {
+	At     time.Time `json:"at"`
+	Source string    `json:"source"`
+	Detail string    `json:"detail,omitempty"`
+}
+
+const maxCaptures = 20
+
+func (e *Entry) addCapture(source, detail string, at time.Time) {
+	if n := len(e.Captures); n > 0 {
+		last := e.Captures[n-1]
+		if last.Source == source && last.Detail == detail && at.Sub(last.At) < time.Minute {
+			return // the same copy seen twice
+		}
+	}
+	e.Captures = append(e.Captures, Capture{At: at, Source: source, Detail: detail})
+	if len(e.Captures) > maxCaptures {
+		e.Captures = e.Captures[len(e.Captures)-maxCaptures:]
+	}
 }
 
 type Clip struct {
@@ -352,6 +378,7 @@ func (s *Store) SaveEntry(in EntryInput) (EntryView, error) {
 		}
 	} else {
 		e = &Entry{ID: randomHex(8), Created: now}
+		e.addCapture("manual", "", now)
 		s.st.Entries = append(s.st.Entries, e)
 	}
 	e.Project = orDefault(strings.TrimSpace(in.Project), "General")
@@ -590,6 +617,7 @@ func (s *Store) SyncBookmarks(list []Bookmark) (added, removed int) {
 		}
 		e := &Entry{ID: randomHex(8), Project: "Bookmarks", Name: orDefault(name, f.Host), Host: f.Host, Port: f.Port,
 			Protocol: f.Protocol, URL: f.URL, Folder: b.Folder, Source: b.Source, Created: now, Updated: now}
+		e.addCapture(orDefault(b.Source, "bookmark"), b.Folder, now)
 		e.Env = inferEnv(e.Host + " " + e.URL + " " + e.Name)
 		s.st.Entries = append(s.st.Entries, e)
 		byURL[k] = e
@@ -749,6 +777,7 @@ func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 			index[k] = e
 		}
 		mergeFinding(e, f)
+		e.addCapture(source, "", now)
 		e.ClipIDs = appendUnique(e.ClipIDs, clip.ID)
 		e.Updated = now
 		clip.EntryIDs = append(clip.EntryIDs, e.ID)
@@ -780,10 +809,21 @@ func mergeFinding(e *Entry, f Finding) {
 		e.Protocol = f.Protocol
 	}
 	if f.Password != "" && f.Password != e.Password {
-		if e.Password != "" {
-			e.PrevPasswords = append(e.PrevPasswords, e.Password)
+		switch {
+		case e.Status == "ok" && e.Password != "":
+			// Keep the password that connected; the new one is kept as an alternative.
+			if !slices.Contains(e.PrevPasswords, f.Password) {
+				e.PrevPasswords = append(e.PrevPasswords, f.Password)
+			}
+		default:
+			if e.Password != "" && !slices.Contains(e.PrevPasswords, e.Password) {
+				e.PrevPasswords = append(e.PrevPasswords, e.Password)
+			}
+			e.Password = f.Password
+			if e.Status == "fail" {
+				e.Status, e.StatusMsg = "", "" // new details: not tried yet
+			}
 		}
-		e.Password = f.Password
 	}
 	for k, v := range f.Extra {
 		if e.Extra == nil {

@@ -612,3 +612,4 @@ dialog.detail-dlg { width: min(760px, 96vw); }
 .detail-grid .v { font-family: var(--mono, ui-monospace, Consolas, monospace); overflow-wrap: anywhere; user-select: text; white-space: pre-wrap; padding: 4px 8px; background: var(--panel2); border-radius: 6px; }
 .svc[data-detail], tr[data-detail] { cursor: pointer; }
 tr[data-detail]:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.tblwrap { overflow-x: auto; max-width: 100%; }
