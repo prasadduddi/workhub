@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -196,7 +197,7 @@ func (a *App) startTunnels(e Entry) (*tunnelSet, error) {
 // local port, if any and not already running. Used before connecting to a
 // database at localhost:<port>.
 func (a *App) tunnelFor(port int) (string, error) {
-	if a.tunnels.servesPort(port) {
+	if a.tunnels.servesPort(port) || portOpen(port) { // ours, or one you started (ssh -L, PuTTY)
 		return "", nil
 	}
 	for _, v := range a.store.Entries() {
@@ -240,6 +241,16 @@ func mergeTunnelSpecs(old, add string) string {
 // tunnelsOff: the forwards stay saved but are not started ("Use tunnels"
 // unticked), e.g. when PuTTY itself provides them.
 func tunnelsOff(e Entry) bool { return e.Extra["tunnels_off"] == "1" }
+
+// portOpen: something on this PC already listens on 127.0.0.1:port.
+func portOpen(port int) bool {
+	c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 300*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	c.Close()
+	return true
+}
 
 func isLocalHost(h string) bool {
 	h = strings.ToLower(strings.TrimSpace(h))

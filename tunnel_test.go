@@ -181,3 +181,17 @@ func TestParseSSHTunnelCommand(t *testing.T) {
 		t.Fatalf("%+v", touched)
 	}
 }
+
+// A tunnel you started yourself (ssh -L / PuTTY) on the port is used as is.
+func TestTunnelForUsesExistingPort(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+	st, _ := OpenStore(t.TempDir())
+	st.SaveEntry(EntryInput{Name: "jump", Host: "jump.invalid", Protocol: "ssh", Username: "u",
+		Extra: map[string]string{"tunnels": fmt.Sprintf("%d:db:1521", port)}})
+	a := &App{store: st, dataDir: t.TempDir(), tunnels: &tunnelManager{}}
+	if via, err := a.tunnelFor(port); err != nil || via != "" {
+		t.Fatalf("should use the running tunnel, got %q %v", via, err)
+	}
+}
