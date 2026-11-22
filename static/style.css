@@ -645,3 +645,4 @@ dialog.lockscreen::backdrop { background: var(--bg); }
 [hidden] { display: none !important; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 10px 0; }
 @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+.upd-notes { white-space: pre-wrap; max-height: 240px; overflow: auto; font-size: 12px; background: var(--panel2); padding: 8px; border-radius: 6px; }

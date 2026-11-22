@@ -277,6 +277,8 @@ const CMD = (() => {
 
     // ---- per-page actions ----
     if (/\b(check|test|verify|ping) (the |all |my )?(links|bookmarks|urls|sites)\b/.test(s)) A('checkLinks');
+    if (/\b(updates?|new(er)? version|upgrade)\b/.test(s) && !/\bjira\b/.test(s)) A('checkUpdate');
+    if (/^ (lock|lock (workhub|the app|it|now|screen)) $/.test(s)) A('lockNow');
     if (/\b(sync|refresh|reload|update) (the |my )?(browser )?(bookmarks|favou?rites)\b/.test(s)) A('syncBookmarks');
     if ((m = s.match(/\b(go to|open|cd|jump to|switch to|show) (my |the )?(downloads|desktop|documents|home|onedrive)( folder)?\b/))) A('localPlace', { place: m[3] });
     if ((m = text.match(/(?:go to|open|cd|browse)\s+(?:folder\s+)?("?)([A-Za-z]:\\[^"]*|\/[^\s"]+|~[^\s"]*)\1/i))) A('localPath', { path: m[2] });
@@ -672,6 +674,8 @@ async function runCommand(text) {
       }
       case 'bmGroup': Bookmarks.mode = a.v; viewChanged = true; show('bookmarks'); said.push(`Bookmarks grouped by ${a.v === 'smart' ? 'category' : a.v}.`); break;
       case 'checkLinks': show('bookmarks'); Bookmarks.check(); said.push('Checking links — dots turn green or red in a few seconds.'); break;
+      case 'checkUpdate': Update.check(true); said.push('Checking for a newer WorkHub…'); break;
+      case 'lockNow': Lock.lockNow(); said.push('Locking WorkHub.'); break;
       case 'syncBookmarks': show('bookmarks'); Bookmarks.sync(true); said.push('Re-reading Edge/Chrome bookmarks.'); break;
       case 'fileSort': {
         show('files');

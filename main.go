@@ -146,6 +146,7 @@ func main() {
 	go app.jiraWatcher()
 	go app.tunnelKeeper()
 	go app.backupWatcher()
+	go func() { time.Sleep(15 * time.Second); cleanOldExe() }()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -539,6 +540,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/external", a.handleExternalList)
 	mux.HandleFunc("POST /api/external/paths", a.handleExternalPaths)
 	mux.HandleFunc("POST /api/external/open", a.handleExternalOpen)
+	mux.HandleFunc("GET /api/update", a.handleUpdateCheck)
+	mux.HandleFunc("POST /api/update", a.handleUpdateApply)
 	mux.HandleFunc("GET /api/profile", a.handleProfileGet)
 	mux.HandleFunc("PUT /api/profile", a.handleProfilePut)
 	mux.HandleFunc("GET /api/lock", a.handleLockStatus)
