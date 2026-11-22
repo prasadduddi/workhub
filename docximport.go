@@ -3,7 +3,7 @@ package main
 // Import Word documents (.docx) as task threads. Headings, bold/italic,
 // lists, links, tables and pictures are kept; pictures go into the encrypted
 // file store. A document WorkHub exported itself (dated paragraphs) is split
-// back into its posts; any other document becomes one post.
+// back into its posts; any other document gets one post per heading.
 
 import (
 	"archive/zip"
@@ -111,10 +111,46 @@ func (s *Store) ImportDocx(name string, data []byte) (WorkItem, error) {
 	for _, at := range stored {
 		_ = s.AddWorkFile(w.ID, at)
 	}
-	// Exported threads: one post per dated heading; otherwise one post.
+	// Exported threads: one post per dated heading. Other documents: one post
+	// per heading, at the highest heading level the document uses.
+	exported := false
+	for _, p := range parts {
+		exported = exported || p.head != ""
+	}
+	if !exported {
+		split := ""
+		for _, h := range []string{"<h1>", "<h2>", "<h3>"} {
+			for _, p := range parts {
+				if split == "" && strings.HasPrefix(p.html, h) {
+					split = h
+				}
+			}
+		}
+		if split != "" {
+			for i := range parts {
+				if strings.HasPrefix(parts[i].html, split) {
+					parts[i].head = "section"
+				}
+			}
+			// the heading starts the post: give it its own part after the marker
+			var out []docxPart
+			for _, p := range parts {
+				if p.head == "section" {
+					out = append(out, docxPart{head: "section"}, docxPart{html: p.html})
+				} else {
+					out = append(out, p)
+				}
+			}
+			parts = out
+		}
+	}
 	var posts []Post
 	var lastTop string
 	for _, p := range parts {
+		if p.head == "section" {
+			posts = append(posts, Post{Kind: "note", At: when})
+			continue
+		}
 		if p.head != "" {
 			at, err := time.ParseInLocation("Mon 2 Jan 2006 15:04", p.head, time.Local)
 			if err != nil {

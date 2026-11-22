@@ -176,7 +176,7 @@ func TestImportPlainDocx(t *testing.T) {
 	if w.Title != "Payments release" || len(w.Posts) != 1 {
 		t.Fatalf("title %q posts %d", w.Title, len(w.Posts))
 	}
-	h := w.Posts[0].HTML
+	h := w.Posts[0].HTML // one heading: one post
 	for _, want := range []string{"<h1>Release steps</h1>", "<b>EOD batch</b>", `<a href="https://wiki.example.com/runbook">runbook</a>`, "<ul><li>stop app</li><li>deploy</li></ul>", "<table><tr><td>Server</td><td>Owner</td></tr></table>"} {
 		if !strings.Contains(h, want) {
 			t.Errorf("missing %s in %s", want, h)
@@ -184,5 +184,41 @@ func TestImportPlainDocx(t *testing.T) {
 	}
 	if _, err := s.ImportDocx("old.doc", []byte("not a zip")); err == nil {
 		t.Error("a .doc file should be refused with a hint")
+	}
+}
+
+func TestImportDocxSplitsAtHeadings(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	const W = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"`
+	p := func(style, text string) string {
+		ps := ""
+		if style != "" {
+			ps = `<w:pPr><w:pStyle w:val="` + style + `"/></w:pPr>`
+		}
+		return `<w:p>` + ps + `<w:r><w:t>` + text + `</w:t></w:r></w:p>`
+	}
+	doc := `<?xml version="1.0"?><w:document ` + W + `><w:body>` +
+		p("", "Intro before any heading") +
+		p("Heading1", "Prepare") + p("", "stop batch") + p("Heading2", "Checks") + p("", "disk ok") +
+		p("Heading1", "Deploy") + p("", "run job 412") +
+		`</w:body></w:document>`
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	f, _ := z.Create("word/document.xml")
+	f.Write([]byte(doc))
+	z.Close()
+	w, err := s.ImportDocx("Runbook.docx", buf.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Posts) != 3 {
+		for _, x := range w.Posts {
+			t.Log(x.HTML)
+		}
+		t.Fatalf("want intro + 2 sections (split at Heading 1), got %d posts", len(w.Posts))
+	}
+	if !strings.Contains(w.Posts[0].HTML, "Intro") || !strings.HasPrefix(w.Posts[1].HTML, "<h1>Prepare</h1>") ||
+		!strings.Contains(w.Posts[1].HTML, "<h2>Checks</h2>") || !strings.HasPrefix(w.Posts[2].HTML, "<h1>Deploy</h1>") {
+		t.Fatalf("sections wrong: %q | %q | %q", w.Posts[0].HTML, w.Posts[1].HTML, w.Posts[2].HTML)
 	}
 }
