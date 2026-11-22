@@ -21,7 +21,7 @@ func (a *App) openLink(url string) {
 				if exec.Command("open", "-a", exe, url).Start() == nil {
 					return
 				}
-			} else if exec.Command(exe, url).Start() == nil {
+			} else if exec.Command(exe, "--", url).Start() == nil {
 				// Only the URL, no --new-window or profile flags: an already
 				// running Chrome/Edge takes it over and opens a new tab in its
 				// last active window instead of starting another instance.
@@ -35,6 +35,11 @@ func (a *App) openLink(url string) {
 func findBrowser(name string) string {
 	switch runtime.GOOS {
 	case "windows":
+		// The Chrome/Edge that is already running wins: the link then lands as
+		// a new tab in that session, whatever folder it was installed in.
+		if p := runningExe(map[string]string{"chrome": "chrome.exe", "edge": "msedge.exe"}[name]); p != "" {
+			return p
+		}
 		var rel []string
 		switch name {
 		case "chrome":
@@ -45,7 +50,7 @@ func findBrowser(name string) string {
 			return ""
 		}
 		// Per-user installs (no admin) live under LOCALAPPDATA.
-		for _, base := range []string{os.Getenv("LOCALAPPDATA"), os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")} {
+		for _, base := range []string{os.Getenv("LOCALAPPDATA"), os.Getenv("ProgramW6432"), os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")} {
 			for _, r := range rel {
 				if p := filepath.Join(base, r); base != "" && fileExists(p) {
 					return p

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -120,4 +121,29 @@ func TestTunnelEndToEnd(t *testing.T) {
 	if via, _ := a.tunnelFor(localPort); via != "" {
 		t.Fatal("a running tunnel should be reused, not started twice")
 	}
+
+	// Switched off: running tunnel stops, settings stay, nothing auto-starts.
+	req := httptest.NewRequest("POST", "/api/tunnels/"+jump.ID+"/enabled", strings.NewReader(`{"on":false}`))
+	req.SetPathValue("id", jump.ID)
+	a.handleTunnelsEnabled(httptest.NewRecorder(), req)
+	if e, _ := store.Entry(jump.ID); e.Extra["tunnels"] == "" || !tunnelsOff(e) {
+		t.Fatalf("settings lost or not off: %v", e.Extra)
+	}
+	if a.tunnels.servesPort(localPort) {
+		t.Fatal("tunnel still running after switching off")
+	}
+	if via, _ := a.tunnelFor(localPort); via != "" || a.tunnels.servesPort(localPort) {
+		t.Fatal("switched-off tunnel was started")
+	}
+	if _, err := a.startTunnels(must(store.Entry(jump.ID))); err == nil {
+		t.Fatal("manual start should explain tunnels are off")
+	}
+	req = httptest.NewRequest("POST", "/", strings.NewReader(`{"on":true}`))
+	req.SetPathValue("id", jump.ID)
+	a.handleTunnelsEnabled(httptest.NewRecorder(), req)
+	if via, err := a.tunnelFor(localPort); via != "jump" || err != nil {
+		t.Fatalf("switched back on: %q %v", via, err)
+	}
 }
+
+func must(e Entry, _ bool) Entry { return e }

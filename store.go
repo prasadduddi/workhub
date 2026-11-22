@@ -479,7 +479,11 @@ func (s *Store) SetExtra(id, key, val string) {
 			if e.Extra == nil {
 				e.Extra = map[string]string{}
 			}
-			e.Extra[key] = val
+			if val == "" {
+				delete(e.Extra, key)
+			} else {
+				e.Extra[key] = val
+			}
 			s.changed()
 		}
 	}

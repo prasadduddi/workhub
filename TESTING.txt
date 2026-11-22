@@ -79,3 +79,7 @@ v1.6 checks
   [ ] Tunnels: edit the SSH server you tunnel through → Tunnels: 1522:<db host>:1521 → open jdbc:oracle:thin:@localhost:1522:os08 in SQL (tunnel starts itself)
   [ ] Jira settings… (address + token) → add PAY-123 → pull requests and CM- items appear under it
   [ ] The web version is now WorkHub-web.exe
+  [ ] SSH server → Edit → untick "Use tunnels": tunnels stop, the forwards stay saved; tick again to use them
+      (also right-click → "Tunnels on — switch off")
+  [ ] Desktop: with Chrome open, click / Ctrl+click / middle-click a link → new tab in that Chrome window
+      (no extra Edge or WorkHub window, no second Chrome)

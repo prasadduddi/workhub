@@ -179,7 +179,9 @@ func (a *App) handleTerm(w http.ResponseWriter, r *http.Request) {
 	}
 	a.store.Touch(e.ID)
 	// PuTTY-style tunnels on this server start with the session.
-	if fws, ferr := parseForwards(e.Extra["tunnels"]); ferr != nil {
+	if tunnelsOff(e) {
+		// saved but switched off
+	} else if fws, ferr := parseForwards(e.Extra["tunnels"]); ferr != nil {
 		send([]byte("\x1b[33m" + ferr.Error() + "\x1b[0m\r\n"))
 	} else if len(fws) > 0 && a.tunnels.byEntry(e.ID) == nil {
 		ts, errs := startForwards(client, fws)

@@ -494,6 +494,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/tunnels", a.handleTunnelsList)
 	mux.HandleFunc("POST /api/tunnels/{id}/start", a.handleTunnelsStart)
 	mux.HandleFunc("POST /api/tunnels/{id}/stop", a.handleTunnelsStop)
+	mux.HandleFunc("POST /api/tunnels/{id}/enabled", a.handleTunnelsEnabled)
 	mux.HandleFunc("GET /api/mail/status", a.handleMailStatus)
 	mux.HandleFunc("POST /api/mail/check", a.handleMailCheck)
 	mux.HandleFunc("POST /api/db/open", a.handleDBOpen)

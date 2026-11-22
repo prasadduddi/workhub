@@ -162,6 +162,9 @@ func (a *App) startTunnels(e Entry) (*tunnelSet, error) {
 	if t := a.tunnels.byEntry(e.ID); t != nil {
 		return t, nil
 	}
+	if tunnelsOff(e) {
+		return nil, fmt.Errorf("tunnels are switched off for %s (Edit → tick Use tunnels)", e.Name)
+	}
 	fws, err := parseForwards(e.Extra["tunnels"])
 	if err != nil {
 		return nil, err
@@ -197,6 +200,9 @@ func (a *App) tunnelFor(port int) (string, error) {
 		return "", nil
 	}
 	for _, v := range a.store.Entries() {
+		if v.Extra["tunnels_off"] == "1" {
+			continue
+		}
 		fws, _ := parseForwards(v.Extra["tunnels"])
 		for _, f := range fws {
 			if f.Local == port {
@@ -210,6 +216,10 @@ func (a *App) tunnelFor(port int) (string, error) {
 	}
 	return "", nil
 }
+
+// tunnelsOff: the forwards stay saved but are not started ("Use tunnels"
+// unticked), e.g. when PuTTY itself provides them.
+func tunnelsOff(e Entry) bool { return e.Extra["tunnels_off"] == "1" }
 
 func isLocalHost(h string) bool {
 	h = strings.ToLower(strings.TrimSpace(h))
@@ -273,6 +283,33 @@ func (a *App) handleTunnelsStart(w http.ResponseWriter, r *http.Request) {
 		res["warning"] = err.Error()
 	}
 	writeJSON(w, res)
+}
+
+// handleTunnelsEnabled switches an SSH connection's tunnels on or off; the
+// forwards themselves stay saved. Switching off stops running ones.
+func (a *App) handleTunnelsEnabled(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		On bool `json:"on"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	id := r.PathValue("id")
+	if _, ok := a.store.Entry(id); !ok {
+		writeErr(w, 404, errors.New("connection not found"))
+		return
+	}
+	if in.On {
+		a.store.SetExtra(id, "tunnels_off", "")
+	} else {
+		a.store.SetExtra(id, "tunnels_off", "1")
+		if t := a.tunnels.byEntry(id); t != nil {
+			t.close()
+			a.tunnels.remove(t)
+		}
+	}
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func (a *App) handleTunnelsStop(w http.ResponseWriter, r *http.Request) {

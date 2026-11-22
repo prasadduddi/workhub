@@ -60,12 +60,32 @@ func runDesktop(url string, openLink func(string)) bool {
 	_ = w.Bind("whOpenExternal", func(u string) error { openLink(u); return nil })
 	// The page reports its title ("WorkHub — <workspace>") for the taskbar.
 	_ = w.Bind("whSetTitle", func(t string) error { w.Dispatch(func() { w.SetTitle(t) }); return nil })
-	w.Init(`window.WH_DESKTOP = true;`)
+	w.Init(`window.WH_DESKTOP = true;` + desktopLinkScript)
 	w.Navigate(url)
 	w.Run()
 	saveWindow(hwnd)
 	return true
 }
+
+// desktopLinkScript runs in every page before its own scripts. Any web link
+// that would otherwise open a WebView2 popup window (plain, Ctrl/Shift or
+// middle click, target=_blank, window.open) goes to the user's browser.
+const desktopLinkScript = `
+(() => {
+  const ext = u => { try { const x = new URL(u, location.href); return /^https?:$/.test(x.protocol) && x.origin !== location.origin ? x.href : ''; } catch { return ''; } };
+  const send = u => window.whOpenExternal && window.whOpenExternal(u);
+  const open = window.open.bind(window);
+  window.open = (u, ...rest) => { const x = ext(u); if (x) { send(x); return null; } return open(u, ...rest); };
+  const grab = ev => {
+    if (ev.defaultPrevented || (ev.type === 'auxclick' && ev.button !== 1)) return;
+    const a = ev.target.closest && ev.target.closest('a[href]'); if (!a) return;
+    if (ev.type === 'click' && a.isContentEditable && !(ev.ctrlKey || ev.metaKey)) return; // editing text
+    const x = ext(a.href); if (!x) return;
+    ev.preventDefault(); ev.stopImmediatePropagation(); send(x);
+  };
+  window.addEventListener('click', grab, true);
+  window.addEventListener('auxclick', grab, true);
+})();`
 
 func restoreWindow(hwnd uintptr) {
 	b, err := os.ReadFile(windowFile())

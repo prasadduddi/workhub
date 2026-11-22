@@ -315,6 +315,7 @@
       <label id="dbNameRow">Service name / database<input name="dbname" placeholder="e.g. ORCLPDB1 or postgres"></label>
       <label class="check" id="sidRow" title="Oracle: tick if this is a SID rather than a service name"><input type="checkbox" name="is_sid"> It's an Oracle SID</label>
       <label class="wide" id="tunnelRow" title="Like PuTTY Connection › SSH › Tunnels (local forwards). Started with this server's session, by right-click › Start tunnels, or automatically when a database at localhost:PORT needs one.">Tunnels (PuTTY-style)<input name="tunnels" placeholder="1522:dbhost:1521, 8443:app01:443"></label>
+      <label class="check" id="tunnelOnRow" title="Untick to stop using these tunnels without losing them (e.g. when PuTTY already provides them)"><input type="checkbox" name="tunnels_on" checked> Use tunnels</label>
       <label class="wide">Private key file (OpenSSH format)<input name="key_file" placeholder="C:\Users\me\.ssh\id_rsa"></label>
       <label class="wide">Tags (comma separated)<input name="tags"></label>
       <label class="wide">Extra (key=value per line)<textarea name="extra" rows="2"></textarea></label>

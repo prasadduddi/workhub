@@ -7,11 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 	"unicode/utf16"
 	"unsafe"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -284,6 +286,38 @@ var (
 )
 
 // registryAppPath finds an installed program via the Windows "App Paths" key.
+// runningExe returns the full path of a running program (e.g. chrome.exe)
+// belonging to this user, or "".
+func runningExe(name string) string {
+	if name == "" {
+		return ""
+	}
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return ""
+	}
+	defer windows.CloseHandle(snap)
+	var pe windows.ProcessEntry32
+	pe.Size = uint32(unsafe.Sizeof(pe))
+	for err = windows.Process32First(snap, &pe); err == nil; err = windows.Process32Next(snap, &pe) {
+		if !strings.EqualFold(windows.UTF16ToString(pe.ExeFile[:]), name) {
+			continue
+		}
+		h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pe.ProcessID)
+		if err != nil {
+			continue
+		}
+		buf := make([]uint16, windows.MAX_LONG_PATH)
+		n := uint32(len(buf))
+		err = windows.QueryFullProcessImageName(h, 0, &buf[0], &n)
+		windows.CloseHandle(h)
+		if err == nil {
+			return windows.UTF16ToString(buf[:n])
+		}
+	}
+	return ""
+}
+
 func registryAppPath(exe string) string {
 	for _, root := range []registry.Key{registry.CURRENT_USER, registry.LOCAL_MACHINE} {
 		k, err := registry.OpenKey(root, `Software\Microsoft\Windows\CurrentVersion\App Paths\`+exe, registry.QUERY_VALUE)

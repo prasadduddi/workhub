@@ -635,7 +635,8 @@ async function openEntryDialog(e) {
   const ex = { ...(v.extra || {}) };
   f.dbname.value = ex.service || ex.service_name || ex.database || ex.db_name || ex.dbname || ex.sid || '';
   f.tunnels.value = ex.tunnels || '';
-  delete ex.tunnels;
+  f.tunnels_on.checked = ex.tunnels_off !== '1';
+  delete ex.tunnels; delete ex.tunnels_off;
   f.is_sid.checked = !!ex.sid && !(ex.service || ex.service_name || ex.database);
   for (const k of DB_KEYS) delete ex[k];
   f.extra.value = Object.entries(ex).map(([k, x]) => `${k}=${x}`).join('\n');
@@ -644,6 +645,7 @@ async function openEntryDialog(e) {
   f.favorite.checked = !!v.favorite;
   f.password.value = f.password.dataset.orig = e?.password || '';
   if (e?.prev_passwords?.length) $('#prevPw').textContent = 'Previous passwords: ' + e.prev_passwords.join('   ·   ');
+  $('#entryDlg').returnValue = ''; // Esc must not repeat the last Save
   $('#entryDlg').showModal();
 }
 $('#newEntry').onclick = () => openEntryDialog(null);
@@ -662,6 +664,7 @@ function entryFormBody() {
   const extra = {};
   f.extra.value.split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) extra[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
   if (f.tunnels.value.trim()) extra.tunnels = f.tunnels.value.trim();
+  if (!f.tunnels_on.checked) extra.tunnels_off = '1';
   const db = f.dbname.value.trim();
   if (db && $('#dbNameRow').style.display !== 'none') {
     const p = f.protocol.value.trim().toLowerCase();
@@ -677,7 +680,12 @@ function entryFormBody() {
 }
 $('#entryDlg').addEventListener('close', async () => {
   if ($('#entryDlg').returnValue !== 'save') return;
-  try { await api('POST', '/api/entries', entryFormBody()); toast('Saved'); poll(); } catch (err) { toast(err.message, true); }
+  try {
+    const body = entryFormBody(), r = await api('POST', '/api/entries', body);
+    const id = r?.id || body.id;
+    if (id && body.extra.tunnels && body.extra.tunnels_off) await api('POST', `/api/tunnels/${id}/enabled`, { on: false }); // stop any running
+    toast('Saved'); poll();
+  } catch (err) { toast(err.message, true); }
 });
 $('#testConn').onclick = async () => {
   const out = $('#testResult'), btn = $('#testConn');
@@ -1173,7 +1181,12 @@ const Tree = {
       }
       if (canSSH(e)) items.push(['Open in PuTTY', () => Term.open(e)]);
       if (canSSH(e) && e.extra?.tunnels) {
-        items.push(['Start tunnels (' + e.extra.tunnels + ')', async () => {
+        const off = e.extra.tunnels_off === '1';
+        items.push([off ? '☐ Tunnels switched off — switch on' : '☑ Tunnels on — switch off', async () => {
+          await api('POST', `/api/tunnels/${e.id}/enabled`, { on: off });
+          toast(off ? 'Tunnels switched on (' + e.extra.tunnels + ')' : 'Tunnels switched off — settings kept'); poll();
+        }]);
+        if (!off) items.push(['Start tunnels (' + e.extra.tunnels + ')', async () => {
           try { const r = await api('POST', `/api/tunnels/${e.id}/start`); toast('Tunnels running: ' + r.forwards.join(', ') + (r.warning ? ' — ' + r.warning : '')); }
           catch (err) { toast(err.message, true); }
         }], ['Stop tunnels', async () => { await api('POST', `/api/tunnels/${e.id}/stop`); toast('Tunnels stopped'); }]);
@@ -1435,8 +1448,8 @@ function openExternal(u) {
   else window.open(u, '_blank', 'noopener');
 }
 document.addEventListener('click', ev => {
-  const a = ev.target.closest('a[target="_blank"]');
-  if (a && window.WH_DESKTOP) { ev.preventDefault(); openExternal(a.href); }
+  const a = ev.target.closest('a[target="_blank"]'); // external links: handled by the desktop window itself
+  if (a && window.WH_DESKTOP && !ev.defaultPrevented) { ev.preventDefault(); openExternal(a.href); }
 }, true);
 function openURL(e) {
   openExternal(e.url);

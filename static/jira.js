@@ -84,6 +84,7 @@ const Jira = {
     $('#jiraToken').value = ''; $('#jiraToken').placeholder = this.hasToken ? '(saved — leave blank to keep)' : 'API token / personal access token';
     $('#jiraPrefix').value = c.child_prefix || 'CM-';
     $('#jiraUserRow').hidden = $('#jiraMode').value === 'server';
+    d.returnValue = '';
     d.showModal();
   },
 };
