@@ -544,7 +544,7 @@ async function runCommand(text) {
       case 'workNew': {
         show('notes');
         const w = await Work.create(a.title || 'New work item');
-        said.push(`Created work item <b>${esc(w.title)}</b> in Notepad++. Paste screenshots, links or notes onto the page.`);
+        said.push(`Created work item <b>${esc(w.title)}</b> in Notes. Paste screenshots, links or notes onto the page.`);
         break;
       }
       case 'workOpen': {
@@ -613,7 +613,7 @@ async function runCommand(text) {
         if (!g) { said.push(`No group called "${esc(a.name)}".`); break; }
         const n = await Groups.openAll(a.kind, g); said.push(`Opened ${n} ${a.kind === 'putty' ? 'PuTTY session(s)' : 'link(s)'} from ${esc(g.name)}.`); break;
       }
-      case 'groupTabs': arrangeTabsByGroup(); said.push('Tabs arranged by group in PuTTY, SQL and Notepad++.'); break;
+      case 'groupTabs': arrangeTabsByGroup(); said.push('Tabs arranged by group in SSH, SQL and Notes.'); break;
       case 'bulk': {
         const pool = a.op === 'unhide' ? S.allEntries.filter(e => e.hidden) : S.entries;
         const page = currentPage();
@@ -697,7 +697,7 @@ async function runCommand(text) {
       case 'newNote': show('notes'); $('#newNote').click(); said.push('New note created.'); break;
       case 'wrap': $('#wrapToggle').checked = a.on; $('#wrapToggle').dispatchEvent(new Event('change')); said.push(`Line wrap ${a.on ? 'on' : 'off'}.`); break;
       case 'lang':
-        if (!Notes.active) { said.push('Open a note or file in Notepad++ first.'); break; }
+        if (!Notes.active) { said.push('Open a note or file in Notes first.'); break; }
         $('#langPick').value = a.v; $('#langPick').dispatchEvent(new Event('change')); said.push(`Language: ${$('#langPick').selectedOptions[0].text}.`); break;
       case 'shell': {
         const want = a.which.toLowerCase();

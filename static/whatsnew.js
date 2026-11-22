@@ -5,6 +5,10 @@
 
 const RELEASES = [
   { v: '1.8', title: 'Organise and find faster, Jira browser sign-in, macros', items: [
+    ['🔒', 'Passwords hidden in captured text too', 'The Captured page, Groups and Details now mask passwords inside the text you captured (password:, pwd=, -pw, user:pass@, “user / password”). 👁 shows one; Show passwords shows all.', 'inbox'],
+    ['⋯', 'Delete is tucked away, with Undo', 'Cards have a ⋯ menu (copy, duplicate, move, delete) instead of a red Delete button. After deleting, Undo puts it back.', 'dashboard'],
+    ['🎛', 'One View menu', 'Dashboard: the search box has the full width; filters, grouping, layout, card size and passwords are under View ▾.', 'dashboard'],
+    ['📝', 'Notes and a clearer sidebar', 'Notepad++ is now Notes, Folders has its own icon, and the sidebar links sit under Find, Connect and Tools.', ''],
     ['🧹', 'Tidier sidebar', 'Updates, programs, backups, data location and Quit are in ☰ at the top; ✨ opens this window any time (it now opens by itself only once per new version). Capture options fold under “Saving to …”.', ''],
     ['▤', 'Applications × environments grid', 'Dashboard → ▤ Grid: one row per application, one column per environment (DEV, UAT, PROD…). Click a server for details; empty cells show where no server is known.', 'dashboard'],
     ['★', 'Saved searches', 'Type a search (e.g. env:prod app:batch), press ☆ Save search: it stays in the sidebar with a live count. Right-click to rename, change or delete.', 'dashboard'],

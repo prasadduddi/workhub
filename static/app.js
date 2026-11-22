@@ -28,6 +28,26 @@ function pwHTML(pw) {
   if (!pw) return '';
   return `<span class="pwbox"><span class="copy pwv" data-copy="${esc(pw)}" data-pw="${esc(pw)}" title="Click to copy">${S.showPw ? esc(pw) : PW_MASK}</span><button class="icon eye" data-eye title="Show / hide">👁</button></span>`;
 }
+// Raw captured text with passwords masked: every saved password, plus values
+// after "password:", "pwd=", "-pw" and in user:password@host.
+function secretsIn(text) {
+  const out = new Set((S.allEntries || []).map(e => e.password).filter(p => p && p.length >= 3 && text.includes(p)));
+  for (const re of [/\b(?:password|passwd|pwd|pass|pw)\s*[:=]\s*(\S+)/gi, /(?:^|\s)-pw\s+(\S+)/g, /:\/\/[^:\s/@]+:([^@\s]+)@/g,
+    /(?:^|\s)[\w.@-]+ \/ ([^\s/]+)/g]) // "user / password"
+    for (const m of text.matchAll(re)) if (m[1].length >= 2) out.add(m[1]);
+  return [...out].sort((a, b) => b.length - a.length);
+}
+function maskedText(text) {
+  const secrets = secretsIn(text || '');
+  if (!secrets.length) return esc(text || '');
+  const re = new RegExp(secrets.map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
+  let out = '', i = 0;
+  for (const m of text.matchAll(re)) {
+    out += esc(text.slice(i, m.index)) + `<span class="pwinline"><span class="pwv" data-pw="${esc(m[0])}">${S.showPw ? esc(m[0]) : PW_MASK}</span><button class="icon eye" data-eye title="Show / hide">👁</button></span>`;
+    i = m.index + m[0].length;
+  }
+  return out + esc(text.slice(i));
+}
 document.addEventListener('click', ev => {
   const b = ev.target.closest('[data-eye]'); if (!b) return;
   ev.stopPropagation(); ev.preventDefault();
@@ -38,12 +58,27 @@ document.addEventListener('click', ev => {
 }, true);
 
 let toastTimer;
-function toast(msg, err = false) {
+function toast(msg, err = false, undo = null) {
   const t = $('#toast');
   t.textContent = msg;
-  t.className = 'show' + (err ? ' err' : '');
+  if (undo) { // e.g. "Deleted x — Undo"
+    const b = document.createElement('button');
+    b.textContent = 'Undo'; b.className = 'toast-undo';
+    b.onclick = () => { t.className = ''; undo(); };
+    t.append(' ', b);
+  }
+  t.className = 'show' + (err ? ' err' : '') + (undo ? ' act' : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (t.className = ''), err ? 5000 : 2200);
+  toastTimer = setTimeout(() => (t.className = ''), undo ? 8000 : err ? 5000 : 2200);
+}
+// Delete entries with an Undo that saves them back (with their passwords).
+async function deleteEntries(list) {
+  for (const e of list) await api('DELETE', `/api/entries/${e.id}`).catch(err => toast(err.message, true));
+  poll();
+  toast(list.length === 1 ? `Deleted ${list[0].name}` : `Deleted ${list.length} entries`, false, async () => {
+    for (const e of list) await api('POST', '/api/entries', { ...entryInput(e), id: '', password: e.password }).catch(err => toast(err.message, true));
+    poll(); toast('Restored');
+  });
 }
 
 async function copyText(text, what = 'Copied') {
@@ -776,6 +811,7 @@ const Saved = {
 
 function renderBoard() {
   renderViewChips();
+  viewSummary();
   const list = filtered();
   renderStats(list);
   const board = $('#board');
@@ -895,7 +931,7 @@ function svcHTML(e) {
     External.items(e).length && `<button class="icon" data-act="ext" data-id="${e.id}" title="Open in the real PuTTY / SQL Developer / DBeaver">Open in ↗</button>`,
     `<button class="icon" data-act="details" data-id="${e.id}">Details</button>`,
     `<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
-    `<button class="icon danger" data-act="del" data-id="${e.id}">Delete</button>`,
+    `<button class="icon more" data-act="more" data-id="${e.id}" title="More: copy, duplicate, move, delete…">⋯</button>`,
   ].filter(Boolean).join('');
   return `<div class="svc" data-detail="${e.id}" title="Click for full details">${rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('')}<div class="svc-actions">${acts}</div></div>`;
 }
@@ -950,9 +986,8 @@ $('#board').addEventListener('click', async ev => {
       case 'open': return openURL(e);
       case 'edit': return openEntryDialog(e);
       case 'accept': case 'keep': await sortEntry(e, b.dataset.act === 'accept'); return poll();
-      case 'del':
-        if (!confirm(`Delete ${e.name}?`)) return;
-        await api('DELETE', `/api/entries/${e.id}`); return poll();
+      case 'del': return deleteEntries([e]);
+      case 'more': { const r = b.getBoundingClientRect(); return setTimeout(() => Tree.menu({ clientX: r.left, clientY: r.bottom }, { dataset: { id: e.id } }, 'board')); }
       case 'fav': await api('POST', '/api/entries', { ...entryInput(e), favorite: !e.favorite }); return poll();
       case 'rename-project': {
         const to = prompt('Rename project', b.dataset.project);
@@ -997,7 +1032,7 @@ const External = {
   },
 };
 $('#extBtn').onclick = () => External.settings();
-$('#showPwBtn').onclick = () => { S.showPw = !S.showPw; $('#showPwBtn').textContent = S.showPw ? '🙈 Hide passwords' : '👁 Show passwords'; renderBoard(); };
+$('#showPwBtn').onclick = () => { S.showPw = !S.showPw; $('#showPwBtn').textContent = S.showPw ? '🙈 Hide passwords' : '👁 Show passwords'; renderBoard(); renderClips(); Groups.render?.(); };
 $('#entryPwEye').onclick = () => { const i = $('#entryForm').password; i.type = i.type === 'password' ? 'text' : 'password'; $('#entryPwEye').classList.toggle('on', i.type === 'text'); };
 $('#extCancel').onclick = () => $('#extDlg').close();
 $('#extSave').onclick = async () => {
@@ -1047,7 +1082,7 @@ function showDetails(e) {
   $('#detailBody').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span>${secret(k) ? `<span class="v pwbox"><span class="pwv" data-pw="${esc(v)}">${S.showPw ? esc(v) : PW_MASK}</span><button class="icon eye" data-eye title="Show / hide">👁</button></span>` : `<span class="v">${esc(v)}</span>`}<button class="icon copyic" data-copy="${esc(v)}" title="Copy ${esc(k)}" aria-label="Copy ${esc(k)}">${COPY_ICON}</button>`).join('');
   const clips = S.clips.filter(c => c.entry_ids?.includes(e.id)).slice(0, 3);
   if (clips.length) $('#detailBody').insertAdjacentHTML('beforeend', `<details class="clipsrc"><summary>Captured from — the text it was read from (${clips.length})</summary>${clips.map(c =>
-    `<div class="muted tiny">${esc(new Date(c.created).toLocaleString())} · ${esc(sourceName({ source: c.source }))}</div><pre>${esc(c.text.length > 1500 ? c.text.slice(0, 1500) + '…' : c.text)}</pre>`).join('')}</details>`);
+    `<div class="muted tiny">${esc(new Date(c.created).toLocaleString())} · ${esc(sourceName({ source: c.source }))}</div><pre>${maskedText(c.text.length > 1500 ? c.text.slice(0, 1500) + '…' : c.text)}</pre>`).join('')}</details>`);
   $('#detailActs').innerHTML = [
     canSSH(e) && ['ssh', 'SSH'], canFiles(e) && ['sftp', isFTP(e) ? 'FTP' : 'SFTP'], canDB(e) && ['sql', 'SQL'], e.url && !/^jdbc:/i.test(e.url) && ['open', 'Open'], ['edit', 'Edit'],
   ].filter(Boolean).map(([a, t]) => `<button data-dact="${a}">${t}</button>`).join('') + External.items(e).map(([t], i) => `<button data-dext="${i}">${esc(t.replace('Open in ', '').replace(' (the real one)', ''))}</button>`).join('');
@@ -1167,7 +1202,7 @@ $('#bulkBar').addEventListener('click', async ev => {
     case 'move': { const p = prompt('Move to folder (use / for subfolders):', Bulk.entries()[0]?.project || ''); if (p?.trim()) await Bulk.each('Moved', e => Bulk.save(e, { project: p.trim() })); break; }
     case 'tag': { const t = prompt('Add tag(s), comma separated:'); const add = (t || '').split(',').map(x => x.trim()).filter(Boolean); if (add.length) await Bulk.each('Tagged', e => Bulk.save(e, { tags: [...new Set([...(e.tags || []), ...add])] })); break; }
     case 'test': return retest(Bulk.entries());
-    case 'delete': if (confirm(`Delete ${Bulk.picked.size} entries?`)) { await Bulk.each('Deleted', e => api('DELETE', `/api/entries/${e.id}`)); Bulk.picked.clear(); } break;
+    case 'delete': { const list = Bulk.entries(); if (list.length < 10 || confirm(`Delete ${list.length} entries?`)) { Bulk.picked.clear(); await deleteEntries(list); } break; }
     case 'clear': Bulk.picked.clear(); renderBoard(); break;
   }
 });
@@ -1200,6 +1235,19 @@ $('#stats').addEventListener('click', ev => { if (ev.target.closest('#retestBtn'
 
 $('#search').addEventListener('focus', () => { $('#searchHint').hidden = false; Recent.render(); });
 $('#search').addEventListener('blur', () => setTimeout(() => ($('#searchHint').hidden = !$('#search').value.trim()), 150));
+// View ▾: filters, grouping, layout, card size and passwords in one panel.
+function viewSummary() {
+  const parts = [{ cards: 'Cards', table: 'Table', grid: 'Grid' }[S.layout] || 'Cards'];
+  if (S.layout !== 'grid') parts.push('by ' + ({ project: 'project', env: 'env', protocol: 'type' }[S.groupBy] || S.groupBy));
+  if ($('#fProject').value) parts.push($('#fProject').value);
+  if ($('#fEnv').value) parts.push($('#fEnv').value);
+  if (S.showPw) parts.push('passwords shown');
+  $('#viewSummary').textContent = parts.join(' · ');
+  $('#viewBtn').classList.toggle('on', !!($('#fProject').value || $('#fEnv').value));
+}
+$('#viewBtn').onclick = ev => { ev.stopPropagation(); $('#viewPanel').hidden = !$('#viewPanel').hidden; };
+document.addEventListener('click', ev => { if (!$('#viewPanel').hidden && !ev.target.closest('.viewwrap')) $('#viewPanel').hidden = true; });
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') $('#viewPanel').hidden = true; });
 for (const [id, key] of [['#groupBy', 'groupBy'], ['#layout', 'layout']]) {
   const seg = $(id), attr = key === 'groupBy' ? 'g' : 'l';
   $$('button', seg).forEach(b => b.classList.toggle('active', b.dataset[attr] === S[key]));
@@ -1340,7 +1388,7 @@ function renderClips() {
       `<span class="chip" data-find="${esc(e.host || e.url || e.username)}">${linkLabel(e.url) ? esc(linkLabel(e.url)) + ' · ' : ''}${esc(e.username ? e.username + ' @ ' : '')}${esc(e.host || e.url || '')}${e.port ? ':' + e.port : ''}</span>`).join('');
     return `<div class="clip"><div class="clip-head"><span>${new Date(c.created).toLocaleString()}</span><span class="proto">${esc(c.source)}</span><span>${esc(c.project)}</span>
       <span class="spacer"></span><button class="icon danger" data-del="${c.id}">Delete</button></div>
-      <pre>${esc(c.text)}</pre><div class="chips">${chips || '<span class="muted tiny">no hosts or credentials recognised</span>'}</div></div>`;
+      <pre>${maskedText(c.text)}</pre><div class="chips">${chips || '<span class="muted tiny">no hosts or credentials recognised</span>'}</div></div>`;
   }).join('');
 }
 $('#clips').addEventListener('click', async e => {
@@ -1591,6 +1639,7 @@ Remote.connect = async e => {
     const r = await api('POST', '/api/sftp/open', { id: e.id, ...creds });
     Remote.sid = r.sid;
     Remote.entry = e;
+    $$('#remotePane [data-needs-conn]').forEach(b => { b.disabled = false; b.title = ''; });
     $('#sftpLabel').textContent = `${r.protocol.toUpperCase()}  ${creds.username || e.username || 'anonymous'}@${e.host}`;
     Tree.render();
     toast('Connected to ' + e.host);
@@ -1929,7 +1978,7 @@ const Tree = {
         ['Edit…', () => openEntryDialog(e)],
         ['Duplicate', async () => { await api('POST', '/api/entries', { ...entryInput(e), id: '', name: e.name + ' (copy)', password: e.password }); poll(); }],
         ['Move to folder…', () => { const p = prompt('Folder (use / for subfolders)', e.project); if (p) this.move(e, p.trim(), e.env); }],
-        ['Delete', async () => { if (confirm(`Delete ${e.name}?`)) { await api('DELETE', `/api/entries/${e.id}`); poll(); } }]);
+        ['Delete', () => deleteEntries([e])]);
     } else if (node?.dataset.project) {
       const proj = node.dataset.project;
       items.push(['New connection here…', () => openEntryDialog({ project: proj, env: node.dataset.env })],

@@ -46,7 +46,7 @@ const Groups = {
     const windows = [
       ...Term.tabs.map(t => ({ kind: 'SSH', label: t.local ? t.local.label : `${t.creds.username || t.entry.username || ''}@${t.entry.host}`, text: t.local ? t.local.label + ' ' + t.local.dir : this.entryText(t.entry), go: () => { show('terminal'); Term.activate(t); } })),
       ...SQL.tabs.map(t => ({ kind: 'SQL', label: t.entry.name, text: this.entryText(t.entry), go: () => { show('sql'); SQL.activate(t); } })),
-      ...Notes.docs.map(d => ({ kind: 'Notepad++', label: d.title, text: (d.path || '') + ' ' + d.title + ' ' + (d.content || '').slice(0, 20000), go: () => { show('notes'); Notes.activate(d); } })),
+      ...Notes.docs.map(d => ({ kind: 'Notes', label: d.title, text: (d.path || '') + ' ' + d.title + ' ' + (d.content || '').slice(0, 20000), go: () => { show('notes'); Notes.activate(d); } })),
       ...(Remote.sid && Remote.entry ? [{ kind: 'FTP', label: Remote.entry.name, text: this.entryText(Remote.entry) + ' ' + Remote.path, go: () => show('files') }] : []),
     ].filter(w => this.matches(g, w.text));
     const notes = (Notes.notes || []).filter(n => this.matches(g, n.title + ' ' + n.body));
@@ -68,21 +68,24 @@ const Groups = {
     if (!g) { $('#groupMain').innerHTML = '<div class="empty">Create a group to gather everything about a server, application or search pattern in one place.</div>'; return; }
     this.selected = g.name;
     const c = this.collect(g);
-    const sec = (title, n, body) => `<div class="gsec"><h4>${title} <span class="n">${n}</span></h4>${n ? body : '<div class="muted tiny">None</div>'}</div>`;
+    const empty = []; // empty sections are listed on one line at the end
+    const sec = (title, n, body) => n ? `<div class="gsec"><h4>${title} <span class="n">${n}</span></h4>${body}</div>` : (empty.push(title), '');
     const row = (e, extra) => `<div class="grow">${dot(e)} <b>${esc(e.name)}</b> <span class="muted">${esc(e.username ? e.username + '@' : '')}${esc(e.host || e.url || '')}${e.port ? ':' + e.port : ''}</span>${e.env ? ` <span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="spacer"></span>${extra}</div>`;
     $('#groupMain').innerHTML = `
       <div class="ghead"><span class="gdot big" style="background:${this.color(g)}"></span><h3>${esc(g.name)}</h3>
         <span class="muted tiny">matches: ${g.patterns.map(p => `<code>${esc(p)}</code>`).join(' ')}</span><span class="spacer"></span>
-        ${c.servers.some(canSSH) ? '<button data-ga="putty-all">Open all servers in PuTTY</button>' : ''}
+        ${c.servers.some(canSSH) ? '<button data-ga="putty-all">Open all servers (SSH)</button>' : ''}
         ${c.links.length ? '<button data-ga="links-all">Open all links</button>' : ''}
         <button data-ga="edit">Edit patterns</button><button data-ga="delete" class="danger">Delete group</button></div>
       ${sec('Open windows', c.windows.length, c.windows.map((w, i) => `<div class="grow link" data-gw="${i}"><span class="proto">${w.kind}</span> ${esc(w.label)}</div>`).join(''))}
       ${sec('Servers & databases', c.servers.length, c.servers.map(e => row(e,
-        `${canSSH(e) ? `<button class="icon" data-gs="ssh" data-id="${e.id}">PuTTY</button>` : ''}${canFiles(e) ? `<button class="icon" data-gs="files" data-id="${e.id}">FileZilla</button>` : ''}${canDB(e) ? `<button class="icon" data-gs="sql" data-id="${e.id}">SQL</button>` : ''}<button class="icon" data-gs="edit" data-id="${e.id}">Edit</button>`)).join(''))}
+        `${canSSH(e) ? `<button class="icon" data-gs="ssh" data-id="${e.id}">SSH</button>` : ''}${canFiles(e) ? `<button class="icon" data-gs="files" data-id="${e.id}">FTP</button>` : ''}${canDB(e) ? `<button class="icon" data-gs="sql" data-id="${e.id}">SQL</button>` : ''}<button class="icon" data-gs="edit" data-id="${e.id}">Edit</button>`)).join(''))}
       ${sec('Links', c.links.length, c.links.map(e => row(e, `${linkLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span>` : ''}<button class="icon" data-gs="open" data-id="${e.id}">Open</button>`)).join(''))}
       ${sec('Notes & files', c.notes.length + c.files.length, c.notes.map(n => `<div class="grow link" data-gn="note:${n.id}">📝 ${esc(n.title || 'Untitled')}</div>`).join('') + c.files.map(f => `<div class="grow link" data-gn="file:${esc(f.path)}">📄 ${esc(f.path)}</div>`).join(''))}
       ${sec('Git repositories', c.repos.length, c.repos.map(p => `<div class="grow link" data-gr="${esc(p)}">⎇ ${esc(p)}</div>`).join(''))}
-      ${sec('Captured', c.clips.length, c.clips.map(cl => `<div class="grow clipline"><span class="muted tiny">${new Date(cl.created).toLocaleString()} · ${esc(cl.source)}</span> ${esc(cl.text.replace(/\s+/g, ' ').slice(0, 160))}</div>`).join(''))}`;
+      ${sec('Captured', c.clips.length, c.clips.map(cl => `<div class="grow clipline"><span class="muted tiny">${new Date(cl.created).toLocaleString()} · ${esc(cl.source)}</span> <span class="clipone">${maskedText(cl.text.replace(/\s+/g, ' '))}</span></div>`).join(''))}`;
+    $('#groupMain').insertAdjacentHTML('beforeend', (empty.length ? `<div class="muted tiny gempty">Nothing yet in: ${empty.join(' · ')}</div>` : '')
+      + (c.servers.length || c.links.length ? `<div class="muted tiny dotkey"><span class="dot ok"></span> worked last time · <span class="dot fail"></span> failed · <span class="dot none"></span> not tried yet</div>` : ''));
     this.lastCollect = c;
   },
 

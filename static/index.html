@@ -15,18 +15,21 @@
   <button id="updPill" class="upd-pill" hidden title="Click to see what's new and install it">⬆ <span id="updPillText">A new version is available</span></button>
   <button id="wsName" class="ws" title="Workspace — click to rename"></button>
   <nav id="nav">
+    <div class="navhead">Find</div>
     <div class="navrow"><button data-view="dashboard" class="active"><svg class="ni" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2" fill="#5b8ff0"/><rect x="13" y="3" width="8" height="5" rx="2" fill="#9db8f5"/><rect x="13" y="10" width="8" height="11" rx="2" fill="#5b8ff0"/><rect x="3" y="13" width="8" height="8" rx="2" fill="#9db8f5"/></svg><span class="nl">Dashboard</span></button><button id="navSearch" class="navsearch" title="Search everything (Ctrl+K)"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>
     <button data-view="groups"><svg class="ni" viewBox="0 0 24 24"><rect x="2.5" y="3" width="8.5" height="8.5" rx="2" fill="#2a9d8f"/><rect x="13" y="3" width="8.5" height="8.5" rx="2" fill="#d9822b"/><rect x="2.5" y="13" width="8.5" height="8.5" rx="2" fill="#8e6bd8"/><rect x="13" y="13" width="8.5" height="8.5" rx="2" fill="#2f6fde"/></svg><span class="nl">Groups</span><span id="groupCount" class="count"></span></button>
     <button data-view="bookmarks"><svg class="ni" viewBox="0 0 24 24"><path d="M6 2.5h12a1 1 0 0 1 1 1V21l-7-4.5L5 21V3.5a1 1 0 0 1 1-1z" fill="#f2a900" stroke="#b07a00" stroke-width="1" stroke-linejoin="round"/><path d="m12 6 1.3 2.7 2.9.4-2.1 2 .5 2.9-2.6-1.4-2.6 1.4.5-2.9-2.1-2 2.9-.4z" fill="#fff"/></svg><span class="nl">Bookmarks</span></button>
     <button data-view="inbox"><svg class="ni" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2" fill="none" stroke="#8a93a1" stroke-width="2"/><rect x="8.5" y="2" width="7" height="4" rx="1.2" fill="#8a93a1"/><path d="M8 11h8M8 15h5" stroke="#2f6fde" stroke-width="2" stroke-linecap="round"/></svg><span class="nl">Captured</span><span id="inboxCount" class="count"></span></button>
+    <div class="navhead">Connect</div>
     <button data-view="terminal"><svg class="ni" viewBox="0 0 24 24"><rect x="1.5" y="3" width="21" height="18" rx="3.5" fill="#1d2330"/><path d="M5.5 9l3.5 3-3.5 3" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 16h6" stroke="#e5e7eb" stroke-width="2" stroke-linecap="round"/></svg><span class="nl">SSH</span><span id="termCount" class="count"></span></button>
     <button data-view="files"><svg class="ni" viewBox="0 0 24 24"><path d="M2 6.5A1.5 1.5 0 0 1 3.5 5H9l2 2h9.5A1.5 1.5 0 0 1 22 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 18.5z" fill="#2f7de1"/><path d="M8.5 17.5v-6.5m0 0-2.3 2.3m2.3-2.3 2.3 2.3M15.5 10.5v6.5m0 0-2.3-2.3m2.3 2.3 2.3-2.3" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nl">FTP</span></button>
     <button data-view="sql"><svg class="ni" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="#4f8fd8"/><path d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13c0 1.7-3.4 3-7.5 3s-7.5-1.3-7.5-3z" fill="#2f6fde"/><path d="M4.5 10c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3M4.5 14.5c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3" fill="none" stroke="#9db8f5" stroke-width="1.2"/></svg><span class="nl">SQL</span><span id="sqlCount" class="count"></span></button>
+    <div class="navhead">Tools</div>
     <button data-view="git"><svg class="ni" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3" transform="rotate(45 12 12)" fill="#f05033"/><path d="M9.5 7.5v9M9.5 11.5c0-2 5-1.5 5-4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="9.5" cy="7.5" r="1.5" fill="#fff"/><circle cx="9.5" cy="16.5" r="1.5" fill="#fff"/><circle cx="14.5" cy="7.5" r="1.5" fill="#fff"/></svg><span class="nl">Git</span></button>
     <button data-view="cal"><svg class="ni" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5" fill="#fff" stroke="#e5484d" stroke-width="2"/><rect x="3" y="5" width="18" height="5" rx="2" fill="#e5484d"/><rect x="7" y="2.5" width="2.2" height="5" rx="1" fill="#555"/><rect x="14.8" y="2.5" width="2.2" height="5" rx="1" fill="#555"/><rect x="7" y="13" width="3" height="3" rx=".6" fill="#e5484d"/></svg><span class="nl">Calendar</span></button>
     <button data-view="jira"><svg class="ni" viewBox="0 0 24 24"><path d="M12 2.5 21.5 12 12 21.5 2.5 12z" fill="#2684ff"/><path d="M12 7.2 16.8 12 12 16.8 7.2 12z" fill="#fff"/><path d="M12 9.6 14.4 12 12 14.4 9.6 12z" fill="#0052cc"/></svg><span class="nl">Jira</span></button>
-    <button data-view="ref"><svg class="ni" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" fill="#e0a800"/><path d="M7 11h10M7 14h7M7 17h9" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg><span class="nl">Folders</span></button>
-    <button data-view="notes"><svg class="ni" viewBox="0 0 24 24"><path d="M5 2.5h10l4 4v15H5z" fill="#fff" stroke="#6b7380" stroke-width="1.2" stroke-linejoin="round"/><path d="M15 2.5v4h4" fill="none" stroke="#6b7380" stroke-width="1.2"/><path d="M7.5 9h6M7.5 12h4" stroke="#b5bcc6" stroke-width="1.3" stroke-linecap="round"/><circle cx="16.5" cy="17" r="6" fill="#7cb342"/><path d="M12.8 17h3.4M14.5 15.3v3.4M17.2 17h3.4M18.9 15.3v3.4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nl">Notepad++</span></button>
+    <button data-view="ref"><svg class="ni" viewBox="0 0 24 24"><rect x="3.5" y="2.5" width="17" height="19" rx="2" fill="#8d6e63"/><rect x="5.5" y="4.5" width="13" height="7" rx="1" fill="#d7ccc8"/><rect x="5.5" y="13" width="13" height="7" rx="1" fill="#d7ccc8"/><path d="M10 8h4M10 16.5h4" stroke="#5d4037" stroke-width="1.6" stroke-linecap="round"/></svg><span class="nl">Folders</span></button>
+    <button data-view="notes"><svg class="ni" viewBox="0 0 24 24"><path d="M5 2.5h11l3 3v16H5z" fill="#fff6d6" stroke="#c9a227" stroke-width="1.2" stroke-linejoin="round"/><path d="M8 8.5h8M8 12h8M8 15.5h5" stroke="#b08a10" stroke-width="1.4" stroke-linecap="round"/></svg><span class="nl">Notes</span></button>
   </nav>
   <div id="savedSearches" class="saved-list"></div>
   <div class="capture-box">
@@ -51,16 +54,18 @@
   <section id="view-dashboard" class="view active">
     <header class="toolbar">
       <input id="search" type="search" placeholder="Search hosts, IPs, URLs, users, notes…  (Ctrl+K)"><button id="saveSearchBtn" hidden title="Keep this search in the sidebar, with a live count">☆ Save search</button>
-      <select id="fProject"><option value="">All projects</option></select>
-      <select id="fEnv"><option value="">All envs</option></select>
-      <div class="seg" id="groupBy">
-        <button data-g="project" class="active">Project</button><button data-g="env">Env</button><button data-g="protocol">Type</button>
-      </div>
-      <div class="seg" id="layout">
-        <button data-l="cards" class="active" title="Tiles">▦ Cards</button><button data-l="table" title="Grid">☰ Table</button><button data-l="grid" title="Applications × environments: one row per app, one column per environment">▤ Grid</button>
-      </div>
-      <button id="showPwBtn" class="ghost" title="Show or hide all passwords">👁 Show passwords</button>
-      <label class="cardw muted tiny" title="Card width (Cards view)">▭ <input type="range" id="cardWidth" min="240" max="700" step="10"></label>
+      <div class="viewwrap"><button id="viewBtn" title="Filter, group, layout, card size and passwords"><span id="viewSummary">View</span> ▾</button>
+      <div id="viewPanel" class="viewpanel" hidden>
+        <div class="vp-row"><span class="vp-k">Show only</span><select id="fProject"><option value="">All projects</option></select><select id="fEnv"><option value="">All envs</option></select></div>
+        <div class="vp-row"><span class="vp-k">Group by</span><div class="seg" id="groupBy">
+          <button data-g="project" class="active">Project</button><button data-g="env">Env</button><button data-g="protocol">Type</button>
+        </div></div>
+        <div class="vp-row"><span class="vp-k">Layout</span><div class="seg" id="layout">
+          <button data-l="cards" class="active" title="Tiles">▦ Cards</button><button data-l="table" title="Rows and columns">☰ Table</button><button data-l="grid" title="Applications × environments: one row per app, one column per environment">▤ Grid</button>
+        </div></div>
+        <div class="vp-row"><span class="vp-k">Card size</span><label class="cardw muted tiny" title="Card width (Cards view)">▭ <input type="range" id="cardWidth" min="240" max="700" step="10"></label></div>
+        <div class="vp-row"><span class="vp-k">Passwords</span><button id="showPwBtn" class="ghost" title="Show or hide all passwords">👁 Show passwords</button></div>
+      </div></div>
       <button id="newEntry" class="primary">+ New</button>
     </header>
     <div id="searchHint" class="muted tiny search-hint" hidden><div id="recentSearches" hidden></div><b>↵</b> connect / open the highlighted one · <b>Shift+↵</b> details · <b>↑↓</b> choose · <b>Alt+P</b> password · <b>Alt+U</b> user · <b>Alt+H</b> host · <b>Alt+J</b> JDBC/URL &nbsp;|&nbsp; Filters: <code>env:prod</code> <code>type:db</code> <code>user:ops</code> <code>app:batch</code> <code>port:1521</code> <code>has:password</code> <code>no:env</code> <code>is:fail</code> <code>needs:attention</code> <code>is:stale</code> <code>is:unsorted</code> <code>-word</code> &nbsp;|&nbsp; Desktop: <b>Ctrl+Alt+W</b> anywhere opens this search</div>
@@ -168,7 +173,7 @@
       <div class="pane" id="remotePane">
         <div class="pane-head">
           <b id="sftpLabel">Not connected</b>
-          <span class="spacer"></span><button data-act="mkdir">New folder</button><button data-act="rename">Rename</button><button data-act="delete" class="danger">Delete</button><button data-act="refresh">↻</button>
+          <span class="spacer"></span><button data-act="mkdir" data-needs-conn disabled title="Connect to a server first">New folder</button><button data-act="rename" data-needs-conn disabled title="Connect to a server first">Rename</button><button data-act="delete" data-needs-conn disabled class="danger" title="Connect to a server first">Delete</button><button data-act="refresh">↻</button>
         </div>
         <div class="pathbar"><button data-act="up">↑</button><input class="path"></div>
         <div class="listing drop"><div class="empty">Double-click a server in the tree to connect.<br>Drop files here to upload.</div></div>
