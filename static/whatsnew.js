@@ -10,6 +10,7 @@ const RELEASES = [
     ['🧩', 'Child work items under each Jira issue', 'Every sub-task and child issue (an epic’s stories) is listed under its issue on the Jira page — any key, not only CM- — with its type and status.', 'jira'],
     ['🔒', 'Jira is read-only for WorkHub', 'WorkHub only reads from Jira; any request that could change something is refused before it leaves your PC. “Remove” is now “Stop tracking” (it never touched Jira).', 'jira'],
     ['🔗', 'Jira keys are links', 'Click an issue’s key (in the Jira tree, on its page, in search results, CM and child items) to open the ticket in the browser.', 'jira'],
+    ['⇡', 'Steadier menu at the top', 'With the menu at the top, switching pages no longer moves the icons.', ''],
     ['❓', 'Help', 'F1 or ☰ → Help: how-to topics with steps and a Show me button. Or ask the assistant (Ctrl+J) “how do I …?” — it answers with the steps.', ''],
   ] },
   { v: '1.9', title: 'Task threads, smarter search, tidier layout', items: [
