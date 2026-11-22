@@ -395,7 +395,9 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .tree-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .tree-host { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; min-height: 0; }
 .tree-tools { display: flex; gap: 4px; padding: 6px; border-bottom: 1px solid var(--border); }
-.tree-tools input { flex: 1; }
+.tree-tools input { flex: 1; min-width: 0; }
+.tree-tools select { max-width: 92px; font-size: 12px; }
+.gdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 2px; }
 .tree { flex: 1; overflow: auto; padding: 4px 0; user-select: none; font-size: 13px; }
 .tnode { display: flex; align-items: center; gap: 5px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
 .tnode:hover { background: var(--panel2); }

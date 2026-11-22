@@ -763,6 +763,15 @@ func mergeFinding(e *Entry, f Finding) {
 		if e.Extra == nil {
 			e.Extra = map[string]string{}
 		}
+		switch k {
+		case "key_file": // from "ssh -i"
+			if e.KeyFile == "" {
+				e.KeyFile = v
+			}
+			continue
+		case "tunnels": // keep forwards already saved, add new ones
+			v = mergeTunnelSpecs(e.Extra[k], v)
+		}
 		e.Extra[k] = v
 	}
 	if e.Env == "" {

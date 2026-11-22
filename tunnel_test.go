@@ -147,3 +147,37 @@ func TestTunnelEndToEnd(t *testing.T) {
 }
 
 func must(e Entry, _ bool) Entry { return e }
+
+func TestParseSSHTunnelCommand(t *testing.T) {
+	for _, c := range []struct {
+		in, host, user, tunnels string
+		port                    int
+	}{
+		{"ssh -N -L1522:10.0.20.15:1521 jdoe@10.0.10.5", "10.0.10.5", "jdoe", "1522:10.0.20.15:1521", 22},
+		{"ssh -N -L 1522:dbhost:1521 jumpbox", "jumpbox", "", "1522:dbhost:1521", 22},
+		{"C:\\> ssh.exe -fN -L 5433:pg01.corp.local:5432 -L 127.0.0.1:1522:ora01:1521 -p 2222 -i C:\\keys\\id_rsa -l ops jump.corp.local", "jump.corp.local", "ops", "5433:pg01.corp.local:5432, 1522:ora01:1521", 2222},
+	} {
+		fs := Parse(c.in)
+		var got *Finding
+		for i := range fs {
+			if fs[i].Extra["tunnels"] != "" {
+				got = &fs[i]
+			}
+		}
+		if got == nil || got.Host != c.host || got.Username != c.user || got.Port != c.port || got.Extra["tunnels"] != c.tunnels || got.Protocol != "ssh" {
+			t.Fatalf("%q → %+v (all: %+v)", c.in, got, fs)
+		}
+		if len(fs) != 1 {
+			t.Fatalf("%q: the tunnel target should not become its own connection: %+v", c.in, fs)
+		}
+	}
+	if s := mergeTunnelSpecs("1522:a:1521, 8443:w:443", "1522:b:1521, 5433:p:5432"); s != "1522:b:1521, 8443:w:443, 5433:p:5432" {
+		t.Fatal(s)
+	}
+	// Pasting it creates the jump server with the tunnel, ready to use.
+	st, _ := OpenStore(t.TempDir())
+	_, touched := st.Ingest("ssh -N -L1522:10.0.20.15:1521 jdoe@10.0.10.5", "paste", "General")
+	if len(touched) != 1 || touched[0].Extra["tunnels"] != "1522:10.0.20.15:1521" || touched[0].Username != "jdoe" {
+		t.Fatalf("%+v", touched)
+	}
+}

@@ -83,3 +83,6 @@ v1.6 checks
       (also right-click → "Tunnels on — switch off")
   [ ] Desktop: with Chrome open, click / Ctrl+click / middle-click a link → new tab in that Chrome window
       (no extra Edge or WorkHub window, no second Chrome)
+  [ ] PuTTY / FileZilla / SQL: the "Group by" box next to the filter (Folders, Env, App, Domain / subnet, Type, My groups, User)
+      or chat "group putty by app", "group sql connections by env"
+  [ ] Copy an  ssh -N -L1522:<db host>:1521 user@<jump host>  command → an SSH connection with that tunnel appears

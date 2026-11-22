@@ -217,6 +217,26 @@ func (a *App) tunnelFor(port int) (string, error) {
 	return "", nil
 }
 
+// mergeTunnelSpecs joins two "lport:host:port, …" lists; a new forward for
+// the same local port replaces the old one.
+func mergeTunnelSpecs(old, add string) string {
+	byLocal, order := map[int]string{}, []int{}
+	for _, spec := range []string{old, add} {
+		fws, _ := parseForwards(spec)
+		for _, f := range fws {
+			if _, seen := byLocal[f.Local]; !seen {
+				order = append(order, f.Local)
+			}
+			byLocal[f.Local] = fmt.Sprintf("%d:%s:%d", f.Local, f.Host, f.Port)
+		}
+	}
+	out := make([]string, 0, len(order))
+	for _, l := range order {
+		out = append(out, byLocal[l])
+	}
+	return strings.Join(out, ", ")
+}
+
 // tunnelsOff: the forwards stay saved but are not started ("Use tunnels"
 // unticked), e.g. when PuTTY itself provides them.
 func tunnelsOff(e Entry) bool { return e.Extra["tunnels_off"] == "1" }

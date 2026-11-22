@@ -24,11 +24,13 @@ var (
 	// Oracle TNS form: jdbc:oracle:thin:[user/pass]@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=h)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=s)))
 	reOracleTNS = regexp.MustCompile(`(?is)jdbc:oracle:thin:(?:([^/@\s]+)/([^@\s]+))?@\s*(\(\s*DESCRIPTION.*?\)\s*\)\s*\))`)
 	reTNSPart   = regexp.MustCompile(`(?i)\(\s*(HOST|PORT|SERVICE_NAME|SID)\s*=\s*([^)\s]+)\s*\)`)
-	reUserAt    = regexp.MustCompile(`\b([A-Za-z0-9._\-\\]+)@([A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9\-]+)*)(?::(\d{1,5}))?\b`)
-	rePortFlag  = regexp.MustCompile(`\s-[pP]\s*(\d{1,5})\b`)
-	reUNC       = regexp.MustCompile(`\\\\([A-Za-z0-9.\-]+)\\[^\s]+`)
-	reIPv4      = regexp.MustCompile(`\b((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?::(\d{1,5}))?\b`)
-	reFQDN      = regexp.MustCompile(`\b((?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63})(?::(\d{1,5}))?\b`)
+	// ssh tunnel commands: ssh -N -L1522:10.1.2.3:1521 user@jumphost
+	reSSHCmd   = regexp.MustCompile(`(?im)(?:^|[\s;&|"'/\\])ssh(?:\.exe)?[ \t]+[^\n]*?-[A-Za-z]*L[ \t]*\S+[^\n]*`)
+	reUserAt   = regexp.MustCompile(`\b([A-Za-z0-9._\-\\]+)@([A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9\-]+)*)(?::(\d{1,5}))?\b`)
+	rePortFlag = regexp.MustCompile(`\s-[pP]\s*(\d{1,5})\b`)
+	reUNC      = regexp.MustCompile(`\\\\([A-Za-z0-9.\-]+)\\[^\s]+`)
+	reIPv4     = regexp.MustCompile(`\b((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?::(\d{1,5}))?\b`)
+	reFQDN     = regexp.MustCompile(`\b((?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63})(?::(\d{1,5}))?\b`)
 
 	reKVHost = regexp.MustCompile(`(?i)\b(?:host\s?name|host|server\s?name|server|ip\s?address|ip|address|endpoint|machine|node)\s*[:=]\s*([^\s,;)("'<>]+)`)
 	reKVPort = regexp.MustCompile(`(?i)\bport\s*(?:no\.?|number|#)?\s*[:=]?\s*(\d{1,5})\b`)
@@ -158,6 +160,12 @@ func parseChunk(s string) []Finding {
 	masked := s
 	var targets []Finding
 
+	for _, m := range reSSHCmd.FindAllStringIndex(masked, -1) {
+		if f, ok := fromSSHTunnel(s[m[0]:m[1]]); ok {
+			targets = append(targets, f)
+			masked = blank(masked, m[0], m[1])
+		}
+	}
 	for _, m := range reOracleTNS.FindAllStringSubmatchIndex(masked, -1) {
 		f := Finding{Protocol: "oracle", URL: s[m[0]:m[1]], Extra: map[string]string{}}
 		if m[2] >= 0 {
@@ -321,6 +329,73 @@ func parseChunk(s string) []Finding {
 		}
 	}
 	return targets
+}
+
+// fromSSHTunnel reads "ssh -N -L1522:10.1.2.3:1521 [-p 2222] user@jump" into
+// an SSH connection to the jump server with Tunnels filled in (as PuTTY's
+// Connection > SSH > Tunnels would hold them).
+func fromSSHTunnel(cmd string) (Finding, bool) {
+	toks := strings.Fields(strings.NewReplacer(`"`, " ", "'", " ").Replace(cmd))
+	i := 0
+	for i < len(toks) && !regexp.MustCompile(`(?i)(^|[/\\])ssh(\.exe)?$`).MatchString(toks[i]) {
+		i++
+	}
+	f := Finding{Protocol: "ssh", Extra: map[string]string{}}
+	var fws []string
+	const withArg = "BbcDEeFIiJLlmOopQRSWw"
+	for i++; i < len(toks); i++ {
+		t := toks[i]
+		if !strings.HasPrefix(t, "-") || len(t) < 2 {
+			if f.Host != "" {
+				break // the rest is a remote command
+			}
+			d := strings.TrimPrefix(t, "ssh://")
+			if at := strings.LastIndex(d, "@"); at >= 0 {
+				f.Username, d = d[:at], d[at+1:]
+			}
+			if h, p, ok := strings.Cut(d, ":"); ok && strings.HasPrefix(t, "ssh://") {
+				d = h
+				f.Port, _ = strconv.Atoi(p)
+			}
+			f.Host = d
+			continue
+		}
+		for j := 1; j < len(t); j++ {
+			c := t[j]
+			if !strings.ContainsRune(withArg, rune(c)) {
+				continue // -N, -f, -v, -T, -4 …
+			}
+			val := t[j+1:]
+			if val == "" && i+1 < len(toks) {
+				i++
+				val = toks[i]
+			}
+			switch c {
+			case 'L':
+				parts := strings.Split(val, ":")
+				if len(parts) >= 3 {
+					parts = parts[len(parts)-3:] // drop a bind address
+					fws = append(fws, strings.Join(parts, ":"))
+				}
+			case 'p':
+				f.Port, _ = strconv.Atoi(val)
+			case 'l':
+				f.Username = val
+			case 'i':
+				f.Extra["key_file"] = val
+			}
+			break
+		}
+	}
+	// Inside an ssh command any IP, short name or FQDN is a real server.
+	if len(fws) == 0 || !regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.\-]*[A-Za-z0-9])?$`).MatchString(f.Host) {
+		return Finding{}, false
+	}
+	if f.Port == 0 {
+		f.Port = 22
+	}
+	f.Extra["tunnels"] = strings.Join(fws, ", ")
+	return f, true
 }
 
 func fromURL(raw string) (Finding, bool) {

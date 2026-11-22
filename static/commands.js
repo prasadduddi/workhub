@@ -228,6 +228,15 @@ const CMD = (() => {
     if (/\b(wider|bigger|larger) cards?\b|\bcards? (wider|bigger|larger)\b/.test(s)) A('cardWidth', { delta: 80 });
     if (/\b(narrower|smaller|compact) cards?\b|\bcards? (narrower|smaller)\b|\bmore cards per row\b/.test(s)) A('cardWidth', { delta: -80 });
 
+    // Connection trees: "group putty by app", "group sql connections by env", "group unix servers by domain"
+    if ((m = s.match(/\b(?:group|organi[sz]e|arrange|sort|show)\s+(?:the\s+|my\s+)?(putty|ssh|unix|linux|terminal|filezilla|sftp|ftp|sql|db|database|oracle|postgres|connections?|servers?)\b[a-z\s]*?\s(?:by|per)\s+(folders?|projects?|env|envs|environments?|apps?|applications?|domains?|subnets?|sites?|types?|kinds?|my groups|groups?|users?|usernames?|logins?)\b/))) {
+      const pageTree = { terminal: 'ssh', files: 'sftp', sql: 'db' }[ctx.page];
+      const tree = /putty|ssh|unix|linux|terminal/.test(m[1]) ? ['ssh'] : /filezilla|sftp|ftp/.test(m[1]) ? ['sftp'] : /sql|db|database|oracle|postgres/.test(m[1]) ? ['db'] : pageTree ? [pageTree] : null;
+      if (tree) {
+      const g = [['folder', /^(folder|project)/], ['env', /^env/], ['app', /^app/], ['domain', /^(domain|subnet|site)/], ['type', /^(type|kind)/], ['group', /group/], ['user', /^(user|login)/]].find(([, r]) => r.test(m[2]))[0];
+      return [{ type: 'treeGroup', trees: tree, v: g }];
+      }
+    }
     if ((m = s.match(/\b(group|grouped|organi[sz]e|organi[sz]ed|arrange|arranged|categori[sz]e|split)\s+(them |it |everything |servers |bookmarks |links )?by\s+([a-z ]+?)(?=\s(and|then|sorted|sort|as|with|in|only)\b|\s*$)/))) {
       const g = findKey(' ' + m[3] + ' ', GROUPS)[0];
       const bg = /\b(app|application|apps|category|categories|smart|folder|folders|site|sites|domain)\b/.exec(m[3]);
@@ -434,6 +443,7 @@ const HELP = `Things you can say (in your own words — I understand synonyms an
 <b>Properties</b>  "go to properties" · "go to json schemas" — then drop files/folders, paste screenshots, Format/Check/Validate JSON
 <b>Links</b>  "open links in chrome" · "open links in edge" · "open links in default browser" (desktop version)
 <b>Work items</b>  "new work item PAY-123 refund limits" · "open work item PAY-123" · "list work items" — then paste screenshots, links and notes onto the page
+<b>Servers</b>  "group putty by app" · "group sql connections by env" · "group servers by domain" · "group filezilla by my groups"
 <b>Jira</b>  "add jira PAY-123" · "track PAY-123, PAY-130" · "refresh jira" · "go to jira"
 <b>Remember</b>  "save this view as Prod overview" · "open Prod overview" · "list my views" · "undo" · "reset"
 <b>Ask</b>  "how many prod servers" · "password for app-prod-01" · "user for jenkins"
@@ -505,6 +515,12 @@ async function runCommand(text) {
         const list = S.entries.filter(e => viewMatch(e, v));
         const hosts = new Set(list.map(e => e.host).filter(Boolean)).size;
         said.push(`${list.length} matching item${list.length === 1 ? '' : 's'} (${hosts} distinct host${hosts === 1 ? '' : 's'}).`); break;
+      }
+      case 'treeGroup': {
+        for (const t of a.trees) { try { localStorage.setItem('treeGroup_' + t, a.v); } catch { /* ignore */ } }
+        Tree.render(); show({ ssh: 'terminal', sftp: 'files', db: 'sql' }[a.trees[0]]);
+        said.push(`${{ ssh: 'PuTTY', sftp: 'FileZilla', db: 'SQL' }[a.trees[0]]} servers grouped by ${TREE_GROUPS[a.v].toLowerCase()}.`);
+        break;
       }
       case 'jiraAdd': show('jira'); await Jira.add(a.ref); said.push(`Added ${esc(a.ref.toUpperCase())} to the Jira page — its pull requests and ${esc(Jira.cfg?.child_prefix || 'CM-')} items appear under it.`); break;
       case 'jiraRefresh': show('jira'); $('#jiraRefreshAll').click(); said.push('Refreshing all Jira issues.'); break;

@@ -1026,13 +1026,61 @@ const Jobs = {
 // ---------- connection tree (Terminal + Files) ----------
 // Folders come from the project name ("Payments/Batch" nests), then the
 // environment. Drag a server onto a folder to move it.
+// Connection trees (PuTTY, FileZilla, SQL) can be grouped like bookmarks:
+// by your folders, environment, application (from the server name),
+// domain / IP subnet, type, your Groups, or login user. One choice per tree.
+const TREE_GROUPS = { folder: 'Folders', env: 'Env', app: 'App', domain: 'Domain / subnet', type: 'Type', group: 'My groups', user: 'User' };
+const ENV_WORD = /^(dev|devl?|uat|sit|qa|test|tst|stg|stage|staging|preprod|pre|pprd|prod|prd|live|dr|nonprod|np|int|perf|train|trn)\d*[a-z]?$/;
+const ROLE_WORD = /^(app|apps|web|db|dbs|srv|svr|server|node|host|vm|ap|ws|lx|lnx|linux|unix|ora|pg|sql|ftp|sftp|jump|bastion)\d*$/;
+function serverApp(e) {
+  const h = /^[\d.:]+$/.test(e.host || '') && e.name && e.name !== e.host ? e.name : (e.host || e.name || '');
+  if (/^[\d.:]+$/.test(h)) return 'IP addresses';
+  const parts = h.toLowerCase().split('.')[0].split(/[-_\s/]+/).filter(Boolean);
+  const keep = parts.filter(p => !ENV_WORD.test(p) && !/^\d+$/.test(p)).map(p => p.replace(/\d+$/, '')).filter(Boolean);
+  const named = keep.filter(p => !ROLE_WORD.test(p));
+  return (named.length ? named : keep.length ? keep : parts).slice(0, 2).join('-') || 'Other';
+}
+function serverDomain(e) {
+  const h = (e.host || '').toLowerCase();
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return h.split('.').slice(0, 3).join('.') + '.x';
+  return h.includes('.') ? h.split('.').slice(1).join('.') : 'Short names';
+}
+function serverType(e) {
+  const k = dbKindOf(e);
+  if (k) return k === 'oracle' ? 'Oracle' : 'PostgreSQL';
+  if (isFTP(e)) return (e.protocol || 'ftp').toUpperCase();
+  return /rdp|windows/i.test(e.protocol || '') ? 'Windows' : 'Unix / Linux';
+}
+const LAST_GROUPS = new Set(['Other', 'No environment', 'Not in a group', 'No user', 'Short names', 'IP addresses']);
+
 const Tree = {
   collapsed: new Set(JSON.parse(localStorage.getItem('treeCollapsed') || '[]')),
   selected: null,
+  groupMode(mode) { try { return localStorage.getItem('treeGroup_' + mode) || 'folder'; } catch { return 'folder'; } },
+  setGroupMode(mode, g) { try { localStorage.setItem('treeGroup_' + mode, g); } catch { /* ignore */ } this.render(); },
+
+  keysOf(e, g) {
+    switch (g) {
+      case 'env': return [e.env || 'No environment'];
+      case 'app': return [serverApp(e)];
+      case 'domain': return [serverDomain(e)];
+      case 'type': return [serverType(e)];
+      case 'user': return [e.username || 'No user'];
+      case 'group': { const t = Groups.entryText(e), gs = Groups.all().filter(x => Groups.matches(x, t)).map(x => x.name); return gs.length ? gs : ['Not in a group']; }
+    }
+    return [];
+  },
 
   build(q, mode) {
     const root = { kids: {}, items: [] };
     const want = { ssh: canSSH, sftp: canFiles, db: canDB }[mode];
+    const g = this.groupMode(mode);
+    if (g !== 'folder') {
+      for (const e of S.entries.filter(want).filter(e => matches(e, q)))
+        for (const k of this.keysOf(e, g))
+          (root.kids[k] ||= { name: k, key: `${mode}:${g}:${k}`, gmode: g, env: g === 'env' && k !== 'No environment' ? k : '', project: '', kids: {}, items: [] }).items.push(e);
+      return root;
+    }
     for (const e of S.entries.filter(want).filter(e => matches(e, q))) {
       let node = root, path = '';
       const parts = (e.project || 'General').split('/').map(s => s.trim()).filter(Boolean);
@@ -1050,12 +1098,15 @@ const Tree = {
 
   html(node, depth, q) {
     let out = '';
-    const kids = Object.entries(node.kids).sort(([a], [b]) => (a[0] === '#') - (b[0] === '#') || a.localeCompare(b));
+    const kids = Object.entries(node.kids).sort(([a, x], [b, y]) => (a[0] === '#') - (b[0] === '#') || LAST_GROUPS.has(a) - LAST_GROUPS.has(b)
+      || (x.gmode === 'env' ? (ENV_ORDER[a] ?? 9) - (ENV_ORDER[b] ?? 9) : 0) || a.localeCompare(b));
+    const icon = { app: '▦', domain: '🌐', type: '⚙', group: '◆', user: '👤' };
     for (const [, k] of kids) {
-      const key = k.project + (k.env ? '#' + k.env : '');
+      const key = k.key || k.project + (k.env ? '#' + k.env : '');
       const open = q || !this.collapsed.has(key);
-      out += `<div class="tnode folder" style="padding-left:${8 + depth * 14}px" data-key="${esc(key)}" data-project="${esc(k.project)}" data-env="${esc(k.env || '')}">
-        <span class="tw">${open ? '▾' : '▸'}</span>${k.env ? `<span class="badge ${esc(k.env)}">${esc(k.env)}</span>` : '📁 <span class="nm">' + esc(k.name) + '</span>'}<span class="n">${this.count(k)}</span></div>`;
+      const gc = k.gmode === 'group' && Groups.get(k.name);
+      out += `<div class="tnode folder" style="padding-left:${8 + depth * 14}px" data-key="${esc(key)}" data-project="${esc(k.project)}" data-env="${esc(k.env || '')}" data-gmode="${esc(k.gmode || 'folder')}">
+        <span class="tw">${open ? '▾' : '▸'}</span>${k.env ? `<span class="badge ${esc(k.env)}">${esc(k.env)}</span>` : (gc ? `<span class="gdot" style="background:${Groups.color(gc)}"></span>` : (icon[k.gmode] || '📁')) + ' <span class="nm">' + esc(k.name) + '</span>'}<span class="n">${this.count(k)}</span></div>`;
       if (open) out += this.html(k, depth + 1, q);
     }
     for (const e of node.items.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -1080,9 +1131,10 @@ const Tree = {
   render() {
     for (const host of $$('.tree-host')) {
       if (!host.firstChild) {
-        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><button data-tool="new" title="New connection">+</button><button data-tool="collapse" title="Collapse all">⊟</button></div><div class="tree"></div>`;
+        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="new" title="New connection">+</button><button data-tool="collapse" title="Collapse all">⊟</button></div><div class="tree"></div>`;
         this.wire(host);
       }
+      $('select[data-tool=groupby]', host).value = this.groupMode(host.dataset.mode);
       const q = $('input', host).value.trim().toLowerCase();
       $('.tree', host).innerHTML = this.html(this.build(q, host.dataset.mode), 0, q) || '<div class="empty">No servers yet.<br>Copy or paste some details, or press +.</div>';
     }
@@ -1093,8 +1145,9 @@ const Tree = {
   wire(host) {
     const mode = host.dataset.mode;
     $('input', host).addEventListener('input', () => this.render());
+    $('select[data-tool=groupby]', host).addEventListener('change', ev => this.setGroupMode(mode, ev.target.value));
     host.addEventListener('click', ev => {
-      const tool = ev.target.closest('[data-tool]')?.dataset.tool;
+      const tool = ev.target.closest('button[data-tool]')?.dataset.tool;
       if (tool === 'new') return openEntryDialog(null);
       if (tool === 'collapse') {
         $$('.tnode.folder', host).forEach(f => this.collapsed.add(f.dataset.key));
@@ -1135,7 +1188,7 @@ const Tree = {
     });
     host.addEventListener('dragover', ev => {
       const f = ev.target.closest('.tnode.folder');
-      if (!f || !ev.dataTransfer.types.includes('text/x-entry')) return;
+      if (!f || !ev.dataTransfer.types.includes('text/x-entry') || !['folder', 'env'].includes(f.dataset.gmode)) return;
       ev.preventDefault();
       $$('.tnode.drop', host).forEach(x => x.classList.remove('drop'));
       f.classList.add('drop');
@@ -1144,8 +1197,9 @@ const Tree = {
     host.addEventListener('drop', async ev => {
       const f = ev.target.closest('.tnode.folder');
       const e = byId(ev.dataTransfer.getData('text/x-entry'));
-      if (!f || !e) return;
+      if (!f || !e || !['folder', 'env'].includes(f.dataset.gmode)) return;
       ev.preventDefault();
+      if (f.dataset.gmode === 'env') return this.move(e, e.project, f.dataset.env);
       await this.move(e, f.dataset.project, f.dataset.env || e.env);
     });
   },
