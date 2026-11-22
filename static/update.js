@@ -59,7 +59,8 @@ $('#mainMenuBtn').onclick = () => {
   const r = $('#mainMenuBtn').getBoundingClientRect(), click = id => () => $(id).click();
   setTimeout(() => Tree.showMenu({ clientX: r.left, clientY: r.bottom + 4 }, [
     [Update.info?.newer ? `⬆ Install WorkHub ${Update.info.latest}…` : '⟳ Check for updates & install', () => Update.info?.newer ? Update.show() : Update.check(true)],
-    ["✨ What's new & tips", click('#whatsNewBtn')], '-',
+    ["✨ What's new & tips", click('#whatsNewBtn')],
+    [`🌓 Theme: ${{ auto: 'follow Windows', light: 'light', dark: 'dark' }[Theme.pref()]} — switch to ${{ auto: 'light', light: 'dark', dark: 'follow Windows' }[Theme.pref()]}`, () => Theme.set({ auto: 'light', light: 'dark', dark: 'auto' }[Theme.pref()])], '-',
     ['👤 Your profile', click('#profileBtn')], ['🔒 Lock (Ctrl+L)', click('#lockBtn')], '-',
     ['↗ Programs for “Open in”…', click('#extBtn')], ['🛟 Backups…', click('#backupBtn')], ['Import data…', click('#importBtn')], ['Data location…', click('#dataLocBtn')], '-',
     ['Quit WorkHub', click('#quitBtn')]]));

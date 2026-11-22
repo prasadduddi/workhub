@@ -5,6 +5,10 @@
 
 const RELEASES = [
   { v: '1.8', title: 'Organise and find faster, Jira browser sign-in, macros', items: [
+    ['🔑', 'Key / SSO logins', 'Edit a server and tick “Logs in with a key / SSO” (or use ⋯ / the Table bulk bar): it stops being flagged for a missing password.', 'dashboard'],
+    ['📋', 'No duplicate captures', 'Copying the same text again no longer adds another capture.', 'inbox'],
+    ['🌓', 'Light or dark', '☰ → Theme: follow Windows, light or dark.', ''],
+    ['💬', 'Ask moved to the top', 'The assistant button now sits at the top of the sidebar instead of floating over the page.', ''],
     ['🔒', 'Passwords hidden in captured text too', 'The Captured page, Groups and Details now mask passwords inside the text you captured (password:, pwd=, -pw, user:pass@, “user / password”). 👁 shows one; Show passwords shows all.', 'inbox'],
     ['⋯', 'Delete is tucked away, with Undo', 'Cards have a ⋯ menu (copy, duplicate, move, delete) instead of a red Delete button. After deleting, Undo puts it back.', 'dashboard'],
     ['🎛', 'One View menu', 'Dashboard: the search box has the full width; filters, grouping, layout, card size and passwords are under View ▾.', 'dashboard'],

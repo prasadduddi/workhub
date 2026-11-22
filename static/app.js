@@ -518,7 +518,7 @@ function problems(e) {
   if (!isConn(e)) return out; // web links: an unreachable page isn't missing information
   if (e.status === 'fail') out.push(['failing', 'Last connection failed' + (e.status_msg ? ': ' + e.status_msg : '')]);
   if (!e.username) out.push(['user', 'No username']);
-  else if (!e.has_password && !e.password && !e.key_file) out.push(['password', 'No password or key']);
+  else if (!e.has_password && !e.password && !e.key_file && e.extra?.auth !== 'key') out.push(['password', 'No password or key']);
   if (!e.env) out.push(['env', 'No environment']);
   if (canDB(e) && !dbService(e)?.name) out.push(['service', 'No service name / database']);
   return out;
@@ -903,7 +903,7 @@ function cardsHTML(items) {
 
 function warnChip(e) {
   const p = problems(e);
-  return p.length ? `<button class="warnchip" data-act="edit" data-id="${e.id}" title="${esc(p.map(x => '• ' + x[1]).join('\n'))}\nClick to fill in">⚠ ${p.length === 1 ? esc(p[0][1]) : p.length + ' to fix'}</button>` : '';
+  return p.length ? `<button class="warnchip" data-act="edit" data-id="${e.id}" title="${esc(p.map(x => '• ' + x[1]).join('\n'))}\nClick to fill in${p.some(x => x[0] === 'password') ? ' (or tick “Logs in with a key / SSO”)' : ''}">⚠ ${p.length === 1 ? esc(p[0][1]) : p.length + ' to fix'}</button>` : '';
 }
 
 function svcHTML(e) {
@@ -933,7 +933,7 @@ function svcHTML(e) {
     `<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
     `<button class="icon more" data-act="more" data-id="${e.id}" title="More: copy, duplicate, move, delete…">⋯</button>`,
   ].filter(Boolean).join('');
-  return `<div class="svc" data-detail="${e.id}" title="Click for full details">${rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('')}<div class="svc-actions">${acts}</div></div>`;
+  return `<div class="svc" data-detail="${e.id}" title="Click for full details">${rows.map(([k, v]) => k ? `<span class="k">${k}</span><span class="v">${v}</span>` : `<div class="svc-line">${v}</div>`).join('')}<div class="svc-actions">${acts}</div></div>`;
 }
 
 // Table columns: drag a header edge to resize (shared by every group's table).
@@ -1053,7 +1053,7 @@ const captureText = e => (c => c ? `${shortWhen(c.at)} · ${c.source ? sourceNam
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
 // Full details of one connection in a pop-up: every field with its own Copy button.
 // Every detail of an entry as [label, value] rows (details pop-up, Copy all).
-const EXTRA_LABELS = { commands: 'Commands after connecting', run_macros: 'Run macros' };
+const EXTRA_LABELS = { commands: 'Commands after connecting', run_macros: 'Run macros', auth: 'Login' };
 function detailRows(e) {
   const svc = dbService(e), when = t => t ? new Date(t).toLocaleString() : '';
   const rows = [
@@ -1063,7 +1063,7 @@ function detailRows(e) {
     [svc?.sid ? 'SID' : dbKindOf(e) === 'postgres' ? 'Database' : 'Service name', svc?.name],
     ['Username', e.username], ['Password', e.password], [e.status === 'ok' ? 'Other passwords' : 'Previous passwords', (e.prev_passwords || []).join('\n')],
     ['Key file', e.key_file], ['Last folder', e.last_dir],
-    ...Object.entries(e.extra || {}).filter(([k]) => !DB_KEYS.includes(k)).map(([k, v]) => EXTRA_LABELS[k] ? [EXTRA_LABELS[k], k === 'run_macros' ? 'yes' : v] : [k, v]),
+    ...Object.entries(e.extra || {}).filter(([k]) => !DB_KEYS.includes(k)).map(([k, v]) => EXTRA_LABELS[k] ? [EXTRA_LABELS[k], k === 'run_macros' ? 'yes' : k === 'auth' ? 'key / SSO (no password needed)' : v] : [k, v]),
     ['Tags', (e.tags || []).join(', ')], ['Notes', e.notes],
     ['Last used', when(e.last_used)],
     ...(e.captures?.length ? e.captures.slice().reverse().map((c, i) => [i ? 'Also captured' : 'Captured', `${when(c.at)} · ${sourceName(c)}`]) : [['Captured', captureText(e)]]),
@@ -1202,6 +1202,7 @@ $('#bulkBar').addEventListener('click', async ev => {
     case 'move': { const p = prompt('Move to folder (use / for subfolders):', Bulk.entries()[0]?.project || ''); if (p?.trim()) await Bulk.each('Moved', e => Bulk.save(e, { project: p.trim() })); break; }
     case 'tag': { const t = prompt('Add tag(s), comma separated:'); const add = (t || '').split(',').map(x => x.trim()).filter(Boolean); if (add.length) await Bulk.each('Tagged', e => Bulk.save(e, { tags: [...new Set([...(e.tags || []), ...add])] })); break; }
     case 'test': return retest(Bulk.entries());
+    case 'key': return Bulk.each('Marked as key login', e => Bulk.save(e, { extra: { ...(e.extra || {}), auth: 'key' } }));
     case 'delete': { const list = Bulk.entries(); if (list.length < 10 || confirm(`Delete ${list.length} entries?`)) { Bulk.picked.clear(); await deleteEntries(list); } break; }
     case 'clear': Bulk.picked.clear(); renderBoard(); break;
   }
@@ -1284,7 +1285,8 @@ async function openEntryDialog(e) {
   delete ex.tunnels; delete ex.tunnels_off; delete ex.tunnels_auto;
   f.commands.value = ex.commands || '';
   f.run_macros.checked = ex.run_macros === '1';
-  delete ex.commands; delete ex.run_macros;
+  f.key_auth.checked = ex.auth === 'key';
+  delete ex.commands; delete ex.run_macros; delete ex.auth;
   f.is_sid.checked = !!ex.sid && !(ex.service || ex.service_name || ex.database);
   for (const k of DB_KEYS) delete ex[k];
   f.extra.value = Object.entries(ex).map(([k, x]) => `${k}=${x}`).join('\n');
@@ -1331,6 +1333,7 @@ function entryFormBody() {
   const cmds = f.commands.value.replace(/\r/g, '').split('\n').map(l => l.trimEnd()).filter(l => l.trim()).join('\n');
   if (cmds) extra.commands = cmds;
   if (cmds && f.run_macros.checked) extra.run_macros = '1';
+  if (f.key_auth.checked) extra.auth = 'key';
   const db = f.dbname.value.trim();
   if (db && $('#dbNameRow').style.display !== 'none') {
     const p = f.protocol.value.trim().toLowerCase();
@@ -1387,15 +1390,24 @@ function renderClips() {
     const chips = (c.entry_ids || []).map(byId).filter(Boolean).map(e =>
       `<span class="chip" data-find="${esc(e.host || e.url || e.username)}">${linkLabel(e.url) ? esc(linkLabel(e.url)) + ' · ' : ''}${esc(e.username ? e.username + ' @ ' : '')}${esc(e.host || e.url || '')}${e.port ? ':' + e.port : ''}</span>`).join('');
     return `<div class="clip"><div class="clip-head"><span>${new Date(c.created).toLocaleString()}</span><span class="proto">${esc(c.source)}</span><span>${esc(c.project)}</span>
-      <span class="spacer"></span><button class="icon danger" data-del="${c.id}">Delete</button></div>
+      <span class="spacer"></span><button class="icon more" data-clipmore="${c.id}" title="Copy or delete this capture">⋯</button></div>
       <pre>${maskedText(c.text)}</pre><div class="chips">${chips || '<span class="muted tiny">no hosts or credentials recognised</span>'}</div></div>`;
   }).join('');
 }
 $('#clips').addEventListener('click', async e => {
   const chip = e.target.closest('[data-find]');
   if (chip) { $('#search').value = chip.dataset.find; $('#fProject').value = ''; $('#fEnv').value = ''; show('dashboard'); return renderBoard(); }
-  const del = e.target.closest('[data-del]');
-  if (del) { await api('DELETE', `/api/clips/${del.dataset.del}`); poll(); }
+  const more = e.target.closest('[data-clipmore]');
+  if (more) {
+    const c = S.clips.find(x => x.id === more.dataset.clipmore); if (!c) return;
+    const r = more.getBoundingClientRect();
+    setTimeout(() => Tree.showMenu({ clientX: r.left - 150, clientY: r.bottom }, [
+      ['Copy the text', () => copyText(c.text)],
+      ['Delete this capture', async () => {
+        await api('DELETE', `/api/clips/${c.id}`); poll();
+        toast('Capture deleted', false, async () => { await api('POST', '/api/ingest', { text: c.text, source: c.source, project: c.project }); poll(); toast('Restored'); });
+      }]]));
+  }
 });
 async function ingestPaste() {
   const text = $('#pasteText').value;
@@ -1650,6 +1662,11 @@ Remote.connect = async e => {
   }
 };
 
+$('#remotePane').addEventListener('click', e => {
+  const m = e.target.closest('[data-ftpmore]'); if (!m) return;
+  const r = m.getBoundingClientRect(), hidden = a => () => $(`#remotePane [data-act=${a}]`).click();
+  setTimeout(() => Tree.showMenu({ clientX: r.left - 120, clientY: r.bottom }, [['Rename…', hidden('rename')], ['Delete…', hidden('delete')]]));
+});
 $('#remotePane').addEventListener('click', async e => {
   const a = e.target.closest('[data-act]')?.dataset.act;
   if (!a || !Remote.sid) return;
@@ -1967,6 +1984,7 @@ const Tree = {
           catch (err) { toast(err.message, true); }
         }], ['Stop tunnels', async () => { await api('POST', `/api/tunnels/${e.id}/stop`); toast('Tunnels stopped' + (e.extra.tunnels_auto === '1' ? ' (they restart within a minute while "Start when WorkHub starts" is on)' : '')); Tunnels.load(); }], '-');
       }
+      if (problems(e).some(p => p[0] === 'password')) items.push(['🔑 Logs in with a key / SSO (no password)', async () => { await api('POST', '/api/entries', { ...entryInput(e), password: e.password, extra: { ...(e.extra || {}), auth: 'key' } }); poll(); toast(`${e.name}: marked as key login`); }]);
       items.push('-',
         ['Copy host', () => copyText(e.host)]);
       if (e.username) items.push(['Copy username', () => copyText(e.username)]);
@@ -2011,7 +2029,7 @@ const Chat = {
   toggle(force) {
     const c = $('#chat');
     c.hidden = force === undefined ? !c.hidden : !force;
-    $('#chatFab').hidden = !c.hidden;
+    $('#chatFab').classList.toggle('on', !c.hidden); // highlighted while the assistant is open
     if (!c.hidden) { $('#chatText').focus(); if (!$('#chatLog').children.length) this.help(true); }
   },
 
@@ -2211,7 +2229,7 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
     });
   },
 };
-$('#chatFab').onclick = () => Chat.toggle(true);
+$('#chatFab').onclick = () => Chat.toggle();
 $('#chatClose').onclick = () => Chat.toggle(false);
 $('#chatSend').onclick = () => { const t = $('#chatText').value; $('#chatText').value = ''; Chat.send(t); };
 $('#chatText').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#chatSend').click(); } });
@@ -2880,7 +2898,9 @@ $('#sqlCommit').onclick = () => SQL.tx('commit');
 $('#sqlRollback').onclick = () => SQL.tx('rollback');
 $('#sqlAuto').checked = (() => { try { return localStorage.getItem('sqlAuto') === '1'; } catch { return false; } })();
 $('#sqlAuto').onchange = e => { try { localStorage.setItem('sqlAuto', e.target.checked ? '1' : '0'); } catch { /* ignore */ } };
-$('#sqlObjToggle').onclick = () => $('.sql-grid').classList.toggle('no-objects');
+// The tree already lists each database's tables, so the right-hand list starts hidden (remembered).
+$('.sql-grid').classList.toggle('no-objects', (() => { try { return localStorage.getItem('sqlObjects') !== '1'; } catch { return true; } })());
+$('#sqlObjToggle').onclick = () => { const on = !$('.sql-grid').classList.toggle('no-objects'); try { localStorage.setItem('sqlObjects', on ? '1' : '0'); } catch { /* ignore */ } };
 SQL.cm = makeEditor($('#sqlEditorHost'), { mode: 'text/x-plsql' });
 SQL.cm.addKeyMap({ 'Ctrl-Enter': () => SQL.run(false), 'Cmd-Enter': () => SQL.run(false), 'F5': () => SQL.run(true) });
 document.addEventListener('keydown', e => { if (e.key === 'F5' && $('#view-sql').classList.contains('active') && SQL.active) { e.preventDefault(); SQL.run(true); } });
@@ -3381,9 +3401,16 @@ for (const [sel, k] of [['#termWrap', 'term'], ['.editor', 'editor'], ['.sql-lef
 
 // Sidebar
 const setSide = w => root.style.setProperty('--side-w', clamp(w, 170, 420) + 'px');
-setSide(store.get('sideW', 210));
+setSide(store.get('sideW', 236));
 Fonts.apply();
-document.body.classList.toggle('side-collapsed', store.get('sideCollapsed', false));
+// Narrow windows (under 1000px) show the sidebar as icons only.
+const narrowWin = matchMedia('(max-width: 1000px)');
+const applySide = () => {
+  document.body.classList.toggle('side-collapsed', narrowWin.matches || store.get('sideCollapsed', false));
+  if ($('#sideToggle')) $('#sideToggle').textContent = document.body.classList.contains('side-collapsed') ? '»' : '«';
+};
+applySide();
+narrowWin.addEventListener('change', () => { applySide(); fitActiveTerm(); });
 dragBar($('#sideSplit'), {
   start: () => $('.side').getBoundingClientRect().width,
   apply: setSide,
@@ -3391,7 +3418,7 @@ dragBar($('#sideSplit'), {
 });
 function toggleSide() {
   const c = document.body.classList.toggle('side-collapsed');
-  store.set('sideCollapsed', c);
+  if (!narrowWin.matches) store.set('sideCollapsed', c); // on a narrow window: just for now
   $('#sideToggle').textContent = c ? '»' : '«';
   fitActiveTerm();
 }

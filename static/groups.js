@@ -76,7 +76,7 @@ const Groups = {
         <span class="muted tiny">matches: ${g.patterns.map(p => `<code>${esc(p)}</code>`).join(' ')}</span><span class="spacer"></span>
         ${c.servers.some(canSSH) ? '<button data-ga="putty-all">Open all servers (SSH)</button>' : ''}
         ${c.links.length ? '<button data-ga="links-all">Open all links</button>' : ''}
-        <button data-ga="edit">Edit patterns</button><button data-ga="delete" class="danger">Delete group</button></div>
+        <button data-ga="edit">Edit patterns</button><button data-ga="more" class="icon more" title="More: delete this group">⋯</button></div>
       ${sec('Open windows', c.windows.length, c.windows.map((w, i) => `<div class="grow link" data-gw="${i}"><span class="proto">${w.kind}</span> ${esc(w.label)}</div>`).join(''))}
       ${sec('Servers & databases', c.servers.length, c.servers.map(e => row(e,
         `${canSSH(e) ? `<button class="icon" data-gs="ssh" data-id="${e.id}">SSH</button>` : ''}${canFiles(e) ? `<button class="icon" data-gs="files" data-id="${e.id}">FTP</button>` : ''}${canDB(e) ? `<button class="icon" data-gs="sql" data-id="${e.id}">SQL</button>` : ''}<button class="icon" data-gs="edit" data-id="${e.id}">Edit</button>`)).join(''))}
@@ -128,7 +128,13 @@ $('#groupMain').addEventListener('click', async e => {
   const a = e.target.closest('[data-ga]')?.dataset.ga;
   if (a === 'putty-all') return Groups.openAll('putty');
   if (a === 'links-all') return Groups.openAll('links');
-  if (a === 'delete' && confirm(`Delete group "${g.name}"? (Nothing inside it is deleted.)`)) return Groups.save(Groups.all().filter(x => x !== g));
+  if (a === 'more') {
+    const r = e.target.closest('[data-ga]').getBoundingClientRect(), before = Groups.all();
+    return setTimeout(() => Tree.showMenu({ clientX: r.left - 150, clientY: r.bottom }, [['Delete group (nothing inside is deleted)', async () => {
+      await Groups.save(before.filter(x => x !== g));
+      toast(`Group “${g.name}” deleted`, false, () => Groups.save(before));
+    }]]));
+  }
   if (a === 'edit') {
     const v = prompt('Patterns (comma separated; * wildcard, /regex/ allowed)', g.patterns.join(', '));
     if (v !== null) { g.patterns = v.split(',').map(x => x.trim()).filter(Boolean); return Groups.save(Groups.all()); }

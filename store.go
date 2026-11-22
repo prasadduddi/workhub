@@ -751,6 +751,18 @@ func entryKey(host string, port int, user, url string) string {
 
 // Ingest parses text, stores the clip and merges findings into entries.
 // Clipboard captures without findings are dropped unless CaptureAll is on.
+// seenClip: the same text (ignoring spacing) is among the recent captures.
+func (s *Store) seenClip(text string) bool {
+	norm := func(t string) string { return strings.Join(strings.Fields(t), " ") }
+	t := norm(text)
+	for i := len(s.st.Clips) - 1; i >= 0 && i >= len(s.st.Clips)-500; i-- {
+		if norm(s.st.Clips[i].Text) == t {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 	all := Parse(text)
 	s.mu.Lock()
@@ -766,6 +778,9 @@ func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 	}
 	if len(findings) == 0 && (source == "outlook" || (source == "clipboard" && !s.st.Settings.CaptureAll)) {
 		return nil, nil
+	}
+	if source == "clipboard" && s.seenClip(text) {
+		return nil, nil // copied the same text again: already captured
 	}
 	if source == "outlook-all" {
 		source = "outlook"
