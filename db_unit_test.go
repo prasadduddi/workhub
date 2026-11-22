@@ -33,3 +33,18 @@ func TestStatementKinds(t *testing.T) {
 		t.Errorf("dbName = %q %v", name, sid)
 	}
 }
+
+func TestDBKindByPort(t *testing.T) {
+	for port, want := range map[int]string{1521: "oracle", 1525: "oracle", 1529: "oracle", 2484: "oracle",
+		5432: "postgres", 5433: "postgres", 6432: "postgres", 1530: "", 22: "", 5440: ""} {
+		if got := dbKindByPort(port); got != want {
+			t.Errorf("port %d: got %q, want %q", port, got, want)
+		}
+	}
+	if dbKind(Entry{Host: "db", Port: 5434}) != "postgres" || dbKind(Entry{Host: "db", Port: 1523}) != "oracle" {
+		t.Error("dbKind should follow the port range")
+	}
+	if f := Parse("dbhost01.acme.local:5433"); len(f) == 0 || f[0].Protocol != "postgres" {
+		t.Errorf("parse 5433: %+v", f)
+	}
+}

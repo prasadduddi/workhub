@@ -74,6 +74,19 @@ var portProtocols = map[int]string{
 	9200: "elasticsearch", 2181: "zookeeper", 25: "smtp", 587: "smtp", 53: "dns",
 }
 
+// dbKindByPort guesses the database from the usual port ranges, so a host and
+// port are enough: Oracle listeners use 1521–1529 (2483/2484 with TCPS),
+// PostgreSQL 5432–5439 and 6432 (PgBouncer).
+func dbKindByPort(port int) string {
+	switch {
+	case port >= 1521 && port <= 1529, port == 2483, port == 2484:
+		return "oracle"
+	case port >= 5432 && port <= 5439, port == 6432:
+		return "postgres"
+	}
+	return ""
+}
+
 func Parse(text string) []Finding {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	var out []Finding
@@ -325,7 +338,7 @@ func parseChunk(s string) []Finding {
 	for i := range targets {
 		t := &targets[i]
 		if t.Protocol == "" && t.Port != 0 {
-			t.Protocol = portProtocols[t.Port]
+			t.Protocol = orDefault(portProtocols[t.Port], dbKindByPort(t.Port))
 		}
 	}
 	return targets

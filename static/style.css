@@ -113,7 +113,8 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .copy:hover { color: var(--accent); }
 .svc-actions { grid-column: 1 / -1; display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
 .star { cursor: pointer; color: var(--muted); } .star.on { color: #e0a800; }
-.ulabel { font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 4px; padding: 1px 6px; margin-right: 6px; }
+.ulabel { font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--lc, var(--accent)); background: color-mix(in srgb, var(--lc, var(--accent)) 14%, transparent); border-radius: 4px; padding: 1px 6px; margin-right: 6px; }
+.rname { color: var(--lc); font-weight: 600; }
 .tag { font-size: 11px; color: var(--muted); }
 
 table.tbl { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: var(--radius); table-layout: fixed; }
@@ -354,7 +355,7 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .tnode.topused .nm { font-weight: 600; }
 .tchip { font-size: 10.5px; border-radius: 4px; padding: 0 5px; margin-left: 4px; background: var(--panel2); color: var(--muted); white-space: nowrap; }
 .tchip.on { background: var(--ok); color: #fff; }
-.tnode .rlabel { font-size: 10.5px; border-radius: 4px; padding: 0 5px; background: var(--panel2); color: var(--muted); margin-left: 4px; }
+.tnode .rlabel { font-size: 10.5px; border-radius: 4px; padding: 0 5px; background: color-mix(in srgb, var(--lc, var(--muted)) 14%, transparent); color: var(--lc, var(--muted)); margin-left: 4px; }
 
 #backupDlg { width: min(560px, 94vw); }
 .backup-list { max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }

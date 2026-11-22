@@ -147,6 +147,9 @@ func (m *tunnelManager) byEntry(id string) *tunnelSet {
 }
 
 func (m *tunnelManager) servesPort(port int) bool {
+	if m == nil {
+		return false
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, t := range m.sets {

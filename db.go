@@ -95,13 +95,7 @@ func dbKind(e Entry) string {
 	case "postgres", "postgresql":
 		return "postgres"
 	}
-	switch e.Port {
-	case 1521, 1522:
-		return "oracle"
-	case 5432:
-		return "postgres"
-	}
-	return ""
+	return dbKindByPort(e.Port)
 }
 
 // dbName finds the Oracle service/SID or PostgreSQL database for an entry.

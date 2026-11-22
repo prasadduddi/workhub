@@ -200,6 +200,21 @@ function ruleLabel(hostOrURL) {
   const r = h && (S.settings.name_rules || []).find(x => x.match?.trim() && x.label?.trim() && h.includes(x.match.trim().toLowerCase()));
   return r ? r.label.trim() : '';
 }
+// Each naming-rule label gets its own colour (in rule order), so Batch,
+// Touchpoint, App… stand apart everywhere they appear.
+const RULE_COLORS = ['#2563eb', '#c2410c', '#7c3aed', '#059669', '#db2777', '#0891b2', '#65a30d', '#b45309', '#4f46e5', '#0d9488'];
+function ruleColor(label) {
+  if (!label) return '';
+  const labels = [...new Set((S.settings.name_rules || []).map(r => r.label?.trim()).filter(Boolean))];
+  const i = labels.indexOf(label);
+  return i < 0 ? '' : RULE_COLORS[i % RULE_COLORS.length];
+}
+const ruleStyle = hostOrURL => (c => c ? ` style="--lc:${c}"` : '')(ruleColor(ruleLabel(hostOrURL)));
+// A name like "Batch – host": the rule label part in its colour.
+function ruleName(e) {
+  const rl = ruleLabel(e.host || e.url), c = ruleColor(rl), n = e.name || '';
+  return c && n.startsWith(rl) ? `<b class="rname" style="--lc:${c}">${esc(rl)}</b>${esc(n.slice(rl.length))}` : esc(n);
+}
 function urlLabel(url) {
   if (!url) return '';
   if (labelCache.has(url)) return labelCache.get(url);
@@ -509,15 +524,26 @@ function renderViewChips() {
 }
 
 const isFTP = e => ['ftp', 'ftps'].includes(e.protocol) || (!e.protocol && e.port === 21);
-const canSSH = e => !!e.host && !isFTP(e) && (['', 'ssh', 'sftp', 'scp'].includes(e.protocol || '') || e.port === 22);
+const canSSH = e => !!e.host && !isFTP(e) && (['ssh', 'sftp', 'scp'].includes(e.protocol) || e.port === 22 || (!e.protocol && !dbKindByPort(+e.port)));
 const canFiles = e => canSSH(e) || (!!e.host && isFTP(e));
-const dbKindOf = e => ['oracle'].includes(e.protocol) || (!e.protocol && [1521, 1522].includes(e.port)) ? 'oracle'
-  : ['postgres', 'postgresql'].includes(e.protocol) || (!e.protocol && e.port === 5432) ? 'postgres' : '';
+// Usual port ranges (same as dbKindByPort in parse.go): Oracle 1521–1529 and
+// 2483/2484 (TCPS), PostgreSQL 5432–5439 and 6432 (PgBouncer).
+const dbKindByPort = p => (p >= 1521 && p <= 1529) || p === 2483 || p === 2484 ? 'oracle'
+  : (p >= 5432 && p <= 5439) || p === 6432 ? 'postgres' : '';
+const dbKindOf = e => e.protocol === 'oracle' ? 'oracle' : ['postgres', 'postgresql'].includes(e.protocol) ? 'postgres'
+  : !e.protocol ? dbKindByPort(+e.port) : '';
 const canDB = e => !!e.host && !!dbKindOf(e);
 // Service name / SID / database of a DB connection: { name, sid }.
 function dbService(e) {
   const x = e.extra || {}, svc = x.service || x.service_name || x.database || x.db_name || x.dbname;
   return svc ? { name: svc, sid: false } : x.sid ? { name: x.sid, sid: true } : null;
+}
+// JDBC string for a database connection, built from host, port and service/SID/database.
+function jdbcURL(e) {
+  if (!canDB(e)) return '';
+  const kind = dbKindOf(e), svc = dbService(e), port = e.port || (kind === 'oracle' ? 1521 : 5432);
+  if (kind === 'postgres') return `jdbc:postgresql://${e.host}:${port}/${svc?.name || ''}`;
+  return svc?.sid ? `jdbc:oracle:thin:@${e.host}:${port}:${svc.name}` : `jdbc:oracle:thin:@//${e.host}:${port}${svc ? '/' + svc.name : ''}`;
 }
 // Status dot: green = last connection/link check worked, red = failed, grey = not tried.
 function dot(e) {
@@ -591,9 +617,11 @@ function cardsHTML(items) {
 
 function svcHTML(e) {
   const rows = [];
-  const label = [dot(e), e.protocol && `<span class="proto">${esc(e.protocol)}</span>`, e.port && `<span class="proto">:${e.port}</span>`, e.name !== e.host ? esc(e.name) : ''].filter(Boolean).join(' ');
+  const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, e.name !== e.host ? ruleName(e) : ''].filter(Boolean).join(' ');
   if (label) rows.push(['', label]);
-  if (e.url) rows.push(['URL', `${linkLabel(e.url) ? `<span class="ulabel">${esc(linkLabel(e.url))}</span>` : ''}<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a> <button class="icon" data-copy="${esc(e.url)}">copy</button>`]);
+  if (e.url) rows.push(['URL', `${linkLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span>` : ''}<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a> <button class="icon" data-copy="${esc(e.url)}">copy</button>`]);
+  const jdbc = !/^jdbc:/i.test(e.url || '') && jdbcURL(e);
+  if (jdbc) rows.push(['JDBC', `<span class="copy" data-copy="${esc(jdbc)}" title="Copy">${esc(jdbc)}</span> <button class="icon" data-copy="${esc(jdbc)}">copy</button>`]);
   if (e.username) rows.push(['User', `<span class="copy" data-copy="${esc(e.username)}" title="Copy">${esc(e.username)}</span>`]);
   if (e.has_password) rows.push(['Password', `<span class="copy" data-copy="${esc(e.password)}" title="Copy">${esc(e.password)}</span>`]);
   if (e.key_file) rows.push(['Key', esc(e.key_file)]);
@@ -617,14 +645,14 @@ const TABLE_COLS = [['Env', 95], ['Name', 170], ['Host', 190], ['Port', 64], ['T
 function tableHTML(items) {
   const cell = [
     e => `${dot(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`,
-    e => esc(e.name),
+    e => ruleName(e),
     e => `<span class="copy" data-copy="${esc(e.host)}">${esc(e.host)}</span>`,
     e => e.port || '',
     e => esc(e.protocol),
-    e => `${linkLabel(e.url) ? `<span class="ulabel">${esc(linkLabel(e.url))}</span> ` : ''}${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a>` : ''}`,
+    e => `${linkLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span> ` : ''}${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a>` : jdbcURL(e) ? `<span class="copy" data-copy="${esc(jdbcURL(e))}" title="Copy">${esc(jdbcURL(e))}</span>` : ''}`,
     e => `<span class="copy" data-copy="${esc(e.username)}">${esc(e.username)}</span>`,
     e => `<span class="copy" data-copy="${esc(e.password)}">${esc(e.password)}</span>`,
-    e => `${canSSH(e) ? `<button class="icon" data-act="ssh" data-id="${e.id}">SSH</button> ` : ''}<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
+    e => `${canSSH(e) ? `<button class="icon" data-act="ssh" data-id="${e.id}">SSH</button> ` : ''}${canDB(e) ? `<button class="icon" data-act="sql" data-id="${e.id}">SQL</button> ` : ''}<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
   ];
   const hidden = S.view.hideCols.map(h => h.toLowerCase());
   const cols = TABLE_COLS.map((c, i) => i).filter(i => !hidden.includes((TABLE_COLS[i][0] || 'actions').toLowerCase()));
@@ -685,6 +713,7 @@ async function openEntryDialog(e) {
   $('#prevPw').textContent = '';
   const v = e || { project: S.settings.project };
   for (const k of ['name', 'project', 'host', 'port', 'protocol', 'env', 'url', 'username', 'key_file', 'notes']) f[k].value = v[k] || '';
+  delete f.protocol.dataset.auto;
   f.tags.value = (v.tags || []).join(', ');
   const ex = { ...(v.extra || {}) };
   f.dbname.value = ex.service || ex.service_name || ex.database || ex.db_name || ex.dbname || ex.sid || '';
@@ -707,12 +736,20 @@ $('#newEntry').onclick = () => openEntryDialog(null);
 const DB_KEYS = ['service', 'service_name', 'database', 'db_name', 'dbname', 'sid'];
 function dbFieldsVisible() {
   const f = $('#entryForm'), p = f.protocol.value.trim().toLowerCase(), port = +f.port.value;
-  const isDB = ['oracle', 'postgres', 'postgresql'].includes(p) || (!p && [1521, 1522, 5432].includes(port));
-  $('#dbNameRow').style.display = isDB ? '' : 'none';
-  $('#sidRow').style.display = isDB && (p === 'oracle' || (!p && port !== 5432)) ? '' : 'none';
+  const kind = dbKindOf({ protocol: p, port });
+  $('#dbNameRow').style.display = kind ? '' : 'none';
+  $('#sidRow').style.display = kind === 'oracle' ? '' : 'none';
 }
-$('#entryForm').protocol.addEventListener('input', dbFieldsVisible);
-$('#entryForm').port.addEventListener('input', dbFieldsVisible);
+// Typing a database port fills in Type (oracle/postgres) unless the user chose one.
+$('#entryForm').protocol.addEventListener('input', e => { delete e.target.dataset.auto; dbFieldsVisible(); });
+$('#entryForm').port.addEventListener('input', () => {
+  const f = $('#entryForm'), kind = dbKindByPort(+f.port.value);
+  if (!f.protocol.value.trim() || f.protocol.dataset.auto) {
+    f.protocol.value = kind;
+    if (kind) f.protocol.dataset.auto = '1'; else delete f.protocol.dataset.auto;
+  }
+  dbFieldsVisible();
+});
 
 function entryFormBody() {
   const f = $('#entryForm');
@@ -724,7 +761,7 @@ function entryFormBody() {
   const db = f.dbname.value.trim();
   if (db && $('#dbNameRow').style.display !== 'none') {
     const p = f.protocol.value.trim().toLowerCase();
-    extra[f.is_sid.checked ? 'sid' : (p === 'oracle' || (!p && +f.port.value !== 5432) ? 'service' : 'database')] = db;
+    extra[f.is_sid.checked ? 'sid' : dbKindOf({ protocol: p, port: +f.port.value }) === 'oracle' ? 'service' : 'database'] = db;
   }
   const body = {
     id: editing?.id || '', name: f.name.value, project: f.project.value, host: f.host.value, port: +f.port.value || 0,
@@ -1201,7 +1238,7 @@ const Tree = {
       const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
       const dbOpen = isDb && SQL.expanded.has(e.id);
       out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc(target)}">
-        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel">${esc(rl)}</span>` : '')(ruleLabel(e.host))}${canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${ruleName(e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
       if (dbOpen) {
         const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
         if (dbt) out += SQL.treeHTML(dbt, depth + 1);
@@ -1522,6 +1559,11 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
       if (['ftp', 'ftps'].includes(v) && (!p.value || p.value === '22')) p.value = 21;
       if (['ssh', 'sftp'].includes(v) && (!p.value || p.value === '21')) p.value = 22;
     });
+    // …and a database port picks oracle/postgres.
+    $('[data-f=port]', el).addEventListener('input', ev => {
+      const kind = dbKindByPort(+ev.target.value);
+      if (kind) $('[data-f=protocol]', el).value = kind;
+    });
     c.el = el;
     this.cards.push(c);
     $('#chatLog').append(el);
@@ -1559,7 +1601,7 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
     const res = S.entries.filter(e => matches(e, q)).slice(0, 12);
     if (!res.length) return this.say(`Nothing saved matches <code>${esc(q)}</code>.`);
     const d = this.say(`${res.length} match${res.length > 1 ? 'es' : ''}:\n` + res.map(e =>
-      `• <b>${esc(e.name)}</b>${linkLabel(e.url) ? ` <span class="ulabel">${esc(linkLabel(e.url))}</span>` : ''} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''} <span class="muted">${esc(e.username || '')}${e.username ? '@' : ''}${esc(e.host || e.url || '')}</span>
+      `• <b>${esc(e.name)}</b>${linkLabel(e.url) ? ` <span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span>` : ''} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''} <span class="muted">${esc(e.username || '')}${e.username ? '@' : ''}${esc(e.host || e.url || '')}</span>
    ${canSSH(e) ? `<button class="icon" data-t="${e.id}">PuTTY</button> ` : ''}${canFiles(e) ? `<button class="icon" data-fl="${e.id}">FileZilla</button> ` : ''}${e.password ? `<button class="icon" data-pw="${e.id}">copy password</button>` : ''}${e.url ? ` <button class="icon" data-url="${e.id}">open URL</button>` : ''}`).join('\n'));
     d.addEventListener('click', ev => {
       const b = ev.target.closest('button'); if (!b) return;
@@ -1691,7 +1733,7 @@ const Bookmarks = {
     return `<div class="bm env-${esc(e.env || '')}" data-bm="${e.id}" title="${esc(e.url)}">
       ${dot(e)}${avatar(label || e.name || e.host)}
       <div class="bm-body"><div class="bm-name">${esc(title)}</div>
-        <div class="bm-sub">${sub ? `<span class="ulabel">${esc(sub)}</span>` : ''}${esc(e.host)}${e.username ? ' · ' + esc(e.username) : ''}</div>
+        <div class="bm-sub">${sub ? `<span class="ulabel"${ruleStyle(e.url || e.host)}>${esc(sub)}</span>` : ''}${esc(e.host)}${e.username ? ' · ' + esc(e.username) : ''}</div>
         ${e.folder && this.mode !== 'folder' ? `<div class="bm-sub" title="${esc(e.folder)}">📁 ${esc(e.folder.split(' › ').slice(1).join(' › ') || e.folder)}</div>` : ''}</div>
       <div class="bm-meta">${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="n">${when}</span>
         <span class="bm-tools"><button class="icon" data-bmcopy="${e.id}" title="Copy URL">URL</button>${e.password ? `<button class="icon" data-bmpw="${e.id}" title="Copy password">pw</button>` : ''}<button class="icon" data-bmedit="${e.id}" title="Edit">✎</button>${e.hidden ? `<button class="icon" data-bmrestore="${e.id}" title="Show this bookmark again">↺ Restore</button>` : `<button class="icon danger" data-bmdel="${e.id}" title="Remove from WorkHub (your browser is not changed)">🗑</button>`}</span></div>
