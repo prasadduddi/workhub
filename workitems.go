@@ -22,6 +22,7 @@ type WorkItem struct {
 	Title   string       `json:"title"`
 	Status  string       `json:"status"` // todo, doing, blocked, done
 	Tags    []string     `json:"tags,omitempty"`
+	Jira    string       `json:"jira,omitempty"`  // linked Jira issue key, e.g. PAY-123 or CM-456
 	Blocks  []*Block     `json:"blocks"`          // older format, converted into Doc by the page
 	Doc     string       `json:"doc"`             // the free-form document (sanitised HTML)
 	Files   []Attachment `json:"files,omitempty"` // images/files placed in Doc or posts
@@ -85,11 +86,12 @@ func (s *Store) SaveWorkItem(in WorkItem) WorkItem {
 	now := time.Now()
 	if w := s.workItem(in.ID); w != nil {
 		w.Title, w.Status, w.Tags, w.Updated = orDefault(strings.TrimSpace(in.Title), w.Title), orDefault(in.Status, w.Status), in.Tags, now
+		w.Jira = jiraKeyOf(in.Jira)
 		s.changed()
 		return *w
 	}
 	w := &WorkItem{ID: randomHex(8), Title: orDefault(strings.TrimSpace(in.Title), "New work item"), Status: orDefault(in.Status, "todo"),
-		Tags: in.Tags, Blocks: []*Block{}, Created: now, Updated: now}
+		Tags: in.Tags, Jira: jiraKeyOf(in.Jira), Blocks: []*Block{}, Created: now, Updated: now}
 	s.st.WorkItems = append(s.st.WorkItems, w)
 	s.changed()
 	return *w
@@ -230,7 +232,7 @@ func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 	for _, wi := range a.store.WorkItems() {
 		n := map[string]int{}
 		var sb strings.Builder
-		sb.WriteString(strings.ToLower(wi.Title + " " + strings.Join(wi.Tags, " ")))
+		sb.WriteString(strings.ToLower(wi.Title + " " + strings.Join(wi.Tags, " ") + " " + wi.Jira))
 		doc := strings.ToLower(wi.Doc)
 		n["image"] += strings.Count(doc, "<img")
 		n["link"] += strings.Count(doc, "<a ")
@@ -253,7 +255,7 @@ func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 				sb.WriteString(" " + strings.ToLower(b.File.Name))
 			}
 		}
-		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "updated": wi.Updated,
+		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated,
 			"notes": n["text"], "links": n["link"], "images": n["image"], "files": n["file"], "posts": n["post"], "search": sb.String()})
 	}
 	writeJSON(w, out)
@@ -366,6 +368,12 @@ func (a *App) handleWorkAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, []Block{b})
+}
+
+// jiraKeyOf: "pay-123", a browse link or "PAY-123 refunds" → "PAY-123" ("" if none).
+func jiraKeyOf(s string) string {
+	k, _ := parseJiraRef(s)
+	return k
 }
 
 var (

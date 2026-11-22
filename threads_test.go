@@ -222,3 +222,25 @@ func TestImportDocxSplitsAtHeadings(t *testing.T) {
 		t.Fatalf("sections wrong: %q | %q | %q", w.Posts[0].HTML, w.Posts[1].HTML, w.Posts[2].HTML)
 	}
 }
+
+func TestThreadJiraLink(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	w := s.SaveWorkItem(WorkItem{Title: "Refunds", Jira: "https://acme.atlassian.net/browse/pay-123"})
+	if w.Jira != "PAY-123" {
+		t.Fatalf("link: %q", w.Jira)
+	}
+	w = s.SaveWorkItem(WorkItem{ID: w.ID, Title: "Refunds", Jira: ""})
+	if w.Jira != "" {
+		t.Fatal("unlink failed")
+	}
+	w = s.SaveWorkItem(WorkItem{ID: w.ID, Title: "Refunds", Jira: "CM-456"})
+	got, _ := s.GetWorkItem(w.ID)
+	b, _ := buildDocx(s, got)
+	imp, err := s.ImportDocx("x.docx", b)
+	if err != nil || imp.Jira != "CM-456" {
+		t.Fatalf("Jira key lost in the Word round trip: %v %q", err, imp.Jira)
+	}
+	if md, _ := s.threadMarkdown(got, ""); !strings.Contains(md, "Jira: CM-456") {
+		t.Fatal("Markdown lacks the Jira key")
+	}
+}

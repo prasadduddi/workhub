@@ -299,6 +299,9 @@ func buildDocx(s *Store, w WorkItem) ([]byte, error) {
 	if len(w.Tags) > 0 {
 		meta += "   ·   Tags: " + strings.Join(w.Tags, ", ")
 	}
+	if w.Jira != "" {
+		meta += "   ·   Jira: " + w.Jira
+	}
 	meta += "   ·   Updated: " + w.Updated.Format("2006-01-02 15:04")
 	d.para("Subtitle", d.run(meta, runStyle{}))
 	root, err := html.Parse(strings.NewReader("<html><body>" + s.threadHTML(w) + "</body></html>"))

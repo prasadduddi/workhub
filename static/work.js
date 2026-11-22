@@ -57,7 +57,7 @@ const Work = {
     const items = this.list.filter(w => !q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t)));
     $('#workList').innerHTML = items.map(w => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''}" data-work="${w.id}">
       <div class="tli-top"><span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>${w.id === this.active() ? '<span class="tcap" title="Captures are being added here">● capturing</span>' : ''}</div>
-      <b>${esc(w.title)}</b><small>${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} post${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`).join('')
+      <b>${esc(w.title)}</b><small>${w.jira && !w.title.toUpperCase().includes(w.jira) ? `◆ ${esc(w.jira)} · ` : ''}${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} post${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`).join('')
       || `<div class="muted tiny" style="padding:8px">${q ? 'No matches' : 'No task threads yet — press + New thread.'}</div>`;
   },
 
@@ -89,7 +89,7 @@ const Work = {
   async create(title) {
     title = title || prompt('Thread name (e.g. PAY-123 refund limits, CM-456 UAT release):', '');
     if (!title?.trim()) return null;
-    const w = await api('POST', '/api/work', { title: title.trim() });
+    const w = await api('POST', '/api/work', { title: title.trim(), jira: title }); // a key in the name links it
     await this.loadList();
     await this.open(w.id);
     setTimeout(() => $('#tbox')?.focus());
@@ -103,6 +103,43 @@ const Work = {
     toast(on ? `Captures now also go to “${w.title}”` : 'Captures no longer go to a thread');
   },
 
+  // The linked Jira issue: key, status and summary when it's tracked on the Jira page.
+  jiraChip(w) {
+    if (!w.jira) return '<button data-tact="jiralink" title="Link this thread to a Jira issue (its status shows here; the CM reminder and the Jira page open this thread)">◆ Link Jira…</button>';
+    const j = (typeof Jira !== 'undefined' ? Jira.issues : []).find(x => x.key === w.jira);
+    return `<span class="tjira" title="${esc(j ? j.summary || '' : 'Linked Jira issue')}"><button class="linklike" data-tact="jiraopen">◆ <b>${esc(w.jira)}</b></button>${j?.status ? `<span class="jstat${j.done ? ' done' : ''}">${esc(j.status)}</span>` : ''}<button class="icon" data-tact="jiralink" title="Change or remove the link">✎</button></span>`;
+  },
+  async linkJira() {
+    const w = this.current;
+    const guess = w.jira || (w.title.toUpperCase().match(/\b[A-Z][A-Z0-9_]+-\d+\b/) || [''])[0];
+    const v = prompt('Jira issue key or link for this thread (empty to remove the link):', guess);
+    if (v === null) return;
+    const key = (v.toUpperCase().match(/\b[A-Z][A-Z0-9_]+-\d+\b/) || [''])[0];
+    if (v.trim() && !key) return toast('That doesn\'t look like a Jira key (e.g. PAY-123)', true);
+    const r = await api('POST', '/api/work', { id: w.id, title: w.title, status: w.status, tags: w.tags || [], jira: key });
+    w.jira = r.jira || ''; this.render(); this.loadList();
+    if (key && typeof Jira !== 'undefined' && Jira.cfg?.base_url && !Jira.issues.some(x => x.key === key)) {
+      api('POST', '/api/jira', { ref: key }).then(() => Jira.load()).then(() => this.render()).catch(() => {}); // track it: status + CM items
+    }
+    toast(key ? `Linked to ${key}` : 'Jira link removed');
+  },
+  openJira() {
+    const w = this.current, j = Jira.issues.find(x => x.key === w.jira);
+    if (j) { show('jira'); Jira.sel = 'i:' + j.key; Jira.open.add(j.done ? 'f:done' : 'f:open'); return Jira.render(); }
+    if (Jira.cfg?.base_url) return openExternal(Jira.cfg.base_url.replace(/\/$/, '') + '/browse/' + w.jira);
+    toast('Set up Jira (Jira → Jira settings…) to open it', true);
+  },
+  // The thread for a Jira key (or a CM item's parent): open it, or start one.
+  byJira(...keys) { return this.list.find(w => w.jira && keys.includes(w.jira)); },
+  async forJira(key, summary) {
+    if (!this.list.length) await this.loadList();
+    const t = this.byJira(key);
+    if (t) return this.open(t.id);
+    const w = await api('POST', '/api/work', { title: `${key} ${summary || ''}`.trim(), jira: key, status: 'doing' });
+    await this.loadList(); await this.open(w.id); toast(`Started a thread for ${key}`);
+    setTimeout(() => $('#tbox')?.focus());
+  },
+
   render(scroll) {
     const w = this.current;
     if (!w) { $('#taskMain').innerHTML = '<div class="empty">Start a thread for a task, ticket or change — then post notes, paste screenshots, and let captures land in it.<br><br><button class="primary" data-tact="new">+ New thread</button></div>'; return; }
@@ -111,6 +148,7 @@ const Work = {
       <div class="thead">
         <input id="workTitle" class="wtitle" value="${esc(w.title)}" placeholder="Thread name">
         <select id="workStatus">${STATUSES.map(([v, l]) => `<option value="${v}" ${w.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+ ${this.jiraChip(w)}
         <button data-tact="capture" class="${capturing ? 'primary' : ''}" title="While on, everything Watch clipboard captures is also posted here">${capturing ? '● Capturing here' : '📥 Capture here'}</button>
         <span class="spacer"></span>
         <button data-tact="word" title="Open the Word copy (kept in the work-items folder)">Open in Word</button>
@@ -252,7 +290,7 @@ const Work = {
     const w = this.current;
     w.title = $('#workTitle').value; w.status = $('#workStatus').value;
     clearTimeout(this.headTimer);
-    this.headTimer = setTimeout(async () => { await api('POST', '/api/work', { id: w.id, title: w.title, status: w.status, tags: w.tags || [] }); this.loadList(); }, 600);
+    this.headTimer = setTimeout(async () => { await api('POST', '/api/work', { id: w.id, title: w.title, status: w.status, tags: w.tags || [], jira: w.jira || '' }); this.loadList(); }, 600);
   },
 };
 
@@ -316,6 +354,8 @@ page.addEventListener('click', async e => {
   if (!w) return;
   if (e.target.closest('#tsend')) return Work.send();
   if (act === 'capture') return Work.setCapture(w.id !== Work.active());
+  if (act === 'jiralink') return Work.linkJira();
+  if (act === 'jiraopen') return Work.openJira();
   if (act === 'word' || act === 'folder') {
     try { const r = await api('POST', `/api/work/${w.id}/word${act === 'folder' ? '?what=folder' : ''}`); toast(r.warning ? r.warning : act === 'word' ? 'Opening in Word: ' + r.path.split(/[\\/]/).pop() : 'Opened the work-items folder'); }
     catch (err) { toast(err.message, true); }

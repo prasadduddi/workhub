@@ -100,14 +100,14 @@ func (s *Store) ImportDocx(name string, data []byte) (WorkItem, error) {
 		return fmt.Sprintf(`<img src="/api/props/files/%s" alt="%s">`, at.ID, html.EscapeString(at.Name))
 	}
 
-	title, status, parts := parseDocx(doc, rels, image)
+	title, status, jira, parts := parseDocx(doc, rels, image)
 	title = strings.TrimSpace(orDefault(title, orDefault(core.Title, strings.TrimSuffix(path.Base(strings.ReplaceAll(name, `\`, "/")), path.Ext(name)))))
 	when := time.Now()
 	if t, err := time.Parse(time.RFC3339, core.Modified); err == nil {
 		when = t
 	}
 
-	w := s.SaveWorkItem(WorkItem{Title: title, Status: orDefault(status, "todo")})
+	w := s.SaveWorkItem(WorkItem{Title: title, Status: orDefault(status, "todo"), Jira: orDefault(jira, jiraKeyOf(title))})
 	for _, at := range stored {
 		_ = s.AddWorkFile(w.ID, at)
 	}
@@ -184,7 +184,7 @@ func (s *Store) ImportDocx(name string, data []byte) (WorkItem, error) {
 }
 
 // parseDocx turns document.xml into HTML paragraphs.
-func parseDocx(doc []byte, rels map[string]docxRel, image func(string) string) (title, status string, parts []docxPart) {
+func parseDocx(doc []byte, rels map[string]docxRel, image func(string) string) (title, status, jira string, parts []docxPart) {
 	dec := xml.NewDecoder(bytes.NewReader(doc))
 	var (
 		para, run   strings.Builder
@@ -358,6 +358,9 @@ func parseDocx(doc []byte, rels map[string]docxRel, image func(string) string) (
 				case style == "subtitle" && strings.HasPrefix(plain, "Status:") && len(table) == 0:
 					st := strings.TrimSpace(strings.SplitN(strings.TrimPrefix(plain, "Status:"), "·", 2)[0])
 					status = map[string]string{"To do": "todo", "In progress": "doing", "Blocked": "blocked", "Done": "done"}[st]
+					if k := strings.SplitN(plain, "Jira:", 2); len(k) == 2 {
+						jira = jiraKeyOf(k[1])
+					}
 					continue
 				}
 				if m := docxPostHead.FindStringSubmatch(plain); m != nil && runAllBold && runCount > 0 && len(table) == 0 {

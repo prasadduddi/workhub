@@ -322,6 +322,9 @@ func (s *Store) threadMarkdown(w WorkItem, assets string) (string, map[string]st
 	if len(w.Tags) > 0 {
 		b.WriteString(" · Tags: " + strings.Join(w.Tags, ", "))
 	}
+	if w.Jira != "" {
+		b.WriteString(" · Jira: " + w.Jira)
+	}
 	b.WriteString("\n\n")
 
 	replies := map[string][]*Post{}

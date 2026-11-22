@@ -55,7 +55,7 @@ const Cal = {
         if (!c.start || seen.has(c.key)) continue;
         seen.add(c.key);
         const s = new Date(c.start), en = c.end ? new Date(c.end) : null;
-        if ((en || s) >= from && s <= to) out.push({ kind: 'cm', title: `${c.key} ${c.summary}`, start: s, end: en, allDay: false, url: c.url, sub: `${c.status} · for ${j.key}`, key: c.key });
+        if ((en || s) >= from && s <= to) out.push({ kind: 'cm', title: `${c.key} ${c.summary}`, start: s, end: en, allDay: false, url: c.url, sub: `${c.status} · for ${j.key}`, key: c.key, parent: j.key });
       }
     }
     return out.sort((a, b) => a.start - b.start);
@@ -159,7 +159,7 @@ const Cal = {
   },
   popup(due) {
     $('#remBody').innerHTML = due.map(({ o, when }) => `<div class="cal-item k-${o.kind}"><div class="cal-time">${o.allDay ? 'All day' : this.hm(o.start) + (o.end ? '–' + this.hm(o.end) : '')}</div>
-      <div class="cal-body"><b>${esc(o.title)}</b><div class="muted tiny">${esc(when)}${o.sub ? ' · ' + esc(o.sub) : ''}</div>${o.url ? `<button class="icon" data-remurl="${esc(o.url)}">Open ↗</button>` : ''}</div></div>`).join('');
+      <div class="cal-body"><b>${esc(o.title)}</b><div class="muted tiny">${esc(when)}${o.sub ? ' · ' + esc(o.sub) : ''}</div>${o.url ? `<button class="icon" data-remurl="${esc(o.url)}">Open ↗</button>` : ''}${(t => t ? `<button class="icon" data-remthread="${t.id}" title="Open the task thread for this change">🧵 ${esc(t.title)}</button>` : '')(o.key && typeof Work !== 'undefined' && Work.byJira(o.key, o.parent))}</div></div>`).join('');
     $('#remCal').hidden = typeof Lock !== 'undefined' && Lock.shown;
     if ($('#remDlg').open) $('#remDlg').close();
     $('#remDlg').showModal(); // on top, even over the lock screen
@@ -196,7 +196,10 @@ $('#evCancel').onclick = () => $('#eventDlg').close();
 $('#evDelete').onclick = () => { $('#eventDlg').close(); Cal.del(Cal.editing, Cal.sel); };
 $('#remClose').onclick = () => $('#remDlg').close();
 $('#remCal').onclick = () => { $('#remDlg').close(); show('cal'); };
-$('#remBody').addEventListener('click', e => { const u = e.target.closest('[data-remurl]'); if (u) openExternal(u.dataset.remurl); });
+$('#remBody').addEventListener('click', e => {
+  const u = e.target.closest('[data-remurl]'); if (u) openExternal(u.dataset.remurl);
+  const t = e.target.closest('[data-remthread]'); if (t) { $('#remDlg').close(); Work.open(t.dataset.remthread); }
+});
 Cal.load();
 setInterval(() => Cal.remindTick(), 30000);
 setTimeout(() => Cal.remindTick(), 5000);

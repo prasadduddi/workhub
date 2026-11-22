@@ -31,6 +31,9 @@ type Post struct {
 // its first post. The originals are kept in the data file untouched.
 func (s *Store) migrateThreads() {
 	for _, w := range s.st.WorkItems {
+		if w.Jira == "" {
+			w.Jira = jiraKeyOf(w.Title) // "PAY-123 refunds" is linked to PAY-123
+		}
 		if len(w.Posts) > 0 {
 			continue
 		}
