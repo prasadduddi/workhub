@@ -155,7 +155,7 @@ func TestParseSSHTunnelCommand(t *testing.T) {
 		in, host, user, tunnels string
 		port                    int
 	}{
-		{"ssh -N -L1522:10.0.20.15:1521 jdoe@10.0.10.5", "10.0.10.5", "jdoe", "1522:10.0.20.15:1521", 22},
+		{"ssh -N -L1522:198.51.100.15:1521 jdoe@192.0.2.10", "192.0.2.10", "jdoe", "1522:198.51.100.15:1521", 22},
 		{"ssh -N -L 1522:dbhost:1521 jumpbox", "jumpbox", "", "1522:dbhost:1521", 22},
 		{"C:\\> ssh.exe -fN -L 5433:pg01.corp.local:5432 -L 127.0.0.1:1522:ora01:1521 -p 2222 -i C:\\keys\\id_rsa -l ops jump.corp.local", "jump.corp.local", "ops", "5433:pg01.corp.local:5432, 1522:ora01:1521", 2222},
 	} {
@@ -178,8 +178,8 @@ func TestParseSSHTunnelCommand(t *testing.T) {
 	}
 	// Pasting it creates the jump server with the tunnel, ready to use.
 	st, _ := OpenStore(t.TempDir())
-	_, touched := st.Ingest("ssh -N -L1522:10.0.20.15:1521 jdoe@10.0.10.5", "paste", "General")
-	if len(touched) != 1 || touched[0].Extra["tunnels"] != "1522:10.0.20.15:1521" || touched[0].Username != "jdoe" {
+	_, touched := st.Ingest("ssh -N -L1522:198.51.100.15:1521 jdoe@192.0.2.10", "paste", "General")
+	if len(touched) != 1 || touched[0].Extra["tunnels"] != "1522:198.51.100.15:1521" || touched[0].Username != "jdoe" {
 		t.Fatalf("%+v", touched)
 	}
 }

@@ -24,7 +24,7 @@ var (
 	// Oracle TNS form: jdbc:oracle:thin:[user/pass]@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=h)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=s)))
 	reOracleTNS = regexp.MustCompile(`(?is)jdbc:oracle:thin:(?:([^/@\s]+)/([^@\s]+))?@\s*(\(\s*DESCRIPTION.*?\)\s*\)\s*\))`)
 	reTNSPart   = regexp.MustCompile(`(?i)\(\s*(HOST|PORT|SERVICE_NAME|SID)\s*=\s*([^)\s]+)\s*\)`)
-	// ssh tunnel commands: ssh -N -L1522:10.1.2.3:1521 user@jumphost
+	// ssh tunnel commands: ssh -N -L1522:192.0.2.3:1521 user@jumphost
 	reSSHCmd   = regexp.MustCompile(`(?im)(?:^|[\s;&|"'/\\])ssh(?:\.exe)?[ \t]+[^\n]*?-[A-Za-z]*L[ \t]*\S+[^\n]*`)
 	reUserAt   = regexp.MustCompile(`\b([A-Za-z0-9._\-\\]+)@([A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9\-]+)*)(?::(\d{1,5}))?\b`)
 	rePortFlag = regexp.MustCompile(`\s-[pP]\s*(\d{1,5})\b`)
@@ -344,7 +344,7 @@ func parseChunk(s string) []Finding {
 	return targets
 }
 
-// fromSSHTunnel reads "ssh -N -L1522:10.1.2.3:1521 [-p 2222] user@jump" into
+// fromSSHTunnel reads "ssh -N -L1522:192.0.2.3:1521 [-p 2222] user@jump" into
 // an SSH connection to the jump server with Tunnels filled in (as PuTTY's
 // Connection > SSH > Tunnels would hold them).
 func fromSSHTunnel(cmd string) (Finding, bool) {
