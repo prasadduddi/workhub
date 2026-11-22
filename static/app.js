@@ -213,7 +213,7 @@ const ruleStyle = hostOrURL => (c => c ? ` style="--lc:${c}"` : '')(ruleColor(ru
 // A name like "Batch – host": the rule label part in its colour.
 function ruleName(e) {
   const rl = ruleLabel(e.host || e.url), c = ruleColor(rl), n = e.name || '';
-  return c && n.startsWith(rl) ? `<b class="rname" style="--lc:${c}">${esc(rl)}</b>${esc(n.slice(rl.length))}` : esc(n);
+  return c && n.startsWith(rl) ? `<span><b class="rname" style="--lc:${c}">${esc(rl)}</b>${esc(n.slice(rl.length))}</span>` : esc(n);
 }
 function urlLabel(url) {
   if (!url) return '';
@@ -634,10 +634,11 @@ function svcHTML(e) {
     canFiles(e) && `<button class="icon" data-act="sftp" data-id="${e.id}">${isFTP(e) ? 'FTP' : 'SFTP'}</button>`,
     canDB(e) && `<button class="icon" data-act="sql" data-id="${e.id}">SQL</button>`,
     e.url && `<button class="icon" data-act="open" data-id="${e.id}">Open</button>`,
+    `<button class="icon" data-act="details" data-id="${e.id}">Details</button>`,
     `<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
     `<button class="icon danger" data-act="del" data-id="${e.id}">Delete</button>`,
   ].filter(Boolean).join('');
-  return `<div class="svc">${rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('')}<div class="svc-actions">${acts}</div></div>`;
+  return `<div class="svc" data-detail="${e.id}" title="Click for full details">${rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('')}<div class="svc-actions">${acts}</div></div>`;
 }
 
 // Table columns: drag a header edge to resize (shared by every group's table).
@@ -658,17 +659,21 @@ function tableHTML(items) {
   const cols = TABLE_COLS.map((c, i) => i).filter(i => !hidden.includes((TABLE_COLS[i][0] || 'actions').toLowerCase()));
   return `<table class="tbl"><colgroup>${cols.map(i => `<col style="width:var(--c${i}, ${TABLE_COLS[i][1]}px)">`).join('')}</colgroup>
     <thead><tr>${cols.map(i => `<th>${TABLE_COLS[i][0]}<span class="colgrip" data-col="${i}" title="Drag to resize · double-click to reset"></span></th>`).join('')}</tr></thead><tbody>` +
-    items.map(e => `<tr>${cols.map(i => `<td>${cell[i](e)}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
+    items.map(e => `<tr data-detail="${e.id}" title="Click for full details">${cols.map(i => `<td>${cell[i](e)}</td>`).join('')}</tr>`).join('') + '</tbody></table>';
 }
 
 $('#board').addEventListener('click', async ev => {
   const c = ev.target.closest('[data-copy]');
   if (c) return copyText(c.dataset.copy);
   const b = ev.target.closest('[data-act]');
-  if (!b) return;
+  if (!b) {
+    const d = !ev.target.closest('a, button, input') && ev.target.closest('[data-detail]');
+    return d && showDetails(byId(d.dataset.detail));
+  }
   const e = byId(b.dataset.id);
   try {
     switch (b.dataset.act) {
+      case 'details': return showDetails(e);
       case 'ssh': return Term.open(e);
       case 'sftp': return Remote.connect(e);
       case 'sql': return SQL.open(e);
@@ -685,6 +690,39 @@ $('#board').addEventListener('click', async ev => {
     }
   } catch (err) { toast(err.message, true); }
 });
+
+// Full details of one connection in a pop-up: every field with its own Copy button.
+function showDetails(e) {
+  if (!e) return;
+  const svc = dbService(e), when = t => t ? new Date(t).toLocaleString() : '';
+  const rows = [
+    ['Name', e.name], ['Host', e.host], ['Port', e.port || ''], ['Type', e.protocol || dbKindOf(e)],
+    ['Environment', e.env], ['Project', e.project], ['Naming rule', ruleLabel(e.host || e.url)],
+    ['URL', e.url], ['JDBC', /^jdbc:/i.test(e.url || '') ? '' : jdbcURL(e)],
+    [svc?.sid ? 'SID' : dbKindOf(e) === 'postgres' ? 'Database' : 'Service name', svc?.name],
+    ['Username', e.username], ['Password', e.password], ['Previous passwords', (e.prev_passwords || []).join('\n')],
+    ['Key file', e.key_file], ['Last folder', e.last_dir],
+    ...Object.entries(e.extra || {}).filter(([k]) => !DB_KEYS.includes(k)).map(([k, v]) => [k, v]),
+    ['Tags', (e.tags || []).join(', ')], ['Notes', e.notes],
+    ['Last used', when(e.last_used)], ['Added', when(e.created)], ['Status', e.status ? `${e.status === 'ok' ? 'Worked' : 'Failed'} · ${when(e.status_at)}${e.status_msg ? '\n' + e.status_msg : ''}` : ''],
+  ].filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '');
+  showDetails.text = rows.map(([k, v]) => `${k}: ${v}`).join('\n');
+  $('#detailTitle').innerHTML = `${ruleName(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`;
+  $('#detailBody').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span><button class="icon" data-copy="${esc(v)}">Copy</button>`).join('');
+  $('#detailActs').innerHTML = [
+    canSSH(e) && ['ssh', 'SSH'], canFiles(e) && ['sftp', isFTP(e) ? 'FTP' : 'SFTP'], canDB(e) && ['sql', 'SQL'], e.url && !/^jdbc:/i.test(e.url) && ['open', 'Open'], ['edit', 'Edit'],
+  ].filter(Boolean).map(([a, t]) => `<button data-dact="${a}">${t}</button>`).join('');
+  showDetails.entry = e;
+  $('#detailDlg').showModal();
+}
+$('#detailDlg').addEventListener('click', ev => {
+  const c = ev.target.closest('[data-copy]'); if (c) return copyText(c.dataset.copy);
+  const a = ev.target.closest('[data-dact]'); if (!a) return;
+  const e = showDetails.entry; $('#detailDlg').close();
+  ({ ssh: () => Term.open(e), sftp: () => Remote.connect(e), sql: () => SQL.open(e), open: () => openURL(e), edit: () => openEntryDialog(e) })[a.dataset.dact]();
+});
+$('#detailCopyAll').onclick = () => copyText(showDetails.text);
+$('#detailClose').onclick = () => $('#detailDlg').close();
 
 ['#search', '#fProject', '#fEnv'].forEach(s => $(s).addEventListener('input', renderBoard));
 for (const [id, key] of [['#groupBy', 'groupBy'], ['#layout', 'layout']]) {

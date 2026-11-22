@@ -55,7 +55,7 @@
         <button data-g="project" class="active">Project</button><button data-g="env">Env</button><button data-g="protocol">Type</button>
       </div>
       <div class="seg" id="layout">
-        <button data-l="cards" class="active">Cards</button><button data-l="table">Table</button>
+        <button data-l="cards" class="active" title="Tiles">▦ Cards</button><button data-l="table" title="Grid">☰ Table</button>
       </div>
       <label class="cardw muted tiny" title="Card width (Cards view)">▭ <input type="range" id="cardWidth" min="240" max="700" step="10"></label>
       <button id="newEntry" class="primary">+ New</button>
@@ -345,6 +345,11 @@
 <datalist id="protoList"><option>ssh</option><option>postgres</option><option>https</option><option>http</option><option>rdp</option><option>oracle</option><option>postgres</option><option>mysql</option><option>sqlserver</option><option>ftp</option><option>smb</option><option>ldap</option></datalist>
 <datalist id="envList"><option>PROD</option><option>UAT</option><option>TEST</option><option>STAGE</option><option>DEV</option><option>DR</option></datalist>
 
+<dialog id="detailDlg" class="detail-dlg">
+  <h3 id="detailTitle"></h3>
+  <div id="detailBody" class="detail-grid"></div>
+  <div class="row end" style="margin-top:12px"><span id="detailActs" class="row"></span><span class="spacer"></span><button id="detailCopyAll">Copy all</button><button id="detailClose" class="primary">Close</button></div>
+</dialog>
 <dialog id="backupDlg">
   <h3>🛟 Backups</h3>
   <div class="muted tiny">Made automatically when WorkHub starts and every morning — only when something changed. The newest 30 are kept, in a folder <b>next to</b> your data folder (so they survive if the data folder is lost):</div>

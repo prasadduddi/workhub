@@ -104,7 +104,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; color: #fff; background: var(--dr); letter-spacing: .3px; }
 .badge.PROD { background: var(--prod); } .badge.UAT { background: var(--uat); } .badge.TEST { background: var(--test); }
 .badge.STAGE { background: var(--stage); } .badge.DEV { background: var(--dev); }
-.proto { font-size: 11px; font-family: var(--mono); background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+.proto { white-space: nowrap; flex-shrink: 0; font-size: 11px; font-family: var(--mono); background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
 .svc { border-top: 1px dashed var(--border); padding-top: 6px; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; align-items: center; }
 .svc .k { color: var(--muted); font-size: 12px; }
 .svc .v { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; display: flex; align-items: center; gap: 6px; }
@@ -604,3 +604,11 @@ dialog label.check { flex-direction: row; align-items: center; gap: 6px; }
   .tree-host { max-height: 260px; }
   .cards { grid-template-columns: 1fr; }
 }
+
+/* Details pop-up (click a result) */
+dialog.detail-dlg { width: min(760px, 96vw); }
+.detail-grid { display: grid; grid-template-columns: max-content 1fr max-content; gap: 6px 10px; align-items: center; max-height: 65vh; overflow: auto; }
+.detail-grid .k { color: var(--muted); font-size: 12px; }
+.detail-grid .v { font-family: var(--mono, ui-monospace, Consolas, monospace); overflow-wrap: anywhere; user-select: text; white-space: pre-wrap; padding: 4px 8px; background: var(--panel2); border-radius: 6px; }
+.svc[data-detail], tr[data-detail] { cursor: pointer; }
+tr[data-detail]:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
