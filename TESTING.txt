@@ -88,3 +88,4 @@ v1.6 checks
   [ ] Copy an  ssh -N -L1522:<db host>:1521 user@<jump host>  command → an SSH connection with that tunnel appears
   [ ] Folders (replaces Properties): + adds a folder, + New file, Upload / drop files and whole folders, edit with Ctrl+S,
       JSON Format/Check/Validate; old Properties content is under "From Properties"; files are plain files in <data>\reference
+  [ ] Bookmarks → 🏷 Naming rules… (or 🏷 in a server tree): paste "-BAT- Batch, -BAR- Barn, …" → matching servers/links renamed (this workspace only)

@@ -44,3 +44,49 @@ func TestBulk(t *testing.T) {
 		t.Fatal("unknown action should fail")
 	}
 }
+
+func TestNameRules(t *testing.T) {
+	st, _ := OpenStore(t.TempDir())
+	_, got := st.Ingest("ssh ops@pay-bat-01.corp.local\nhttps://pay-tpp-02.corp.local/console\nhttps://other.corp.local/x", "paste", "General")
+	if len(got) != 3 {
+		t.Fatalf("%+v", got)
+	}
+	set := st.Settings()
+	set.NameRules = []NameRule{{"-BAT-", "Batch"}, {"-TPP-", "Touchpoint"}, {"-APP-", "App/Picasso"}}
+	st.SetSettings(set)
+	names := map[string]string{}
+	for _, e := range st.Entries() {
+		names[e.Host] = e.Name
+	}
+	if names["pay-bat-01.corp.local"] != "Batch – pay-bat-01.corp.local" || names["pay-tpp-02.corp.local"] != "Touchpoint – pay-tpp-02.corp.local" || names["other.corp.local"] != "other.corp.local" {
+		t.Fatalf("%v", names)
+	}
+	// A name the user typed is kept; new captures are named straight away.
+	var bat EntryView
+	for _, e := range st.Entries() {
+		if e.Host == "pay-bat-01.corp.local" {
+			bat = e
+		}
+	}
+	in := EntryInput{ID: bat.ID, Name: "My batch box", Host: bat.Host, Port: bat.Port, Protocol: bat.Protocol, Username: bat.Username, Project: bat.Project}
+	st.SaveEntry(in)
+	_, got = st.Ingest("sftp://x@crm-app-01.corp.local", "paste", "General")
+	set.NameRules = append(set.NameRules, NameRule{"-BAR-", "Barn"})
+	st.SetSettings(set)
+	for _, e := range st.Entries() {
+		if e.Host == "pay-bat-01.corp.local" && e.Name != "My batch box" {
+			t.Fatalf("user's name changed: %q", e.Name)
+		}
+		if e.Host == "crm-app-01.corp.local" && e.Name != "App/Picasso – crm-app-01.corp.local" {
+			t.Fatalf("new capture: %q", e.Name)
+		}
+	}
+	// Removing the rules restores plain names.
+	set.NameRules = nil
+	st.SetSettings(set)
+	for _, e := range st.Entries() {
+		if e.Host == "pay-tpp-02.corp.local" && e.Name != "pay-tpp-02.corp.local" {
+			t.Fatalf("not restored: %q", e.Name)
+		}
+	}
+}

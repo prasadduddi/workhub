@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -80,6 +81,13 @@ type Settings struct {
 	BlockedSites  []string     `json:"blocked_sites"`
 	LinkBrowser   string       `json:"link_browser"` // desktop version: chrome (default), edge or default
 	Mail          MailSettings `json:"mail"`
+	NameRules     []NameRule   `json:"name_rules,omitempty"` // e.g. -BAT- → Batch (this workspace only)
+}
+
+// NameRule names servers and links whose host name contains Match.
+type NameRule struct {
+	Match string `json:"match"`
+	Label string `json:"label"`
 }
 
 // Group gathers everything matching its patterns (see static/groups.js).
@@ -573,6 +581,7 @@ func (s *Store) SyncBookmarks(list []Bookmark) (added, removed int) {
 		changed = true
 	}
 	if changed {
+		s.applyNameRules()
 		s.changed()
 	}
 	return added, removed
@@ -729,6 +738,7 @@ func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 		clip.EntryIDs = append(clip.EntryIDs, e.ID)
 		touched = append(touched, view(e))
 	}
+	s.applyNameRules()
 	s.st.Clips = append(s.st.Clips, clip)
 	if len(s.st.Clips) > maxClips {
 		s.st.Clips = s.st.Clips[len(s.st.Clips)-maxClips:]
@@ -924,7 +934,44 @@ func (s *Store) SetSettings(st Settings) {
 		st.Project = "General"
 	}
 	s.st.Settings = st
+	s.applyNameRules()
 	s.changed()
+}
+
+// ruleLabel: the label of the first naming rule whose text is in the
+// entry's host name (or its URL's host), ignoring case.
+func ruleLabel(rules []NameRule, e *Entry) string {
+	hosts := strings.ToLower(e.Host)
+	if u, err := url.Parse(e.URL); err == nil && u.Hostname() != "" {
+		hosts += " " + strings.ToLower(u.Hostname())
+	}
+	for _, r := range rules {
+		if m := strings.ToLower(strings.TrimSpace(r.Match)); m != "" && strings.TrimSpace(r.Label) != "" && strings.Contains(hosts, m) {
+			return strings.TrimSpace(r.Label)
+		}
+	}
+	return ""
+}
+
+// applyNameRules renames entries that still have an automatic name (the
+// host, or "<label> – <host>" from an earlier rule); names typed by the user
+// are left alone. Caller holds s.mu.
+func (s *Store) applyNameRules() {
+	for _, e := range s.st.Entries {
+		base := defaultName(e)
+		auto := e.Name == "" || e.Name == base || e.Name == e.Host || strings.HasSuffix(e.Name, " – "+base)
+		if !auto {
+			continue
+		}
+		name := base
+		if l := ruleLabel(s.st.Settings.NameRules, e); l != "" {
+			name = l + " – " + base
+		}
+		if e.Name != name {
+			e.Name = name
+			e.Updated = time.Now()
+		}
+	}
 }
 
 // ---- helpers ----

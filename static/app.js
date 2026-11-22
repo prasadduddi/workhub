@@ -172,6 +172,13 @@ for (const [cat, labels] of Object.entries({
 })) labels.forEach(l => (LABEL_CATEGORY[l] = cat));
 
 const labelCache = new Map();
+// Naming rules (this workspace): host name contains "-BAT-" → "Batch".
+function ruleLabel(hostOrURL) {
+  let h = String(hostOrURL || '').toLowerCase();
+  try { if (/^[a-z][a-z0-9+.-]*:\/\//.test(h)) h = new URL(h).hostname; } catch { /* keep as is */ }
+  const r = h && (S.settings.name_rules || []).find(x => x.match?.trim() && x.label?.trim() && h.includes(x.match.trim().toLowerCase()));
+  return r ? r.label.trim() : '';
+}
 function urlLabel(url) {
   if (!url) return '';
   if (labelCache.has(url)) return labelCache.get(url);
@@ -189,6 +196,8 @@ function urlLabel(url) {
       label = URL_LABELS.find(([re]) => re.test(s))?.[1] || '';
     } catch { /* not a URL */ }
   }
+  const rl = ruleLabel(url);
+  if (rl) label = label && label !== rl ? rl + ' · ' + label : rl;
   labelCache.set(url, label);
   return label;
 }
@@ -333,6 +342,7 @@ function renderSettings() {
 }
 async function saveSettings(patch) {
   S.settings = await api('PUT', '/api/settings', { ...S.settings, ...patch });
+  labelCache.clear();
   renderSettings();
 }
 $('#wsName').onclick = () => {
@@ -1034,6 +1044,8 @@ const TREE_GROUPS = { folder: 'Folders', env: 'Env', app: 'App', domain: 'Domain
 const ENV_WORD = /^(dev|devl?|uat|sit|qa|test|tst|stg|stage|staging|preprod|pre|pprd|prod|prd|live|dr|nonprod|np|int|perf|train|trn)\d*[a-z]?$/;
 const ROLE_WORD = /^(app|apps|web|db|dbs|srv|svr|server|node|host|vm|ap|ws|lx|lnx|linux|unix|ora|pg|sql|ftp|sftp|jump|bastion)\d*$/;
 function serverApp(e) {
+  const rl = ruleLabel(e.host) || ruleLabel(e.url);
+  if (rl) return rl;
   const h = /^[\d.:]+$/.test(e.host || '') && e.name && e.name !== e.host ? e.name : (e.host || e.name || '');
   if (/^[\d.:]+$/.test(h)) return 'IP addresses';
   const parts = h.toLowerCase().split('.')[0].split(/[-_\s/]+/).filter(Boolean);
@@ -1118,7 +1130,7 @@ const Tree = {
       const isDb = canDB(e), dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
       const dbOpen = isDb && SQL.expanded.has(e.id);
       out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc(target)}">
-        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel">${esc(rl)}</span>` : '')(ruleLabel(e.host))}${e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
       if (dbOpen) {
         const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
         if (dbt) out += SQL.treeHTML(dbt, depth + 1);
@@ -1132,7 +1144,7 @@ const Tree = {
   render() {
     for (const host of $$('.tree-host')) {
       if (!host.firstChild) {
-        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="new" title="New connection">+</button><button data-tool="collapse" title="Collapse all">⊟</button></div><div class="tree"></div>`;
+        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷</button><button data-tool="new" title="New connection">+</button><button data-tool="collapse" title="Collapse all">⊟</button></div><div class="tree"></div>`;
         this.wire(host);
       }
       $('select[data-tool=groupby]', host).value = this.groupMode(host.dataset.mode);
@@ -1150,6 +1162,7 @@ const Tree = {
     host.addEventListener('click', ev => {
       const tool = ev.target.closest('button[data-tool]')?.dataset.tool;
       if (tool === 'new') return openEntryDialog(null);
+      if (tool === 'rules') return openNameRules();
       if (tool === 'collapse') {
         $$('.tnode.folder', host).forEach(f => this.collapsed.add(f.dataset.key));
         return this.saveCollapsed();
@@ -1697,6 +1710,29 @@ Bookmarks.check = async (ids) => {
   } catch (err) { toast(err.message, true); }
 };
 $('#bmCheck').onclick = () => Bookmarks.check();
+// Naming rules editor. Accepts one rule per line ("-BAT- Batch",
+// "-BAT- = Batch", "-BAT-: Batch") or a pasted list "-BAT- Batch, -BAR- Barn".
+function parseNameRules(text) {
+  return text.split(/\n|,(?=\s*\S+\s*(?:=|:|\s)\s*\S)/).map(l => l.trim()).filter(Boolean).map(l => {
+    const m = /^(\S+?)\s*(?:=|:(?=\s)|\s)\s*(.+)$/.exec(l);
+    return m ? { match: m[1].trim(), label: m[2].trim() } : null;
+  }).filter(r => r && r.label);
+}
+function openNameRules() {
+  const d = $('#nameRulesDlg');
+  $('#nameRulesText').value = (S.settings.name_rules || []).map(r => `${r.match} = ${r.label}`).join('\n');
+  $('#nameRulesWs').textContent = S.settings.workspace || 'this workspace';
+  d.returnValue = ''; d.showModal();
+}
+$('#nameRulesDlg').addEventListener('close', async () => {
+  if ($('#nameRulesDlg').returnValue !== 'save') return;
+  const rules = parseNameRules($('#nameRulesText').value);
+  await saveSettings({ name_rules: rules });
+  await poll();
+  toast(`${rules.length} naming rule(s) saved — matching servers and links are renamed`);
+});
+$('#bmNameRules').onclick = openNameRules;
+
 $('#bmBlocked').onclick = async () => {
   const cur = (S.settings.blocked_sites || []).join(', ');
   const v = prompt('Sites never imported or captured in this workspace (comma separated, e.g. facebook.com, example.org).\nWell-known adult sites are always blocked.', cur);

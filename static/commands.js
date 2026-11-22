@@ -104,6 +104,10 @@ const CMD = (() => {
     if ((m = s.match(/\b(open|launch|show)\s+(the\s+)?(links?|urls?|bookmarks?)\s+(in|with|using)\s+(google chrome|chrome|edge|microsoft edge|(?:the\s+)?default( browser)?|my default browser)\b/)))
       return [{ type: 'linkBrowser', v: /chrome/.test(m[5]) ? 'chrome' : /edge/.test(m[5]) ? 'edge' : 'default' }];
 
+    // ---- naming rules: "name hosts containing -BAT- as Batch", "naming rules"
+    if ((m = raw.match(/^\s*(?:name|label|call)\s+(?:all\s+)?(?:the\s+)?(?:hosts?|servers?|links?|connections?|anything|everything)?\s*(?:with|containing|that contain|which contain|matching|having)\s+(\S+)\s+(?:in (?:the )?(?:host ?name|name)\s+)?(?:as|to)\s+["']?(.+?)["']?\s*$/i))) return [{ type: 'nameRule', match: m[1], label: m[2] }];
+    if (/^\s*(show |edit |open )?(the )?(naming|name) rules\s*$/.test(s)) return [{ type: 'nameRules' }];
+
     // ---- Jira ----
     if ((m = text.match(/^\s*(?:add|track|follow|watch)\s+(?:the\s+)?(?:jira\s*(?:issue|ticket)?s?\s+)?((?:[A-Za-z][A-Za-z0-9_]+-\d+|https?:\/\/\S+)(?:[\s,]+(?:and\s+)?(?:[A-Za-z][A-Za-z0-9_]+-\d+|https?:\/\/\S+))*)\s*(?:in|to)?\s*(?:jira)?\s*$/i))) return [{ type: 'jiraAdd', ref: m[1] }];
     if (/^\s*(refresh|update|sync)\s+(all\s+)?jira\b/.test(s)) return [{ type: 'jiraRefresh' }];
@@ -443,6 +447,7 @@ const HELP = `Things you can say (in your own words — I understand synonyms an
 <b>Folders</b>  "go to folders" — your own folder tree of JSON, YAML, properties… files: + adds folders, drop files/folders in, Format/Check/Validate JSON
 <b>Links</b>  "open links in chrome" · "open links in edge" · "open links in default browser" (desktop version)
 <b>Work items</b>  "new work item PAY-123 refund limits" · "open work item PAY-123" · "list work items" — then paste screenshots, links and notes onto the page
+<b>Names</b>  "name hosts containing -BAT- as Batch" · "naming rules"
 <b>Servers</b>  "group putty by app" · "group sql connections by env" · "group servers by domain" · "group filezilla by my groups"
 <b>Jira</b>  "add jira PAY-123" · "track PAY-123, PAY-130" · "refresh jira" · "go to jira"
 <b>Remember</b>  "save this view as Prod overview" · "open Prod overview" · "list my views" · "undo" · "reset"
@@ -522,6 +527,13 @@ async function runCommand(text) {
         said.push(`${{ ssh: 'PuTTY', sftp: 'FileZilla', db: 'SQL' }[a.trees[0]]} servers grouped by ${TREE_GROUPS[a.v].toLowerCase()}.`);
         break;
       }
+      case 'nameRule': {
+        const rules = (S.settings.name_rules || []).filter(r => r.match.toLowerCase() !== a.match.toLowerCase()).concat({ match: a.match, label: a.label });
+        await saveSettings({ name_rules: rules }); await poll();
+        said.push(`Servers and links whose host name contains <b>${esc(a.match)}</b> are now named <b>${esc(a.label)}</b> (this workspace only).`);
+        break;
+      }
+      case 'nameRules': openNameRules(); said.push('Opened the naming rules.'); break;
       case 'jiraAdd': show('jira'); await Jira.add(a.ref); said.push(`Added ${esc(a.ref.toUpperCase())} to the Jira page — its pull requests and ${esc(Jira.cfg?.child_prefix || 'CM-')} items appear under it.`); break;
       case 'jiraRefresh': show('jira'); $('#jiraRefreshAll').click(); said.push('Refreshing all Jira issues.'); break;
       case 'workNew': {

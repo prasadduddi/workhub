@@ -347,6 +347,9 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .rrow { cursor: pointer; } .rrow:hover { background: var(--panel2); }
 .tnode.rnode.drop { outline: 2px dashed var(--accent); outline-offset: -2px; }
 
+#nameRulesDlg { width: min(560px, 94vw); }
+.tnode .rlabel { font-size: 10.5px; border-radius: 4px; padding: 0 5px; background: var(--panel2); color: var(--muted); margin-left: 4px; }
+
 /* jira */
 .jira-layout { display: grid; grid-template-columns: minmax(320px, 40%) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
 #jiraDlg { width: min(520px, 94vw); } #jiraDlg label { margin-bottom: 8px; }
