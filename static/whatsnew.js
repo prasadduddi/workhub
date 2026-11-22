@@ -4,6 +4,11 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.8', title: 'Macros, Open in, quicker folders', items: [
+    ['▶', 'Run macros', 'Edit an SSH connection → “Commands to run after connecting” (one per line) and tick Run macros: they are typed in one by one each time the session connects.', 'terminal'],
+    ['↗', 'Open in the real programs from more places', 'Right-click a search result or a connection in the tree: Open in PuTTY / FileZilla for servers, SQL Developer (Oracle) or DBeaver for databases. The Edit dialog has the same buttons.', 'dashboard'],
+    ['➕', '+ on every folder', 'In Folders, each folder has its own + : add a sub-folder, a new file, or a link to a folder or file path right there.', 'ref'],
+  ] },
   { v: '1.7', title: 'Folders, naming rules, grouping and more', items: [
     ['📁', 'Folders (replaces Properties)', 'Your own folder tree of JSON, YAML, properties… files. + adds folders; drop files or whole folders in. Files are plain files that every version keeps; older copies and deleted items are kept too.', 'ref'],
     ['🔗', 'Link to a path', 'In Folders, “Link to a path…” shows a folder or file from anywhere (even a network share) without copying it.', 'ref'],

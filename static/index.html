@@ -352,6 +352,8 @@
       <label class="wide" id="tunnelRow" title="Like PuTTY Connection › SSH › Tunnels (local forwards). Started with this server's session, by right-click › Start tunnels, or automatically when a database at localhost:PORT needs one.">Tunnels (PuTTY-style)<input name="tunnels" placeholder="1522:dbhost:1521, 8443:app01:443"></label>
       <label class="check" id="tunnelOnRow" title="Untick to stop using these tunnels without losing them (e.g. when PuTTY already provides them)"><input type="checkbox" name="tunnels_on" checked> Use tunnels</label>
       <label class="check" title="Open these tunnels as soon as WorkHub starts and reconnect them if the connection drops — so SQL Developer, DBeaver etc. can use localhost:PORT any time. Needs the login saved on this server."><input type="checkbox" name="tunnels_auto"> Start when WorkHub starts</label>
+      <label class="wide" id="macroRow" title="Typed into the session one by one after login, each waiting for the previous one to finish — e.g. sudo su - appuser, cd /opt/app/logs, tail -f app.log. Lines starting with # are skipped.">Commands to run after connecting (one per line)<textarea name="commands" rows="3" placeholder="sudo su - appuser&#10;cd /opt/app/logs&#10;ls -ltr | tail"></textarea></label>
+      <label class="check" id="macroOnRow" title="Untick to keep the commands but connect without running them"><input type="checkbox" name="run_macros"> Run macros</label>
       <label class="wide">Private key file (OpenSSH format)<input name="key_file" placeholder="C:\Users\me\.ssh\id_rsa"></label>
       <label class="wide">Tags (comma separated)<input name="tags"></label>
       <label class="wide">Extra (key=value per line)<textarea name="extra" rows="2"></textarea></label>
@@ -359,7 +361,7 @@
       <label class="check"><input type="checkbox" name="favorite"> Pin to top</label>
     </div>
     <div id="prevPw" class="muted tiny"></div>
-    <div class="row end"><button type="button" id="testConn">Test connection</button><span id="testResult" class="test-result"></span><span class="spacer"></span><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div>
+    <div class="row end"><button type="button" id="testConn">Test connection</button><span id="testResult" class="test-result"></span><span id="entryOpenIn" class="row"></span><span class="spacer"></span><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div>
   </form>
 </dialog>
 <datalist id="protoList"><option>ssh</option><option>postgres</option><option>https</option><option>http</option><option>rdp</option><option>oracle</option><option>postgres</option><option>mysql</option><option>sqlserver</option><option>ftp</option><option>smb</option><option>ldap</option></datalist>

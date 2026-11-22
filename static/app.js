@@ -671,7 +671,7 @@ function svcHTML(e) {
   if (e.has_password) rows.push(['Password', pwHTML(e.password)]);
   if (e.key_file) rows.push(['Key', esc(e.key_file)]);
   if (e.last_dir) rows.push(['Last folder', `<span class="copy" data-copy="${esc(e.last_dir)}">${esc(e.last_dir)}</span>`]);
-  Object.entries(e.extra || {}).forEach(([k, v]) => rows.push([esc(k), `<span class="copy" data-copy="${esc(v)}">${esc(v)}</span>`]));
+  Object.entries(e.extra || {}).filter(([k]) => k !== 'run_macros').forEach(([k, v]) => rows.push([esc(EXTRA_LABELS[k] || k) + (k === 'commands' ? (e.extra.run_macros === '1' ? ' ▶' : ' (off)') : ''), `<span class="copy" data-copy="${esc(v)}" style="white-space:pre-wrap">${esc(v)}</span>`]));
   if (e.tags?.length) rows.push(['Tags', `<span class="tag">${e.tags.map(esc).join(', ')}</span>`]);
   if (e.notes) rows.push(['Notes', `<span class="muted">${esc(e.notes)}</span>`]);
   if (captureText(e)) rows.push(['Captured', `<span class="muted tiny">${esc(captureText(e))}</span>`]);
@@ -710,6 +710,11 @@ function tableHTML(items) {
     items.map(e => `<tr data-detail="${e.id}" title="Click for full details">${cols.map(i => `<td>${cell[i](e)}</td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
 }
 
+$('#board').addEventListener('contextmenu', ev => {
+  const d = ev.target.closest('[data-detail]'); if (!d || ev.target.closest('a, input')) return;
+  ev.preventDefault();
+  Tree.menu(ev, { dataset: { id: d.dataset.detail } }, 'board');
+});
 $('#board').addEventListener('click', async ev => {
   const jo = ev.target.closest('[data-jopen]'); if (jo) return openExternal(jo.dataset.jopen);
   const jr = ev.target.closest('[data-jira]');
@@ -799,6 +804,7 @@ const captureText = e => (c => c ? `${shortWhen(c.at)} · ${c.source ? sourceNam
 const COPY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
 // Full details of one connection in a pop-up: every field with its own Copy button.
 // Every detail of an entry as [label, value] rows (details pop-up, Copy all).
+const EXTRA_LABELS = { commands: 'Commands after connecting', run_macros: 'Run macros' };
 function detailRows(e) {
   const svc = dbService(e), when = t => t ? new Date(t).toLocaleString() : '';
   const rows = [
@@ -808,7 +814,7 @@ function detailRows(e) {
     [svc?.sid ? 'SID' : dbKindOf(e) === 'postgres' ? 'Database' : 'Service name', svc?.name],
     ['Username', e.username], ['Password', e.password], [e.status === 'ok' ? 'Other passwords' : 'Previous passwords', (e.prev_passwords || []).join('\n')],
     ['Key file', e.key_file], ['Last folder', e.last_dir],
-    ...Object.entries(e.extra || {}).filter(([k]) => !DB_KEYS.includes(k)).map(([k, v]) => [k, v]),
+    ...Object.entries(e.extra || {}).filter(([k]) => !DB_KEYS.includes(k)).map(([k, v]) => EXTRA_LABELS[k] ? [EXTRA_LABELS[k], k === 'run_macros' ? 'yes' : v] : [k, v]),
     ['Tags', (e.tags || []).join(', ')], ['Notes', e.notes],
     ['Last used', when(e.last_used)],
     ...(e.captures?.length ? e.captures.slice().reverse().map((c, i) => [i ? 'Also captured' : 'Captured', `${when(c.at)} · ${sourceName(c)}`]) : [['Captured', captureText(e)]]),
@@ -878,6 +884,9 @@ async function openEntryDialog(e) {
   f.tunnels_on.checked = ex.tunnels_off !== '1';
   f.tunnels_auto.checked = ex.tunnels_auto === '1';
   delete ex.tunnels; delete ex.tunnels_off; delete ex.tunnels_auto;
+  f.commands.value = ex.commands || '';
+  f.run_macros.checked = ex.run_macros === '1';
+  delete ex.commands; delete ex.run_macros;
   f.is_sid.checked = !!ex.sid && !(ex.service || ex.service_name || ex.database);
   for (const k of DB_KEYS) delete ex[k];
   f.extra.value = Object.entries(ex).map(([k, x]) => `${k}=${x}`).join('\n');
@@ -888,6 +897,10 @@ async function openEntryDialog(e) {
   if (e?.prev_passwords?.length) $('#prevPw').textContent = 'Previous passwords: ' + e.prev_passwords.join('   ·   ');
   $('#entryDlg').returnValue = ''; // Esc must not repeat the last Save
   f.password.type = 'password'; $('#entryPwEye').classList.remove('on');
+  // Open the saved connection in the real PuTTY / FileZilla / SQL Developer / DBeaver.
+  const ext = e?.id ? External.items(e) : [];
+  $('#entryOpenIn').innerHTML = ext.map(([t], i) => `<button type="button" data-eext="${i}" title="Opens with the saved details — Save first if you changed them">↗ ${esc(t.replace('Open in ', '').replace(' (the real one)', '').replace(' ↗', ''))}</button>`).join('');
+  $('#entryOpenIn').onclick = ev => { const b = ev.target.closest('[data-eext]'); if (b) ext[b.dataset.eext][1](); };
   $('#entryDlg').showModal();
 }
 $('#newEntry').onclick = () => openEntryDialog(null);
@@ -897,6 +910,7 @@ function dbFieldsVisible() {
   const kind = dbKindOf({ protocol: p, port });
   $('#dbNameRow').style.display = kind ? '' : 'none';
   $('#sidRow').style.display = kind === 'oracle' ? '' : 'none';
+  $('#macroRow').style.display = $('#macroOnRow').style.display = kind ? 'none' : '';
 }
 // Typing a database port fills in Type (oracle/postgres) unless the user chose one.
 $('#entryForm').protocol.addEventListener('input', e => { delete e.target.dataset.auto; dbFieldsVisible(); });
@@ -916,6 +930,9 @@ function entryFormBody() {
   if (f.tunnels.value.trim()) extra.tunnels = f.tunnels.value.trim();
   if (!f.tunnels_on.checked) extra.tunnels_off = '1';
   if (f.tunnels_auto.checked && f.tunnels.value.trim()) extra.tunnels_auto = '1';
+  const cmds = f.commands.value.replace(/\r/g, '').split('\n').map(l => l.trimEnd()).filter(l => l.trim()).join('\n');
+  if (cmds) extra.commands = cmds;
+  if (cmds && f.run_macros.checked) extra.run_macros = '1';
   const db = f.dbname.value.trim();
   if (db && $('#dbNameRow').style.display !== 'none') {
     const p = f.protocol.value.trim().toLowerCase();
@@ -1051,13 +1068,33 @@ const Term = {
       ws.send(JSON.stringify({ t: 'start', cols: t.term.cols, rows: t.term.rows, ...t.creds }));
       t.creds = { ...t.creds, save: false };
       this.renderTabs();
+      this.startMacros(t);
     };
-    ws.onmessage = m => t.term.write(new Uint8Array(m.data));
+    ws.onmessage = m => { t.term.write(new Uint8Array(m.data)); t.macroKick?.(); };
     ws.onclose = () => {
       t.closed = true;
       t.term.write('\r\n\x1b[90m[disconnected - press Enter to reconnect]\x1b[0m\r\n');
       this.renderTabs();
     };
+  },
+
+  // "Run macros": the saved commands are typed in one at a time, each when
+  // the output has been quiet for a moment (so the prompt is back).
+  startMacros(t) {
+    t.macroKick = null;
+    const ex = t.entry.extra || {};
+    if (t.local || ex.run_macros !== '1' || !ex.commands) return;
+    const queue = ex.commands.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+    let timer = null, seen = false;
+    const next = () => {
+      if (t.closed || t.ws?.readyState !== 1) { t.macroKick = null; return; }
+      const cmd = queue.shift();
+      if (cmd === undefined) { t.macroKick = null; return; }
+      t.ws.send(JSON.stringify({ t: 'd', d: cmd + '\r' }));
+      if (!queue.length) t.macroKick = null;
+    };
+    t.macroKick = () => { seen = true; clearTimeout(timer); timer = setTimeout(next, 700); };
+    setTimeout(() => { if (!seen && t.macroKick) next(); }, 5000); // a server that prints nothing at login
   },
 
   activate(t) {
@@ -1514,7 +1551,8 @@ const Tree = {
         else items.push(['Connect and show tables', () => SQL.toggleConn(e)]);
       }
       if (canSSH(e)) items.push(['Open in PuTTY', () => Term.open(e)]);
-      if (External.items(e).length) items.push(...External.items(e));
+      if (canFiles(e)) items.push([`Open in FileZilla (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
+      if (External.items(e).length) items.push('-', ...External.items(e));
       if (canSSH(e) && e.extra?.tunnels) {
         const off = e.extra.tunnels_off === '1', auto = e.extra.tunnels_auto === '1';
         items.push('-', [off ? '☐ Tunnels switched off — switch on' : '☑ Tunnels on — switch off', async () => {
@@ -1530,13 +1568,14 @@ const Tree = {
           catch (err) { toast(err.message, true); }
         }], ['Stop tunnels', async () => { await api('POST', `/api/tunnels/${e.id}/stop`); toast('Tunnels stopped' + (e.extra.tunnels_auto === '1' ? ' (they restart within a minute while "Start when WorkHub starts" is on)' : '')); Tunnels.load(); }], '-');
       }
-      if (canFiles(e)) items.push([`Open in FileZilla (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
       items.push('-',
         ['Copy host', () => copyText(e.host)]);
       if (e.username) items.push(['Copy username', () => copyText(e.username)]);
       if (e.password) items.push(['Copy password', () => copyText(e.password, 'Password copied')]);
       items.push(['Copy all details', () => copyText(detailsText(e), 'All details copied')]);
-      items.push(['Copy ssh command', () => copyText(`ssh ${e.username ? e.username + '@' : ''}${e.host}${sshPort(e) !== 22 ? ' -p ' + sshPort(e) : ''}`)], '-',
+      if (canSSH(e)) items.push(['Copy ssh command', () => copyText(`ssh ${e.username ? e.username + '@' : ''}${e.host}${sshPort(e) !== 22 ? ' -p ' + sshPort(e) : ''}`)]);
+      if (canDB(e) && jdbcURL(e)) items.push(['Copy JDBC URL', () => copyText(jdbcURL(e))]);
+      items.push('-',
         ['Edit…', () => openEntryDialog(e)],
         ['Duplicate', async () => { await api('POST', '/api/entries', { ...entryInput(e), id: '', name: e.name + ' (copy)', password: e.password }); poll(); }],
         ['Move to folder…', () => { const p = prompt('Folder (use / for subfolders)', e.project); if (p) this.move(e, p.trim(), e.env); }],

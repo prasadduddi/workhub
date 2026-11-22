@@ -349,6 +349,9 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .reflink { font-size: 12px; background: var(--panel2); border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; overflow-wrap: anywhere; }
 .tnode .nm.linked { font-style: italic; } .tnode .nm.missing { color: var(--danger); text-decoration: line-through; }
 #refLinkDlg { width: min(560px, 94vw); } #refLinkDlg label { margin-top: 8px; }
+.tnode .radd { margin-left: auto; padding: 0 6px; min-width: 0; line-height: 16px; font-size: 13px; font-weight: 600; border-radius: 4px; opacity: .35; }
+.tnode .n + .radd { margin-left: 4px; }
+.tnode:hover .radd, .tnode.sel .radd { opacity: 1; }
 .tnode.rnode.drop { outline: 2px dashed var(--accent); outline-offset: -2px; }
 
 #nameRulesDlg { width: min(560px, 94vw); }

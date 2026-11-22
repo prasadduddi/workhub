@@ -43,7 +43,7 @@ const Ref = {
     const walk = (p, d) => this.kids(p).filter(i => !show || show.has(i.path)).map(i => {
       const open = i.dir && (show ? true : this.open.has(i.path)), n = i.dir ? this.items.filter(x => !x.dir && x.path.startsWith(i.path + '/')).length : 0;
       return `<div class="tnode rnode ${i.dir ? 'folder' : 'item'} ${i.path === this.sel ? 'sel' : ''} ${this.hits?.includes(i.path) ? 'hit' : ''}" draggable="true" data-rp="${esc(i.path)}" style="padding-left:${8 + d * 14}px" title="${esc(i.missing ? 'Not found: ' + i.link : i.link ? 'Linked to ' + i.link : i.path)}">
-        <span class="tw">${i.dir ? (open ? '▾' : '▸') : ''}</span>${this.icon(i)} <span class="nm ${i.linked ? 'linked' : ''} ${i.missing ? 'missing' : ''}">${esc(this.base(i.path))}</span>${i.dir ? `<span class="n">${n || ''}</span>` : ''}</div>` + (open ? walk(i.path, d + 1) : '');
+        <span class="tw">${i.dir ? (open ? '▾' : '▸') : ''}</span>${this.icon(i)} <span class="nm ${i.linked ? 'linked' : ''} ${i.missing ? 'missing' : ''}">${esc(this.base(i.path))}</span>${i.dir ? `<span class="n">${n || ''}</span>` : ''}${i.dir && !i.link && !i.linked ? '<button class="radd" data-radd title="Add a sub-folder, file or link to a path here">+</button>' : ''}</div>` + (open ? walk(i.path, d + 1) : '');
     }).join('');
     $('#refTree').innerHTML = walk('', 0) || `<div class="empty">${this.hits ? 'Nothing matches.' : 'No folders yet. Press <b>+</b>.'}</div>`;
     $('#refWhere').innerHTML = `Copies are kept as plain files in <a href="#" data-rreveal="">${esc(this.root)}</a> · <a href="#" data-rreveal="history">older copies</a> · <a href="#" data-rreveal="deleted">deleted items</a>`;
@@ -291,6 +291,15 @@ $('#refSearch').addEventListener('input', e => { clearTimeout(refSearchTimer); r
 $('#refTree').addEventListener('click', e => {
   const n = e.target.closest('[data-rp]'); if (!n) return;
   const p = n.dataset.rp;
+  if (e.target.closest('[data-radd]')) { // the + on a folder: add inside it
+    e.stopPropagation();
+    const r = e.target.getBoundingClientRect();
+    if (p !== Ref.sel) { if (!Ref.okToLeave()) return; Ref.dirty = false; Ref.sel = p; }
+    Ref.open.add(p); Ref.persist(); Ref.render();
+    return setTimeout(() => Tree.showMenu({ clientX: r.left, clientY: r.bottom }, [
+      ['📁 New sub-folder…', () => Ref.newFolder()], ['📄 New file…', () => Ref.newFile()],
+      ['🔗 Link to a folder or file path…', () => Ref.linkPath()]]));
+  }
   if (Ref.isDir(p) && (e.target.closest('.tw') || p === Ref.sel)) { Ref.open.has(p) ? Ref.open.delete(p) : Ref.open.add(p); Ref.persist(); return Ref.render(); }
   if (Ref.isDir(p)) Ref.open.add(p);
   Ref.select(p);
