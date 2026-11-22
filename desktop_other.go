@@ -6,5 +6,5 @@ package main
 
 const isDesktop = false
 
-func runDesktop(url string, openLink func(string)) bool { return false }
-func desktopMessage(title, msg string)                  {}
+func runDesktop(url string, openLink func(string, bool)) bool { return false }
+func desktopMessage(title, msg string)                        {}

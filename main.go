@@ -104,7 +104,7 @@ func main() {
 		srv := &http.Server{Handler: app.recoveryRoutes()}
 		if isDesktop {
 			go srv.Serve(ln)
-			if runDesktop(url, openBrowser) {
+			if runDesktop(url, func(u string, _ bool) { openBrowser(u) }) {
 				os.Exit(1)
 			}
 		}

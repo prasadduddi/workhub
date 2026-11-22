@@ -8,28 +8,38 @@ import (
 )
 
 // openLink opens a web link from the desktop version in the user's chosen
-// browser (Settings.LinkBrowser: "chrome" by default, "edge" or "default"),
-// as a new tab. Falls back to the default browser if that one isn't found.
-func (a *App) openLink(url string) {
+// browser (Settings.LinkBrowser: "chrome" by default, "edge" or "default"):
+// a new tab of the running browser, or with newWindow (Ctrl+Click) a new
+// window of it. Falls back to the default browser if that one isn't found.
+func (a *App) openLink(url string, newWindow bool) {
 	choice := "chrome"
 	if a.store != nil {
 		choice = orDefault(a.store.Settings().LinkBrowser, "chrome")
 	}
 	if choice != "default" {
 		if exe := findBrowser(choice); exe != "" {
-			if runtime.GOOS == "darwin" {
-				if exec.Command("open", "-a", exe, url).Start() == nil {
-					return
-				}
-			} else if exec.Command(exe, "--", url).Start() == nil {
-				// Only the URL, no --new-window or profile flags: an already
-				// running Chrome/Edge takes it over and opens a new tab in its
-				// last active window instead of starting another instance.
+			if exec.Command(browserCmd(exe, url, newWindow)[0], browserCmd(exe, url, newWindow)[1:]...).Start() == nil {
 				return
 			}
 		}
 	}
 	openBrowser(url)
+}
+
+// browserCmd builds the command line. No profile flags: an already running
+// Chrome/Edge takes the link over (new tab in its last active window, or a
+// new window with --new-window) instead of starting another instance.
+func browserCmd(exe, url string, newWindow bool) []string {
+	if runtime.GOOS == "darwin" {
+		if newWindow {
+			return []string{"open", "-a", exe, "--args", "--new-window", url}
+		}
+		return []string{"open", "-a", exe, url}
+	}
+	if newWindow {
+		return []string{exe, "--new-window", "--", url}
+	}
+	return []string{exe, "--", url}
 }
 
 func findBrowser(name string) string {

@@ -42,7 +42,7 @@ func windowFile() string { return filepath.Join(filepath.Dir(defaultDataDir()), 
 // runDesktop shows url in a native window and returns when it is closed.
 // It returns false if WebView2 is not available (the caller then falls back
 // to the browser).
-func runDesktop(url string, openLink func(string)) bool {
+func runDesktop(url string, openLink func(string, bool)) bool {
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		AutoFocus: true,
 		DataPath:  filepath.Join(filepath.Dir(defaultDataDir()), "webview2"),
@@ -57,7 +57,7 @@ func runDesktop(url string, openLink func(string)) bool {
 	hwnd := uintptr(w.Window())
 	restoreWindow(hwnd)
 	// Web links open in the normal browser, not inside WorkHub.
-	_ = w.Bind("whOpenExternal", func(u string) error { openLink(u); return nil })
+	_ = w.Bind("whOpenExternal", func(u string, newWindow bool) error { openLink(u, newWindow); return nil })
 	// The page reports its title ("WorkHub — <workspace>") for the taskbar.
 	_ = w.Bind("whSetTitle", func(t string) error { w.Dispatch(func() { w.SetTitle(t) }); return nil })
 	w.Init(`window.WH_DESKTOP = true;` + desktopLinkScript)
@@ -73,7 +73,13 @@ func runDesktop(url string, openLink func(string)) bool {
 const desktopLinkScript = `
 (() => {
   const ext = u => { try { const x = new URL(u, location.href); return /^https?:$/.test(x.protocol) && x.origin !== location.origin ? x.href : ''; } catch { return ''; } };
-  const send = u => window.whOpenExternal && window.whOpenExternal(u);
+  // Ctrl (or Shift) held on the click that led here → new browser window.
+  let wantWin = 0;
+  const remember = ev => { wantWin = (ev.ctrlKey || ev.metaKey || ev.shiftKey) && ev.button === 0 ? Date.now() : 0; };
+  window.addEventListener('mousedown', remember, true);
+  window.addEventListener('click', remember, true);
+  window.WH_NEW_WINDOW = () => Date.now() - wantWin < 1500;
+  const send = (u, nw) => window.whOpenExternal && window.whOpenExternal(u, nw ?? window.WH_NEW_WINDOW());
   const open = window.open.bind(window);
   window.open = (u, ...rest) => { const x = ext(u); if (x) { send(x); return null; } return open(u, ...rest); };
   const grab = ev => {
@@ -81,7 +87,8 @@ const desktopLinkScript = `
     const a = ev.target.closest && ev.target.closest('a[href]'); if (!a) return;
     if (ev.type === 'click' && a.isContentEditable && !(ev.ctrlKey || ev.metaKey)) return; // editing text
     const x = ext(a.href); if (!x) return;
-    ev.preventDefault(); ev.stopImmediatePropagation(); send(x);
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    send(x, ev.type === 'click' && (ev.ctrlKey || ev.metaKey || ev.shiftKey)); // middle click: new tab
   };
   window.addEventListener('click', grab, true);
   window.addEventListener('auxclick', grab, true);

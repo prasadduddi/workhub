@@ -1533,7 +1533,7 @@ document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.ke
 // recently on top, then groups by application (from the URL pattern) or site.
 // Desktop version: links open in the normal browser, not inside WorkHub.
 function openExternal(u) {
-  if (window.WH_DESKTOP && window.whOpenExternal) window.whOpenExternal(u);
+  if (window.WH_DESKTOP && window.whOpenExternal) window.whOpenExternal(u, !!window.WH_NEW_WINDOW?.()); // Ctrl+Click → new Chrome window
   else window.open(u, '_blank', 'noopener');
 }
 document.addEventListener('click', ev => {
