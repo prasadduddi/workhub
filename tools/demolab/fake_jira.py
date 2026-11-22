@@ -43,6 +43,7 @@ ISSUES = {
         "subtasks": [], "issuelinks": [link("CM-4301", "Certificate change window", "Closed")]}, []),
 }
 MINE_DONE = ["PAY-101", "PAY-088", "OPS-61"]
+MINE_OPEN = ["PAY-123", "PAY-130"]  # assigned to me, not done (found by "Add my issues")
 
 # CM change issues with an implementation window (times relative to today, so
 # the demo calendar always has some).
@@ -67,7 +68,9 @@ class H(BaseHTTPRequestHandler):
             return self.send({}, 401)
         parts = u.path.split("/")
         if u.path in ("/rest/api/3/search/jql", "/rest/api/2/search"):
-            return self.send({"issues": [{"key": k} for k in MINE_DONE], "total": len(MINE_DONE)})
+            from urllib.parse import unquote_plus
+            keys = MINE_OPEN if "!=" in unquote_plus(q.get("jql", "")) else MINE_DONE
+            return self.send({"issues": [{"key": k} for k in keys], "total": len(keys)})
         if u.path.startswith("/rest/api/2/issue/CM-") and parts[5] in CM:
             summary, status, start, end = CM[parts[5]]
             return self.send({"key": parts[5], "names": {"summary": "Summary", "customfield_10501": "Planned start", "customfield_10502": "Planned end"},

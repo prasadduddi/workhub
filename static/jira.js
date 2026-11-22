@@ -121,7 +121,9 @@ const Jira = {
         this.session = s; this.showSession();
         await api('POST', '/api/jira/browser', { hide: true }).catch(() => {});
         toast(`Signed in to Jira${s.name ? ' as ' + s.name : ''} — loading your issues…`);
-        await api('POST', '/api/jira/refresh', {}).catch(() => {}); api('POST', '/api/jira/mine').catch(() => {});
+        await api('POST', '/api/jira/refresh', {}).catch(() => {});
+        try { const r = await api('POST', '/api/jira/mine'); toast(`Signed in${s.name ? ' as ' + s.name : ''} — ${r.added ? `added ${r.added} of your issues` : 'your issues are up to date'}`); }
+        catch (err) { toast('Signed in, but ' + err.message, true); }
         return this.load();
       }
       if (Date.now() < until) this.signTimer = setTimeout(poll, 4000);
@@ -147,8 +149,8 @@ $('#jiraFilter').addEventListener('input', () => Jira.render());
 $('#jiraSettings').onclick = () => Jira.settings();
 $('#jiraSetupLink').onclick = () => Jira.settings();
 $('#jiraMine').onclick = async () => {
-  toast('Looking for your completed issues in Jira…');
-  try { const r = await api('POST', '/api/jira/mine'); Jira.issues = r.issues; Jira.open.add('f:done'); Jira.persist(); Jira.render(); toast(r.added ? `Added ${r.added} completed issue(s) to ✅ Completed` : 'No new completed issues'); }
+  toast('Looking for your issues in Jira…');
+  try { const r = await api('POST', '/api/jira/mine'); Jira.issues = r.issues; Jira.open.add('f:open'); Jira.persist(); Jira.render(); toast(r.added ? `Added ${r.added} of your issues (open ones under 📂 In progress, done ones under ✅ Completed)` : 'No new issues assigned to you'); }
   catch (err) { toast(err.message, true); }
 };
 // Loaded at start too, so the main search finds Jira issues; kept fresh.

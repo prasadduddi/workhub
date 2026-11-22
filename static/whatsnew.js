@@ -4,6 +4,10 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.9.1', title: 'Jira issues fix, Help', items: [
+    ['👤', 'All your Jira issues', 'Jira → 👤 Add my issues (and the automatic check every 15 minutes) now adds everything assigned to you — open issues under 📂 In progress, done ones under ✅ Completed. Fixed: with “Sign in with browser” on Jira Cloud no issues were found.', 'jira'],
+    ['❓', 'Help', 'F1 or ☰ → Help: how-to topics with steps and a Show me button. Or ask the assistant (Ctrl+J) “how do I …?” — it answers with the steps.', ''],
+  ] },
   { v: '1.9', title: 'Task threads, smarter search, tidier layout', items: [
     ['🧵', 'Tasks: a thread per task (replaces work items)', 'Tasks in the sidebar: one thread per ticket or change. Post notes, paste screenshots (Win+Shift+S, Ctrl+V), drop files. Press 📥 Capture here and everything the clipboard watcher catches lands in the thread too. Right-click any server or capture → Add to task thread. Your old work items are threads now, with their page as the first post; the Word copy is kept up to date.', 'tasks'],
     ['🔎', 'Search at the top right, everywhere', 'One search box sits at the top right of every page (Ctrl+K from anywhere). Typing shows the results on the dashboard; keys, filters and recent searches drop down under it.', 'dashboard'],

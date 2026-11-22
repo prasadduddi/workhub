@@ -30,6 +30,8 @@ func fakeJira(t *testing.T) *httptest.Server {
 					map[string]any{"type": map[string]any{"inward": "is implemented by", "outward": "implements"}, "outwardIssue": map[string]any{"key": "CM-4411", "fields": map[string]any{"summary": "Prod release", "status": map[string]any{"name": "Scheduled"}, "issuetype": map[string]any{"name": "Change"}}}},
 					map[string]any{"type": map[string]any{"inward": "relates", "outward": "relates"}, "inwardIssue": map[string]any{"key": "OPS-9", "fields": map[string]any{"summary": "Unrelated", "status": map[string]any{"name": "Open"}, "issuetype": map[string]any{"name": "Task"}}}},
 				}}})
+		case r.URL.Path == "/rest/api/2/search" && strings.Contains(r.URL.Query().Get("jql"), "statusCategory != Done"):
+			json.NewEncoder(w).Encode(map[string]any{"total": 1, "issues": []map[string]string{{"key": "PAY-123"}}})
 		case r.URL.Path == "/rest/api/2/search" && strings.Contains(r.URL.Query().Get("jql"), "statusCategory = Done"):
 			json.NewEncoder(w).Encode(map[string]any{"total": 2, "issues": []any{map[string]any{"key": "PAY-90"}, map[string]any{"key": "PAY-91"}}})
 		case r.URL.Path == "/rest/api/2/issue/PAY-90" || r.URL.Path == "/rest/api/2/issue/PAY-91":
@@ -98,17 +100,17 @@ func TestJiraMine(t *testing.T) {
 	a := &App{}
 	a.store, _ = OpenStore(t.TempDir())
 	a.store.SetJiraConfig(JiraConfig{BaseURL: srv.URL, Mode: "server", Token: "tok"})
-	if n, err := a.addMine(); err != nil || n != 2 {
+	if n, err := a.addMine(); err != nil || n != 3 {
 		t.Fatalf("added %d, %v", n, err)
 	}
 	for _, j := range a.store.JiraIssues() {
-		if !j.Done || !j.Mine || j.Resolved == "" {
-			t.Fatalf("completed issue: %+v", j)
+		if !j.Mine || (j.Key != "PAY-123" && (!j.Done || j.Resolved == "")) {
+			t.Fatalf("my issue: %+v", j)
 		}
 	}
 	// Removed by the user: not added again.
 	a.store.removeJiraIssue("PAY-90")
-	if n, _ := a.addMine(); n != 0 || len(a.store.JiraIssues()) != 1 {
+	if n, _ := a.addMine(); n != 0 || len(a.store.JiraIssues()) != 2 {
 		t.Fatalf("removed issue came back (%d added)", n)
 	}
 }

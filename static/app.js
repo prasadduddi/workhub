@@ -2139,6 +2139,11 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
       return this.say('OK, dismissed.');
     }
     if (intent === 'find') return this.find(text.replace(/^\s*\S+\s*(up\s*)?/i, ''));
+    // Questions ("how do I…?", "why don't my Jira issues show?") get the help steps.
+    if (/^\s*(how|why|explain|help( me)?( with)?|what (is|are|does))\b|\?\s*$/i.test(text) && typeof Help !== 'undefined') {
+      const a = Help.answer(text);
+      if (a) return this.say(a);
+    }
 
     // Plain-English view commands ("show prod servers as a table"), unless the
     // message carries connection details (key: value, user@host, URLs, IPs).
@@ -2167,7 +2172,7 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
     if (!found.length) {
       return this.say(intent
         ? 'I couldn\'t find a host in that. Paste the details (host, user, password) or name a saved server.'
-        : 'I didn\'t understand that. Try e.g. <code>show prod servers</code>, <code>group by env</code>, <code>password for app01</code>, or paste connection details with <code>putty</code>. Type <code>help</code> for everything I can do.');
+        : (typeof Help !== 'undefined' && Help.answer(text)) || 'I didn\'t understand that. Ask “how do I …?” for steps, or try e.g. <code>show prod servers</code>, <code>group by env</code>, <code>password for app01</code>, or paste connection details with <code>putty</code>. Type <code>help</code> for everything I can do.');
     }
     const proto = this.fileProto(text);
     this.say(found.length === 1 ? (intent ? 'Here\'s what I understood — check it and confirm (or type <code>yes</code>):' : 'Found this. What should I do with it?') : `Found ${found.length} servers:`);

@@ -369,9 +369,12 @@ const maxMineDone = 300
 
 // searchMine lists my completed issues, newest first (Cloud's new search
 // endpoint, else the classic one Server/Data Center has).
-func searchMine(cfg JiraConfig) ([]string, error) {
+// searchKeys runs a JQL search (up to limit keys). It uses Jira Cloud's
+// current search first, for every sign-in type (the old /rest/api/2/search
+// is switched off on Cloud), and the classic search for Jira Server / DC.
+func searchKeys(cfg JiraConfig, jqlText string, limit int) ([]string, error) {
 	c := &jiraClient{cfg: cfg, http: &http.Client{Timeout: 30 * time.Second}}
-	jql := url.QueryEscape("assignee = currentUser() AND statusCategory = Done ORDER BY resolved DESC")
+	jql := url.QueryEscape(jqlText)
 	var keys []string
 	type page struct {
 		Issues []struct {
@@ -380,9 +383,10 @@ func searchMine(cfg JiraConfig) ([]string, error) {
 		Total         int    `json:"total"`
 		NextPageToken string `json:"nextPageToken"`
 	}
-	if cfg.Mode == "cloud" || cfg.Mode == "" {
+	var cloudErr error
+	{
 		token := ""
-		for len(keys) < maxMineDone {
+		for len(keys) < limit {
 			var p page
 			q := "/rest/api/3/search/jql?jql=" + jql + "&fields=key&maxResults=100"
 			if token != "" {
@@ -390,7 +394,8 @@ func searchMine(cfg JiraConfig) ([]string, error) {
 			}
 			if err := c.get(q, &p); err != nil {
 				if len(keys) == 0 {
-					break // older Jira: try the classic search below
+					cloudErr = err
+					break // Jira Server / DC: try the classic search below
 				}
 				return keys, nil
 			}
@@ -405,11 +410,17 @@ func searchMine(cfg JiraConfig) ([]string, error) {
 			return keys, nil
 		}
 	}
-	for start := 0; start < maxMineDone; start += 100 {
+	if cloudErr == nil {
+		return keys, nil // the current search worked: nothing (more) to find
+	}
+	for start := 0; start < limit; start += 100 {
 		var p page
 		if err := c.get(fmt.Sprintf("/rest/api/2/search?jql=%s&fields=key&maxResults=100&startAt=%d", jql, start), &p); err != nil {
 			if len(keys) > 0 {
 				return keys, nil
+			}
+			if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "410") {
+				return nil, cloudErr // Cloud: the first error says more
 			}
 			return nil, err
 		}
@@ -423,7 +434,26 @@ func searchMine(cfg JiraConfig) ([]string, error) {
 	return keys, nil
 }
 
-// addMine adds my completed issues not tracked yet (or removed by the user).
+// My issues: everything assigned to me that is open, and my completed ones.
+const (
+	jqlMineOpen = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
+	jqlMineDone = "assignee = currentUser() AND statusCategory = Done ORDER BY resolved DESC"
+	maxMineOpen = 150
+)
+
+func searchMine(cfg JiraConfig) ([]string, error) {
+	open, err := searchKeys(cfg, jqlMineOpen, maxMineOpen)
+	if err != nil {
+		return nil, err
+	}
+	done, err := searchKeys(cfg, jqlMineDone, maxMineDone)
+	if err != nil && len(open) == 0 {
+		return nil, err
+	}
+	return append(open, done...), nil
+}
+
+// addMine adds my issues (open and completed) not tracked yet (or removed by the user).
 func (a *App) addMine() (int, error) {
 	cfg := a.store.JiraConfig()
 	if !jiraReady(cfg) {
@@ -431,7 +461,7 @@ func (a *App) addMine() (int, error) {
 	}
 	keys, err := searchMine(cfg)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("couldn't list your Jira issues: %w", err)
 	}
 	have := map[string]bool{}
 	for _, j := range a.store.JiraIssues() {

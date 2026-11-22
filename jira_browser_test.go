@@ -76,3 +76,36 @@ func TestJiraBrowserWebVersion(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// Jira Cloud with browser sign-in: the old search is gone (410), the new one works.
+func TestJiraBrowserCloudSearch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/rest/api/3/search/jql" && strings.Contains(r.URL.Query().Get("jql"), "!= Done"):
+			w.Write([]byte(`{"issues":[{"key":"PAY-7"}]}`))
+		case r.URL.Path == "/rest/api/3/search/jql":
+			w.Write([]byte(`{"issues":[]}`))
+		case r.URL.Path == "/rest/api/2/search":
+			w.WriteHeader(410)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer srv.Close()
+	jiraWinOpen = func(string, bool, bool) error { return nil }
+	jiraWinShown = func() bool { return false }
+	jiraWinFetch = func(u string) (int, string, error) {
+		resp, err := http.Get(u)
+		if err != nil {
+			return 0, "", err
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b), nil
+	}
+	defer func() { jiraWinOpen, jiraWinShown, jiraWinFetch = nil, nil, nil }()
+	keys, err := searchMine(JiraConfig{BaseURL: srv.URL, Mode: "browser"})
+	if err != nil || len(keys) != 1 || keys[0] != "PAY-7" {
+		t.Fatalf("keys %v, %v", keys, err)
+	}
+}
