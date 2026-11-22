@@ -11,7 +11,8 @@
 </head>
 <body>
 <aside class="side">
-  <div class="brand"><span class="logo">W</span><span class="brand-text">WorkHub</span><button id="sideToggle" class="ghost icon" title="Hide/show sidebar (Ctrl+B)">«</button></div>
+  <div class="brand"><span class="logo">W</span><span class="brand-text">WorkHub</span><button id="mainMenuBtn" class="ghost icon" title="Menu: check for updates and install, profile, lock, programs, backups…">☰</button><button id="sideToggle" class="ghost icon" title="Hide/show sidebar (Ctrl+B)">«</button></div>
+  <button id="updPill" class="upd-pill" hidden title="Click to see what's new and install it">⬆ <span id="updPillText">A new version is available</span></button>
   <button id="wsName" class="ws" title="Workspace — click to rename"></button>
   <nav id="nav">
     <div class="navrow"><button data-view="dashboard" class="active"><svg class="ni" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2" fill="#5b8ff0"/><rect x="13" y="3" width="8" height="5" rx="2" fill="#9db8f5"/><rect x="13" y="10" width="8" height="11" rx="2" fill="#5b8ff0"/><rect x="3" y="13" width="8" height="8" rx="2" fill="#9db8f5"/></svg><span class="nl">Dashboard</span></button><button id="navSearch" class="navsearch" title="Search everything (Ctrl+K)"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>
@@ -39,7 +40,7 @@
     <div id="dataDir" class="muted tiny"></div>
     <button id="profileBtn" class="ghost" title="Your profile">👤 <span id="profileName">Your profile</span></button>
     <button id="lockBtn" class="ghost" title="Lock WorkHub with your PIN (Ctrl+L)">🔒 Lock</button>
-    <button id="updBtn" class="ghost" title="Check GitHub for a newer WorkHub">⟳ Check for updates</button>
+    <button id="updBtn" class="ghost" title="Check GitHub for a newer WorkHub and install it">⟳ Check for updates &amp; install</button>
     <button id="extBtn" class="ghost" title="Where PuTTY, FileZilla, DBeaver and SQL Developer are, for “Open in…”">↗ Programs…</button>
     <button id="backupBtn" class="ghost" title="Automatic backups (at start-up and every morning, when something changed)">🛟 Backups…</button>
     <button id="importBtn" class="ghost" title="Bring in data from an older WorkHub folder">Import data…</button>

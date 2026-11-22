@@ -11,6 +11,8 @@ const Update = {
     const r = await api('GET', '/api/update' + (manual ? '?force=1' : '')).catch(err => ({ error: err.message }));
     this.info = r;
     if (r.error) { if (manual) this.show(); return; }
+    $('#updPill').hidden = !r.newer; // stays visible even after "Later" / "Skip"
+    if (r.newer) $('#updPillText').textContent = `WorkHub ${r.latest} — install`;
     if (r.newer && (manual || this.skipped() !== r.latest)) this.show();
     else if (manual) this.show();
   },
@@ -50,6 +52,18 @@ const Update = {
 };
 
 $('#updBtn').onclick = () => Update.check(true);
+$('#updPill').onclick = () => Update.show();
+// ☰ at the top of the sidebar: the same actions as the buttons at its foot
+// (which can be scrolled out of sight on small screens).
+$('#mainMenuBtn').onclick = () => {
+  const r = $('#mainMenuBtn').getBoundingClientRect(), click = id => () => $(id).click();
+  setTimeout(() => Tree.showMenu({ clientX: r.left, clientY: r.bottom + 4 }, [
+    [Update.info?.newer ? `⬆ Install WorkHub ${Update.info.latest}…` : '⟳ Check for updates & install', () => Update.info?.newer ? Update.show() : Update.check(true)],
+    ["✨ What's new & tips", click('#whatsNewBtn')], '-',
+    ['👤 Your profile', click('#profileBtn')], ['🔒 Lock (Ctrl+L)', click('#lockBtn')], '-',
+    ['↗ Programs for “Open in”…', click('#extBtn')], ['🛟 Backups…', click('#backupBtn')], ['Import data…', click('#importBtn')], ['Data location…', click('#dataLocBtn')], '-',
+    ['Quit WorkHub', click('#quitBtn')]]));
+};
 $('#updNow').onclick = () => Update.apply();
 $('#updLater').onclick = () => $('#updDlg').close();
 $('#updSkip').onclick = () => { try { localStorage.setItem('skipUpdate', Update.info?.latest || ''); } catch { /* ignore */ } $('#updDlg').close(); toast('You won\'t be asked about this version again (⟳ Check for updates still shows it)'); };

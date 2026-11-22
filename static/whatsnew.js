@@ -7,6 +7,7 @@ const RELEASES = [
   { v: '1.8', title: 'Macros, Open in, quicker folders', items: [
     ['▶', 'Run macros', 'Edit an SSH connection → “Commands to run after connecting” (one per line) and tick Run macros: they are typed in one by one each time the session connects.', 'terminal'],
     ['↗', 'Open in the real programs from more places', 'Right-click a search result or a connection in the tree: Open in PuTTY / FileZilla for servers, SQL Developer (Oracle) or DBeaver for databases. The Edit dialog has the same buttons.', 'dashboard'],
+    ['☰', 'Menu at the top of the sidebar', '☰ next to WorkHub: Check for updates & install, profile, lock, programs, backups… — and a green “⬆ install” button appears there when a new version is out.', ''],
     ['➕', '+ on every folder', 'In Folders, each folder has its own + : add a sub-folder, a new file, or a link to a folder or file path right there.', 'ref'],
   ] },
   { v: '1.7', title: 'Folders, naming rules, grouping and more', items: [

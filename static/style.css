@@ -35,6 +35,10 @@ input:focus, textarea:focus, select:focus { outline: 2px solid color-mix(in srgb
 .brand-text { flex: 1; }
 .side > * { flex-shrink: 0; }
 #sideToggle { font-size: 14px; color: var(--muted); }
+#mainMenuBtn { font-size: 15px; color: var(--muted); }
+.upd-pill { margin: 8px 6px 0; padding: 6px 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, #16a34a 45%, transparent); background: color-mix(in srgb, #16a34a 14%, transparent); color: #15803d; font-weight: 600; font-size: 12.5px; text-align: left; cursor: pointer; }
+.upd-pill:hover { background: color-mix(in srgb, #16a34a 22%, transparent); }
+body.side-collapsed .upd-pill #updPillText { display: none; }
 body.side-collapsed .side { width: 60px; padding: 14px 6px; }
 body.side-collapsed .brand { flex-direction: column; padding: 0; }
 body.side-collapsed .brand-text, body.side-collapsed .nl, body.side-collapsed .count, body.side-collapsed .capture-box,
