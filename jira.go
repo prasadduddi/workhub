@@ -254,8 +254,8 @@ func fetchJira(cfg JiraConfig, key string) JiraIssue {
 		j.Assignee = f.Assignee.DisplayName
 	}
 	prefix := strings.ToUpper(strings.TrimSpace(orDefault(cfg.ChildPrefix, "CM-")))
-	wanted := func(k, summary string) bool {
-		return prefix == "*" || strings.HasPrefix(strings.ToUpper(k), prefix) || strings.HasPrefix(strings.ToUpper(strings.TrimSpace(summary)), prefix)
+	wanted := func(k, summary string) bool { // only issues whose key starts with the prefix (CM-1234)
+		return prefix == "*" || strings.HasPrefix(strings.ToUpper(k), prefix)
 	}
 	for _, st := range f.Subtasks {
 		if wanted(st.Key, st.Fields.Summary) {

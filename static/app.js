@@ -11,6 +11,7 @@ async function api(method, url, body) {
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  if (r.status === 423) { if (typeof Lock !== 'undefined') Lock.show(); throw new Error('WorkHub is locked'); }
   if (r.status === 401) {
     document.body.innerHTML = '<div class="empty">Session expired. Start <b>WorkHub</b> again to open a fresh window.</div>';
     throw new Error('unauthorized');
@@ -19,6 +20,22 @@ async function api(method, url, body) {
   if (!r.ok) throw new Error(data.error || r.statusText);
   return data;
 }
+
+// Passwords are masked until 👁 is clicked (one at a time, or all with
+// "Show passwords" on the dashboard). Copying always copies the real one.
+const PW_MASK = '••••••••';
+function pwHTML(pw) {
+  if (!pw) return '';
+  return `<span class="pwbox"><span class="copy pwv" data-copy="${esc(pw)}" data-pw="${esc(pw)}" title="Click to copy">${S.showPw ? esc(pw) : PW_MASK}</span><button class="icon eye" data-eye title="Show / hide">👁</button></span>`;
+}
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-eye]'); if (!b) return;
+  ev.stopPropagation(); ev.preventDefault();
+  const v = b.parentElement.querySelector('.pwv');
+  const shown = v.textContent !== PW_MASK;
+  v.textContent = shown ? PW_MASK : v.dataset.pw;
+  b.classList.toggle('on', !shown);
+}, true);
 
 let toastTimer;
 function toast(msg, err = false) {
@@ -650,7 +667,7 @@ function svcHTML(e) {
   const jdbc = !/^jdbc:/i.test(e.url || '') && jdbcURL(e);
   if (jdbc) rows.push(['JDBC', `<span class="copy" data-copy="${esc(jdbc)}" title="Copy">${esc(jdbc)}</span> <button class="icon" data-copy="${esc(jdbc)}">copy</button>`]);
   if (e.username) rows.push(['User', `<span class="copy" data-copy="${esc(e.username)}" title="Copy">${esc(e.username)}</span>`]);
-  if (e.has_password) rows.push(['Password', `<span class="copy" data-copy="${esc(e.password)}" title="Copy">${esc(e.password)}</span>`]);
+  if (e.has_password) rows.push(['Password', pwHTML(e.password)]);
   if (e.key_file) rows.push(['Key', esc(e.key_file)]);
   if (e.last_dir) rows.push(['Last folder', `<span class="copy" data-copy="${esc(e.last_dir)}">${esc(e.last_dir)}</span>`]);
   Object.entries(e.extra || {}).forEach(([k, v]) => rows.push([esc(k), `<span class="copy" data-copy="${esc(v)}">${esc(v)}</span>`]));
@@ -681,7 +698,7 @@ function tableHTML(items) {
     e => esc(e.protocol),
     e => `${linkLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span> ` : ''}${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a>` : jdbcURL(e) ? `<span class="copy" data-copy="${esc(jdbcURL(e))}" title="Copy">${esc(jdbcURL(e))}</span>` : ''}`,
     e => `<span class="copy" data-copy="${esc(e.username)}">${esc(e.username)}</span>`,
-    e => `<span class="copy" data-copy="${esc(e.password)}">${esc(e.password)}</span>`,
+    e => pwHTML(e.password),
     e => `<span class="muted tiny">${esc(captureText(e))}</span>`,
     e => `${canSSH(e) ? `<button class="icon" data-act="ssh" data-id="${e.id}">SSH</button> ` : ''}${canDB(e) ? `<button class="icon" data-act="sql" data-id="${e.id}">SQL</button> ` : ''}<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
   ];
@@ -760,6 +777,8 @@ const External = {
   },
 };
 $('#extBtn').onclick = () => External.settings();
+$('#showPwBtn').onclick = () => { S.showPw = !S.showPw; $('#showPwBtn').textContent = S.showPw ? '🙈 Hide passwords' : '👁 Show passwords'; renderBoard(); };
+$('#entryPwEye').onclick = () => { const i = $('#entryForm').password; i.type = i.type === 'password' ? 'text' : 'password'; $('#entryPwEye').classList.toggle('on', i.type === 'text'); };
 $('#extCancel').onclick = () => $('#extDlg').close();
 $('#extSave').onclick = async () => {
   const body = {}; $$('#extRows [data-ext]').forEach(i => (body[i.dataset.ext] = i.value));
@@ -803,7 +822,8 @@ function showDetails(e) {
   const rows = detailRows(e);
   showDetails.text = detailsText(e);
   $('#detailTitle').innerHTML = `${ruleName(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`;
-  $('#detailBody').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span><button class="icon copyic" data-copy="${esc(v)}" title="Copy ${esc(k)}" aria-label="Copy ${esc(k)}">${COPY_ICON}</button>`).join('');
+  const secret = k => /password/i.test(k);
+  $('#detailBody').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span>${secret(k) ? `<span class="v pwbox"><span class="pwv" data-pw="${esc(v)}">${S.showPw ? esc(v) : PW_MASK}</span><button class="icon eye" data-eye title="Show / hide">👁</button></span>` : `<span class="v">${esc(v)}</span>`}<button class="icon copyic" data-copy="${esc(v)}" title="Copy ${esc(k)}" aria-label="Copy ${esc(k)}">${COPY_ICON}</button>`).join('');
   $('#detailActs').innerHTML = [
     canSSH(e) && ['ssh', 'SSH'], canFiles(e) && ['sftp', isFTP(e) ? 'FTP' : 'SFTP'], canDB(e) && ['sql', 'SQL'], e.url && !/^jdbc:/i.test(e.url) && ['open', 'Open'], ['edit', 'Edit'],
   ].filter(Boolean).map(([a, t]) => `<button data-dact="${a}">${t}</button>`).join('') + External.items(e).map(([t], i) => `<button data-dext="${i}">${esc(t.replace('Open in ', '').replace(' (the real one)', ''))}</button>`).join('');
@@ -866,6 +886,7 @@ async function openEntryDialog(e) {
   f.password.value = f.password.dataset.orig = e?.password || '';
   if (e?.prev_passwords?.length) $('#prevPw').textContent = 'Previous passwords: ' + e.prev_passwords.join('   ·   ');
   $('#entryDlg').returnValue = ''; // Esc must not repeat the last Save
+  f.password.type = 'password'; $('#entryPwEye').classList.remove('on');
   $('#entryDlg').showModal();
 }
 $('#newEntry').onclick = () => openEntryDialog(null);

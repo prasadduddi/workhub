@@ -68,7 +68,7 @@ func TestJira(t *testing.T) {
 	for _, c := range j.Children {
 		keys = append(keys, c.Key+"("+c.Relation+")")
 	}
-	if strings.Join(keys, ",") != "PAY-124(sub-task),CM-4411(implements)" {
+	if strings.Join(keys, ",") != "CM-4411(implements)" { // PAY-124 "CM- deploy…" is not a CM- issue
 		t.Fatalf("CM- children: %v", keys)
 	}
 	if bad := fetchJira(JiraConfig{BaseURL: srv.URL, Mode: "server", Token: "wrong"}, "PAY-123"); !strings.Contains(bad.Error, "401") {

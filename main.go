@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"hash/fnv"
@@ -43,6 +44,9 @@ type App struct {
 	mail        mailStatus
 	mailNow     chan struct{}
 	jobs        *jobList
+
+	lock     lockState
+	lockPath string // set when -data is given, so a test or demo folder has its own PIN
 
 	khMu     sync.Mutex
 	backupMu sync.Mutex
@@ -129,6 +133,12 @@ func main() {
 		}
 	}
 	_ = os.WriteFile(filepath.Join(dir, "session.token"), []byte(app.token), 0o600)
+	if *dataDir != "" {
+		app.lockPath = filepath.Join(dir, "pin-lock.json")
+	}
+	if _, ok := app.lockConf(); ok {
+		app.setLocked(true) // a PIN is set: start locked
+	}
 
 	go app.watchClipboard()
 	go app.syncBrowserBookmarks()
@@ -422,6 +432,10 @@ func (a *App) guard(next http.Handler) http.Handler {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
+		if a.isLocked() && !a.lockAllowed(r.URL.Path) {
+			writeErr(w, http.StatusLocked, errors.New("WorkHub is locked"))
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -525,6 +539,11 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/external", a.handleExternalList)
 	mux.HandleFunc("POST /api/external/paths", a.handleExternalPaths)
 	mux.HandleFunc("POST /api/external/open", a.handleExternalOpen)
+	mux.HandleFunc("GET /api/lock", a.handleLockStatus)
+	mux.HandleFunc("POST /api/lock", a.handleLockNow)
+	mux.HandleFunc("POST /api/lock/unlock", a.handleUnlock)
+	mux.HandleFunc("POST /api/lock/set", a.handleLockSet)
+	mux.HandleFunc("POST /api/lock/recover", a.handleLockRecover)
 	mux.HandleFunc("GET /api/tips", a.handleTipsGet)
 	mux.HandleFunc("POST /api/tips", a.handleTipsHide)
 	mux.HandleFunc("GET /api/ref", a.handleRefTree)

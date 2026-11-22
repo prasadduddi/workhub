@@ -18,6 +18,8 @@ const RELEASES = [
     ['✅', 'Completed Jira issues', 'The Jira page has 📂 In progress and ✅ Completed folders. Issues assigned to you that are done are added to Completed automatically (or with “Add my completed”), with their pull requests and CM- items.', 'jira'],
     ['🔎', 'Search finds Jira too', 'The main search also shows matching Jira issues — by key, summary, status, pull request or CM- item. Click one to open it on the Jira page.', 'dashboard'],
     ['📋', 'Copy all details', 'Right-click a server → Copy all details, or Copy all in the details pop-up, puts every field on the clipboard.', 'terminal'],
+    ['🔒', 'PIN lock', '🔒 Lock in the left menu (or Ctrl+L) locks WorkHub; set a PIN by right-clicking it or clicking it the first time. WorkHub starts locked and locks itself after the minutes you choose. Change PIN anytime; Forgot PIN uses the recovery code shown when you set it.', ''],
+    ['👁', 'Passwords hidden', 'Passwords show as •••••••• — click 👁 next to one to see it, or 👁 Show passwords on the dashboard for all. Copying still copies the real password.', 'dashboard'],
     ['🧩', 'Jenkins job names', 'Jenkins links show their job (Folder › job #build), so identical “Dashboard [Jenkins]” bookmarks are easy to tell apart.', 'bookmarks'],
     ['🛟', 'Automatic backups', 'A dated zip of your data when WorkHub starts and every morning — only if something changed. Kept next to your data folder; the newest 30 are kept. See 🛟 Backups… in the left menu.', ''],
     ['★', 'Most used first', 'Things you open, connect to or find by searching most often — and most recently — come first everywhere, with a “★ Most used” section in the server trees. A sort or grouping you choose still wins.', 'dashboard'],
@@ -34,6 +36,7 @@ const RELEASES = [
 ];
 
 const TIPS = [
+  ['Ctrl+L', 'Lock WorkHub (after you set a PIN).'],
   ['Ctrl+K', 'Search everything — servers, links, notes, files.'],
   ['Ctrl+J', 'Open the chat and ask in plain English: “show prod servers”, “group putty by env”, “add jira PAY-123”.'],
   ['Ctrl+B', 'Hide or show the left menu to get more room.'],

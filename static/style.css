@@ -622,3 +622,24 @@ tr[data-detail]:hover td { background: color-mix(in srgb, var(--accent) 6%, tran
 .jcard { cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
 .jcard .jsum { font-size: 14px; }
 tr[data-jira] { cursor: pointer; }
+
+/* Passwords */
+.pwbox { display: inline-flex; align-items: center; gap: 4px; }
+.eye { padding: 0 5px; font-size: 12px; opacity: .6; line-height: 1.4; }
+.eye.on, .eye:hover { opacity: 1; }
+.pwfield { display: flex; gap: 4px; align-items: center; }
+.pwfield input { flex: 1; }
+/* PIN lock */
+dialog.lockscreen { width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; border: 0; border-radius: 0; background: var(--bg); display: grid; place-items: center; }
+dialog.lockscreen:not([open]) { display: none; }
+dialog.lockscreen::backdrop { background: var(--bg); }
+.lockbox { width: min(360px, 90vw); text-align: center; display: flex; flex-direction: column; gap: 12px; }
+.lockbox > div { display: flex; flex-direction: column; gap: 10px; }
+.lockicon { font-size: 44px; }
+.lockbox input { font-size: 20px; text-align: center; letter-spacing: 4px; padding: 8px; }
+#lockCode { letter-spacing: 1px; font-size: 16px; }
+.lockmsg { color: var(--danger, #dc2626); min-height: 1.2em; font-size: 13px; }
+.linklike { background: none; border: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.pinrec { margin-top: 10px; padding: 10px; border: 2px dashed var(--accent); border-radius: 8px; }
+.pinrec code { font-size: 20px; letter-spacing: 2px; user-select: all; }
+[hidden] { display: none !important; }

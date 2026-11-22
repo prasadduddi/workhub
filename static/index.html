@@ -36,6 +36,7 @@
     <button id="whatsNewBtn" class="ghost" title="New features in this version, and tips">✨ What's new &amp; tips</button>
     <div id="appVersion" class="muted tiny"></div>
     <div id="dataDir" class="muted tiny"></div>
+    <button id="lockBtn" class="ghost" title="Lock WorkHub with your PIN (Ctrl+L)">🔒 Lock</button>
     <button id="extBtn" class="ghost" title="Where PuTTY, FileZilla, DBeaver and SQL Developer are, for “Open in…”">↗ Programs…</button>
     <button id="backupBtn" class="ghost" title="Automatic backups (at start-up and every morning, when something changed)">🛟 Backups…</button>
     <button id="importBtn" class="ghost" title="Bring in data from an older WorkHub folder">Import data…</button>
@@ -58,6 +59,7 @@
       <div class="seg" id="layout">
         <button data-l="cards" class="active" title="Tiles">▦ Cards</button><button data-l="table" title="Grid">☰ Table</button>
       </div>
+      <button id="showPwBtn" class="ghost" title="Show or hide all passwords">👁 Show passwords</button>
       <label class="cardw muted tiny" title="Card width (Cards view)">▭ <input type="range" id="cardWidth" min="240" max="700" step="10"></label>
       <button id="newEntry" class="primary">+ New</button>
     </header>
@@ -328,7 +330,7 @@
       <label>Environment<input name="env" list="envList" placeholder="auto"></label>
       <label class="wide">URL<input name="url"></label>
       <label>Username<input name="username" autocomplete="off"></label>
-      <label>Password<input name="password" autocomplete="off"></label>
+      <label>Password<span class="pwfield"><input name="password" type="password" autocomplete="new-password"><button type="button" class="icon eye" id="entryPwEye" title="Show / hide">👁</button></span></label>
       <label id="dbNameRow">Service name / database<input name="dbname" placeholder="e.g. ORCLPDB1 or postgres"></label>
       <label class="check" id="sidRow" title="Oracle: tick if this is a SID rather than a service name"><input type="checkbox" name="is_sid"> It's an Oracle SID</label>
       <label class="wide" id="tunnelRow" title="Like PuTTY Connection › SSH › Tunnels (local forwards). Started with this server's session, by right-click › Start tunnels, or automatically when a database at localhost:PORT needs one.">Tunnels (PuTTY-style)<input name="tunnels" placeholder="1522:dbhost:1521, 8443:app01:443"></label>
@@ -351,6 +353,38 @@
   <h3 id="detailTitle"></h3>
   <div id="detailBody" class="detail-grid"></div>
   <div class="row end" style="margin-top:12px"><span id="detailActs" class="row"></span><span class="spacer"></span><button id="detailCopyAll">Copy all</button><button id="detailClose" class="primary">Close</button></div>
+</dialog>
+<dialog id="lockDlg" class="lockscreen">
+  <div class="lockbox">
+    <div class="lockicon">🔒</div>
+    <h2>WorkHub is locked</h2>
+    <div id="lockMain">
+      <input id="lockPin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" maxlength="8">
+      <button id="lockGo" class="primary">Unlock</button>
+      <div><button id="lockForgot" class="linklike">Forgot PIN?</button></div>
+    </div>
+    <div id="lockRecover" hidden>
+      <div class="muted tiny">Type the recovery code you saved when you set the PIN, and choose a new PIN.</div>
+      <input id="lockCode" autocomplete="off" placeholder="Recovery code, e.g. ABCD-EFGH-JKLM">
+      <input id="lockNew" type="password" inputmode="numeric" autocomplete="off" placeholder="New PIN (4–8 digits)" maxlength="8">
+      <button id="lockRecoverGo" class="primary">Set new PIN and unlock</button>
+      <div><button id="lockBack" class="linklike">Back</button></div>
+    </div>
+    <div id="lockMsg" class="lockmsg"></div>
+  </div>
+</dialog>
+<dialog id="pinDlg">
+  <h3>🔒 PIN lock</h3>
+  <div id="pinIntro" class="muted tiny"></div>
+  <div id="pinFields">
+  <label id="pinCurRow">Current PIN<input id="pinCur" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+  <label><span id="pinNewLabel">New PIN (4–8 digits)</span><input id="pinNew" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+  <label>Type it again<input id="pinNew2" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+  <label>Lock after no use for
+    <select id="pinMinutes"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="0">Never (only when WorkHub starts or “Lock now”)</option></select></label>
+  </div>
+  <div id="pinRec" class="pinrec" hidden></div>
+  <div class="row end" style="margin-top:10px"><button id="pinRemove" class="danger">Remove PIN</button><span class="spacer"></span><button id="pinCancel">Close</button><button id="pinSave" class="primary">Save</button></div>
 </dialog>
 <dialog id="extDlg">
   <h3>↗ Program locations</h3>
@@ -401,7 +435,7 @@
     <label>Sign-in type<select id="jiraMode"><option value="cloud">Jira Cloud — email + API token</option><option value="server">Jira Server / Data Center — personal access token</option><option value="basic">Username + password</option></select></label>
     <label id="jiraUserRow">Email / username<input id="jiraUser" autocomplete="off"></label>
     <label>Token / password<input id="jiraToken" type="password" autocomplete="new-password"></label>
-    <label>Show sub-tasks and linked issues starting with<input id="jiraPrefix" placeholder="CM-"></label>
+    <label>Show sub-tasks and linked issues whose key starts with<input id="jiraPrefix" placeholder="CM-"></label>
     <div class="muted tiny">Jira Cloud: create an API token at id.atlassian.com → Security → API tokens. Jira Server/DC: your profile → Personal Access Tokens. The token is stored encrypted and never shown again.</div>
     <div class="row end"><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div>
   </form>
@@ -443,6 +477,7 @@
 <script src="jira.js"></script>
 <script src="reffiles.js"></script>
 <script src="whatsnew.js"></script>
+<script src="lock.js"></script>
 <script src="commands.js"></script>
 </body>
 </html>
