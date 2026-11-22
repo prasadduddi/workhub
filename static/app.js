@@ -881,7 +881,7 @@ async function openEntryDialog(e) {
   const ex = { ...(v.extra || {}) };
   f.dbname.value = ex.service || ex.service_name || ex.database || ex.db_name || ex.dbname || ex.sid || '';
   f.tunnels.value = ex.tunnels || '';
-  f.tunnels_on.checked = ex.tunnels_off !== '1';
+  f.tunnels_on.checked = !!ex.tunnels && ex.tunnels_off !== '1'; // off unless this server already has tunnels switched on
   f.tunnels_auto.checked = ex.tunnels_auto === '1';
   delete ex.tunnels; delete ex.tunnels_off; delete ex.tunnels_auto;
   f.commands.value = ex.commands || '';
@@ -928,7 +928,7 @@ function entryFormBody() {
   const extra = {};
   f.extra.value.split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) extra[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
   if (f.tunnels.value.trim()) extra.tunnels = f.tunnels.value.trim();
-  if (!f.tunnels_on.checked) extra.tunnels_off = '1';
+  if (!f.tunnels_on.checked && f.tunnels.value.trim()) extra.tunnels_off = '1';
   if (f.tunnels_auto.checked && f.tunnels.value.trim()) extra.tunnels_auto = '1';
   const cmds = f.commands.value.replace(/\r/g, '').split('\n').map(l => l.trimEnd()).filter(l => l.trim()).join('\n');
   if (cmds) extra.commands = cmds;
