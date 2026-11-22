@@ -90,3 +90,21 @@ func TestNameRules(t *testing.T) {
 		}
 	}
 }
+
+func TestJenkinsJobNames(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://ci.corp.local/job/Payments/job/pay-api-deploy/123/console":                              "Payments › pay-api-deploy #123",
+		"https://jenkins.corp.local/view/UAT/job/nightly%20batch/":                                       "nightly batch",
+		"https://ci.corp.local/blue/organizations/jenkins/Payments%2Fpay-api/detail/pay-api/45/pipeline": "Payments › pay-api #45",
+		"https://jenkins.corp.local/":                                                                    "",
+	} {
+		if got := jenkinsJob(in); got != want {
+			t.Errorf("%s → %q, want %q", in, got, want)
+		}
+	}
+	st, _ := OpenStore(t.TempDir())
+	_, got := st.Ingest("https://ci.corp.local/job/Payments/job/pay-api-deploy/\nhttps://ci.corp.local/job/Payments/job/pay-batch/", "paste", "General")
+	if len(got) != 2 || got[0].Name != "Jenkins – Payments › pay-api-deploy" || got[1].Name != "Jenkins – Payments › pay-batch" {
+		t.Fatalf("%q %q", got[0].Name, got[1].Name)
+	}
+}

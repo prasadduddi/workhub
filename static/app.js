@@ -113,7 +113,7 @@ const URL_LABELS = [
   [/sharepoint\.com|\/sites\/|\/_layouts\//, 'SharePoint'],
   [/service-now\.com|servicenow/, 'ServiceNow'],
   // dev tools
-  [/(^|[.\-])jenkins[.\-:]|\/jenkins(\/|$)/, 'Jenkins'],
+  [/(^|[.\-])jenkins[.\-:]|\/jenkins(\/|$)|^[^/]+\/(?:.*\/)?job\/[^/]+|\/blue\/organizations\/jenkins\//, 'Jenkins'],
   [/(^|[.\-])gitlab[.\-:]|\/gitlab(\/|$)/, 'GitLab'],
   [/github\.com|(^|[.\-])github[.\-:]/, 'GitHub'],
   [/bitbucket/, 'Bitbucket'],
@@ -172,6 +172,27 @@ for (const [cat, labels] of Object.entries({
 })) labels.forEach(l => (LABEL_CATEGORY[l] = cat));
 
 const labelCache = new Map();
+// Jenkins job from its URL: /job/Folder/job/pay-api-deploy/123/console →
+// "Folder › pay-api-deploy #123" (also Blue Ocean and /view/ links).
+function jenkinsJob(url) {
+  let u; try { u = new URL(url); } catch { return ''; }
+  const segs = u.pathname.split('/').filter(Boolean).map(s => { try { return decodeURIComponent(s); } catch { return s; } });
+  const jobs = []; let build = '';
+  for (let i = 0; i < segs.length; i++) {
+    if (segs[i] === 'job' && segs[i + 1]) { jobs.push(segs[++i]); if (/^\d+$/.test(segs[i + 1] || '')) build = segs[i + 1]; }
+  }
+  if (!jobs.length) {
+    const bo = segs.indexOf('organizations'); // Blue Ocean: /blue/organizations/jenkins/Folder%2Fjob/detail/job/12/
+    if (segs[0] === 'blue' && bo >= 0 && segs[bo + 2]) { jobs.push(...segs[bo + 2].split('/')); if (segs[bo + 3] === 'detail' && /^\d+$/.test(segs[bo + 5] || '')) build = segs[bo + 5]; }
+  }
+  if (!jobs.length) { const v = segs.lastIndexOf('view'); return v >= 0 && segs[v + 1] ? 'view ' + segs[v + 1] : ''; }
+  return jobs.join(' › ') + (build ? ' #' + build : '');
+}
+// Label for showing a link: the app label plus, for Jenkins, the job.
+function linkLabel(url) {
+  const l = urlLabel(url), j = /jenkins/i.test(l) ? jenkinsJob(url) : '';
+  return j ? `${l}: ${j}` : l;
+}
 // Naming rules (this workspace): host name contains "-BAT-" → "Batch".
 function ruleLabel(hostOrURL) {
   let h = String(hostOrURL || '').toLowerCase();
@@ -399,7 +420,7 @@ function renderFilters() {
 
 function matches(e, q) {
   if (!q) return true;
-  const hay = [e.name, e.host, e.url, urlLabel(e.url), e.username, e.project, e.env, e.protocol, e.port, e.notes, ...(e.tags || []), ...Object.entries(e.extra || {}).flat()].join(' ').toLowerCase();
+  const hay = [e.name, e.host, e.url, linkLabel(e.url), e.username, e.project, e.env, e.protocol, e.port, e.notes, ...(e.tags || []), ...Object.entries(e.extra || {}).flat()].join(' ').toLowerCase();
   return q.split(/\s+/).every(w => hay.includes(w));
 }
 
@@ -550,7 +571,7 @@ function svcHTML(e) {
   const rows = [];
   const label = [dot(e), e.protocol && `<span class="proto">${esc(e.protocol)}</span>`, e.port && `<span class="proto">:${e.port}</span>`, e.name !== e.host ? esc(e.name) : ''].filter(Boolean).join(' ');
   if (label) rows.push(['', label]);
-  if (e.url) rows.push(['URL', `${urlLabel(e.url) ? `<span class="ulabel">${esc(urlLabel(e.url))}</span>` : ''}<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a> <button class="icon" data-copy="${esc(e.url)}">copy</button>`]);
+  if (e.url) rows.push(['URL', `${linkLabel(e.url) ? `<span class="ulabel">${esc(linkLabel(e.url))}</span>` : ''}<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a> <button class="icon" data-copy="${esc(e.url)}">copy</button>`]);
   if (e.username) rows.push(['User', `<span class="copy" data-copy="${esc(e.username)}" title="Copy">${esc(e.username)}</span>`]);
   if (e.has_password) rows.push(['Password', `<span class="copy" data-copy="${esc(e.password)}" title="Copy">${esc(e.password)}</span>`]);
   if (e.key_file) rows.push(['Key', esc(e.key_file)]);
@@ -578,7 +599,7 @@ function tableHTML(items) {
     e => `<span class="copy" data-copy="${esc(e.host)}">${esc(e.host)}</span>`,
     e => e.port || '',
     e => esc(e.protocol),
-    e => `${urlLabel(e.url) ? `<span class="ulabel">${esc(urlLabel(e.url))}</span> ` : ''}${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a>` : ''}`,
+    e => `${linkLabel(e.url) ? `<span class="ulabel">${esc(linkLabel(e.url))}</span> ` : ''}${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a>` : ''}`,
     e => `<span class="copy" data-copy="${esc(e.username)}">${esc(e.username)}</span>`,
     e => `<span class="copy" data-copy="${esc(e.password)}">${esc(e.password)}</span>`,
     e => `${canSSH(e) ? `<button class="icon" data-act="ssh" data-id="${e.id}">SSH</button> ` : ''}<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
@@ -730,7 +751,7 @@ function renderClips() {
   if (!S.clips.length) { el.innerHTML = '<div class="empty">Nothing captured yet.</div>'; return; }
   el.innerHTML = S.clips.map(c => {
     const chips = (c.entry_ids || []).map(byId).filter(Boolean).map(e =>
-      `<span class="chip" data-find="${esc(e.host || e.url || e.username)}">${urlLabel(e.url) ? esc(urlLabel(e.url)) + ' · ' : ''}${esc(e.username ? e.username + ' @ ' : '')}${esc(e.host || e.url || '')}${e.port ? ':' + e.port : ''}</span>`).join('');
+      `<span class="chip" data-find="${esc(e.host || e.url || e.username)}">${linkLabel(e.url) ? esc(linkLabel(e.url)) + ' · ' : ''}${esc(e.username ? e.username + ' @ ' : '')}${esc(e.host || e.url || '')}${e.port ? ':' + e.port : ''}</span>`).join('');
     return `<div class="clip"><div class="clip-head"><span>${new Date(c.created).toLocaleString()}</span><span class="proto">${esc(c.source)}</span><span>${esc(c.project)}</span>
       <span class="spacer"></span><button class="icon danger" data-del="${c.id}">Delete</button></div>
       <pre>${esc(c.text)}</pre><div class="chips">${chips || '<span class="muted tiny">no hosts or credentials recognised</span>'}</div></div>`;
@@ -1484,7 +1505,7 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
     const res = S.entries.filter(e => matches(e, q)).slice(0, 12);
     if (!res.length) return this.say(`Nothing saved matches <code>${esc(q)}</code>.`);
     const d = this.say(`${res.length} match${res.length > 1 ? 'es' : ''}:\n` + res.map(e =>
-      `• <b>${esc(e.name)}</b>${urlLabel(e.url) ? ` <span class="ulabel">${esc(urlLabel(e.url))}</span>` : ''} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''} <span class="muted">${esc(e.username || '')}${e.username ? '@' : ''}${esc(e.host || e.url || '')}</span>
+      `• <b>${esc(e.name)}</b>${linkLabel(e.url) ? ` <span class="ulabel">${esc(linkLabel(e.url))}</span>` : ''} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''} <span class="muted">${esc(e.username || '')}${e.username ? '@' : ''}${esc(e.host || e.url || '')}</span>
    ${canSSH(e) ? `<button class="icon" data-t="${e.id}">PuTTY</button> ` : ''}${canFiles(e) ? `<button class="icon" data-fl="${e.id}">FileZilla</button> ` : ''}${e.password ? `<button class="icon" data-pw="${e.id}">copy password</button>` : ''}${e.url ? ` <button class="icon" data-url="${e.id}">open URL</button>` : ''}`).join('\n'));
     d.addEventListener('click', ev => {
       const b = ev.target.closest('button'); if (!b) return;
@@ -1608,12 +1629,15 @@ const Bookmarks = {
   },
 
   tile(e) {
-    const label = urlLabel(e.url);
+    const label = urlLabel(e.url), job = /jenkins/i.test(label) ? jenkinsJob(e.url) : '';
+    const jobName = job.replace(/ #\d+$/, '').split(' › ').pop();
+    const title = job && !e.name.toLowerCase().includes(jobName.toLowerCase()) ? job : e.name !== e.host ? e.name : label || e.host;
+    const sub = job ? (title === job ? (e.name !== e.host ? e.name : label) : title.includes(job) ? label : label + ': ' + job) : label && e.name !== e.host ? label : '';
     const when = e.open_count ? `${e.open_count}× · ${fmtTime(e.last_used)}` : '';
     return `<div class="bm env-${esc(e.env || '')}" data-bm="${e.id}" title="${esc(e.url)}">
       ${dot(e)}${avatar(label || e.name || e.host)}
-      <div class="bm-body"><div class="bm-name">${esc(e.name !== e.host ? e.name : label || e.host)}</div>
-        <div class="bm-sub">${label && e.name !== e.host ? `<span class="ulabel">${esc(label)}</span>` : ''}${esc(e.host)}${e.username ? ' · ' + esc(e.username) : ''}</div>
+      <div class="bm-body"><div class="bm-name">${esc(title)}</div>
+        <div class="bm-sub">${sub ? `<span class="ulabel">${esc(sub)}</span>` : ''}${esc(e.host)}${e.username ? ' · ' + esc(e.username) : ''}</div>
         ${e.folder && this.mode !== 'folder' ? `<div class="bm-sub" title="${esc(e.folder)}">📁 ${esc(e.folder.split(' › ').slice(1).join(' › ') || e.folder)}</div>` : ''}</div>
       <div class="bm-meta">${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="n">${when}</span>
         <span class="bm-tools"><button class="icon" data-bmcopy="${e.id}" title="Copy URL">URL</button>${e.password ? `<button class="icon" data-bmpw="${e.id}" title="Copy password">pw</button>` : ''}<button class="icon" data-bmedit="${e.id}" title="Edit">✎</button>${e.hidden ? `<button class="icon" data-bmrestore="${e.id}" title="Show this bookmark again">↺ Restore</button>` : `<button class="icon danger" data-bmdel="${e.id}" title="Remove from WorkHub (your browser is not changed)">🗑</button>`}</span></div>

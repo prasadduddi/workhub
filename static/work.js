@@ -170,7 +170,7 @@ function insertAtCaret(html) {
   Work.saveDoc();
 }
 
-const linkHTML = u => { const label = urlLabel(u); return `${label ? `<b>${esc(label)}:</b> ` : ''}<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>&nbsp;`; };
+const linkHTML = u => { const label = linkLabel(u); return `${label ? `<b>${esc(label)}:</b> ` : ''}<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>&nbsp;`; };
 
 // ---- events ----
 $('#workNew').onclick = () => Work.create();

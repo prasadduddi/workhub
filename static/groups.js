@@ -79,7 +79,7 @@ const Groups = {
       ${sec('Open windows', c.windows.length, c.windows.map((w, i) => `<div class="grow link" data-gw="${i}"><span class="proto">${w.kind}</span> ${esc(w.label)}</div>`).join(''))}
       ${sec('Servers & databases', c.servers.length, c.servers.map(e => row(e,
         `${canSSH(e) ? `<button class="icon" data-gs="ssh" data-id="${e.id}">PuTTY</button>` : ''}${canFiles(e) ? `<button class="icon" data-gs="files" data-id="${e.id}">FileZilla</button>` : ''}${canDB(e) ? `<button class="icon" data-gs="sql" data-id="${e.id}">SQL</button>` : ''}<button class="icon" data-gs="edit" data-id="${e.id}">Edit</button>`)).join(''))}
-      ${sec('Links', c.links.length, c.links.map(e => row(e, `${urlLabel(e.url) ? `<span class="ulabel">${esc(urlLabel(e.url))}</span>` : ''}<button class="icon" data-gs="open" data-id="${e.id}">Open</button>`)).join(''))}
+      ${sec('Links', c.links.length, c.links.map(e => row(e, `${linkLabel(e.url) ? `<span class="ulabel">${esc(linkLabel(e.url))}</span>` : ''}<button class="icon" data-gs="open" data-id="${e.id}">Open</button>`)).join(''))}
       ${sec('Notes & files', c.notes.length + c.files.length, c.notes.map(n => `<div class="grow link" data-gn="note:${n.id}">📝 ${esc(n.title || 'Untitled')}</div>`).join('') + c.files.map(f => `<div class="grow link" data-gn="file:${esc(f.path)}">📄 ${esc(f.path)}</div>`).join(''))}
       ${sec('Git repositories', c.repos.length, c.repos.map(p => `<div class="grow link" data-gr="${esc(p)}">⎇ ${esc(p)}</div>`).join(''))}
       ${sec('Captured', c.clips.length, c.clips.map(cl => `<div class="grow clipline"><span class="muted tiny">${new Date(cl.created).toLocaleString()} · ${esc(cl.source)}</span> ${esc(cl.text.replace(/\s+/g, ' ').slice(0, 160))}</div>`).join(''))}`;

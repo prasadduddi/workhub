@@ -89,3 +89,4 @@ v1.6 checks
   [ ] Folders (replaces Properties): + adds a folder, + New file, Upload / drop files and whole folders, edit with Ctrl+S,
       JSON Format/Check/Validate; old Properties content is under "From Properties"; files are plain files in <data>\reference
   [ ] Bookmarks → 🏷 Naming rules… (or 🏷 in a server tree): paste "-BAT- Batch, -BAR- Barn, …" → matching servers/links renamed (this workspace only)
+  [ ] Jenkins links show the job (Folder › job #build) on Bookmarks, Dashboard and in work items

@@ -178,6 +178,7 @@ func OpenStore(dir string) (*Store, error) {
 		if err := json.Unmarshal(plain, &s.st); err != nil {
 			return nil, fmt.Errorf("corrupt data file %s: %w", s.path, err)
 		}
+		s.applyNameRules() // automatic names follow the current rules and labels
 	}
 	go s.saver()
 	return s, nil
@@ -1003,6 +1004,9 @@ func defaultName(e *Entry) string {
 	if db := orDefault(e.Extra["service"], orDefault(e.Extra["sid"], e.Extra["database"])); db != "" && e.Host != "" && dbKind(*e) != "" {
 		return e.Host + " / " + db
 	}
+	if job := jenkinsJob(e.URL); job != "" {
+		return "Jenkins – " + job
+	}
 	switch {
 	case e.Host != "":
 		return e.Host
@@ -1012,6 +1016,58 @@ func defaultName(e *Entry) string {
 		return "Credential: " + e.Username
 	}
 	return "Untitled"
+}
+
+// jenkinsJob reads the job from a Jenkins link:
+// /job/Folder/job/pay-api-deploy/123/console → "Folder › pay-api-deploy #123".
+func jenkinsJob(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	var segs []string
+	for _, p := range strings.Split(u.EscapedPath(), "/") { // %2F stays inside a segment
+		if p != "" {
+			if d, err := url.PathUnescape(p); err == nil {
+				p = d
+			}
+			segs = append(segs, p)
+		}
+	}
+	var jobs []string
+	build := ""
+	for i := 0; i < len(segs); i++ {
+		if segs[i] == "job" && i+1 < len(segs) {
+			i++
+			jobs = append(jobs, segs[i])
+			if i+1 < len(segs) && isDigits(segs[i+1]) {
+				build = segs[i+1]
+			}
+		}
+	}
+	if len(jobs) == 0 && len(segs) > 3 && segs[0] == "blue" && segs[1] == "organizations" {
+		jobs = strings.Split(segs[3], "/")
+		if len(segs) > 6 && segs[4] == "detail" && isDigits(segs[6]) {
+			build = segs[6]
+		}
+	}
+	if len(jobs) == 0 {
+		return ""
+	}
+	out := strings.Join(jobs, " › ")
+	if build != "" {
+		out += " #" + build
+	}
+	return out
+}
+
+func isDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
 }
 
 func orDefault(s, d string) string {
