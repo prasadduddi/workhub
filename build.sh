@@ -1,6 +1,6 @@
 #!/bin/sh
-# Builds WorkHub-web.exe (Windows, 64-bit) plus a native binary for local testing,
-# then packages a timestamped zip for the work laptop.
+# Builds WorkHub-web.exe and WorkHub-Desktop.exe (Windows, 64-bit) plus a native
+# binary for local testing. "./build.sh zip" also packages a timestamped zip.
 set -e
 cd "$(dirname "$0")"
 stamp="$(date +%Y-%m-%d-%H%M)"
@@ -12,6 +12,9 @@ GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=$st
 GOOS=windows GOARCH=amd64 go build -trimpath -tags desktop -ldflags "-s -w -H windowsgui -X main.version=$stamp" -o dist/WorkHub-Desktop.exe .
 go build -trimpath -ldflags "-X main.version=$stamp" -o dist/workhub-local .
 cp README.md TESTING.txt dist/
-zip="WorkHub-$stamp.zip"
-(cd dist && rm -f "$zip" && zip -q "$zip" WorkHub-web.exe WorkHub-Desktop.exe TESTING.txt README.md)
-echo "Package: dist/$zip"
+echo "Built dist/WorkHub-web.exe and dist/WorkHub-Desktop.exe ($stamp)"
+if [ "$1" = zip ]; then
+  zip="WorkHub-$stamp.zip"
+  (cd dist && rm -f "$zip" && zip -q "$zip" WorkHub-web.exe WorkHub-Desktop.exe TESTING.txt README.md)
+  echo "Package: dist/$zip"
+fi
