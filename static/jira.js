@@ -23,18 +23,24 @@ const Jira = {
     $('#jiraSetupHint').hidden = !!ready;
     $('#jiraSignBtn').hidden = !(browser && this.session?.available && this.session.checked && !this.session.signed_in);
     const q = $('#jiraFilter').value.trim().toLowerCase();
-    const list = this.issues.filter(j => !q || [j.key, j.summary, j.status, j.assignee, ...j.prs.map(p => p.name + ' ' + p.repo), ...j.children.map(c => c.key + ' ' + c.summary)].join(' ').toLowerCase().includes(q));
+    const list = this.issues.filter(j => !q || [j.key, j.summary, j.status, j.assignee, ...j.prs.map(p => p.name + ' ' + p.repo), ...j.children.map(c => c.key + ' ' + c.summary), ...(j.kids || []).map(c => c.key + ' ' + c.summary)].join(' ').toLowerCase().includes(q));
     const prefix = this.cfg?.child_prefix || 'CM-';
     const node = (cls, key, depth, html, title = '') => `<div class="tnode jn ${cls} ${this.sel === key ? 'sel' : ''}" data-jk="${esc(key)}" style="padding-left:${8 + depth * 16}px" title="${esc(title)}">${html}</div>`;
     const issueHTML = j => {
       const k = j.key, open = this.open.has(k) || !!q;
-      let h = node('issue', 'i:' + k, 1, `<span class="tw" data-jtog="${esc(k)}">${open ? '▾' : '▸'}</span><b>${esc(k)}</b> <span class="nm">${esc(j.summary || '')}</span>${j.status ? `<span class="jstat${j.done ? ' done' : ''}">${esc(j.status)}</span>` : ''}${j.error ? '<span class="dot fail" title="' + esc(j.error) + '"></span>' : ''}`, j.error || j.summary);
+      let h = node('issue', 'i:' + k, 1, `<span class="tw" data-jtog="${esc(k)}">${open ? '▾' : '▸'}</span><a class="jkey" href="${esc(j.url)}" data-jlink="${esc(j.url)}" title="Open ${esc(k)} in Jira">${esc(k)}</a> <span class="nm">${esc(j.summary || '')}</span>${j.status ? `<span class="jstat${j.done ? ' done' : ''}">${esc(j.status)}</span>` : ''}${j.error ? '<span class="dot fail" title="' + esc(j.error) + '"></span>' : ''}`, j.error || j.summary);
       if (open) {
         const pOpen = this.open.has('p:' + k), cOpen = this.open.has('c:' + k);
         h += node('folder', 'p:' + k, 2, `<span class="tw" data-jtog="p:${esc(k)}">${j.prs.length ? (pOpen ? '▾' : '▸') : ''}</span>⇄ Pull requests <span class="n">${j.prs.length}</span>`);
         if (pOpen) h += j.prs.map((p, i) => node('pr', `pr:${k}:${i}`, 3, `${this.prBadge(p.status)} <span class="nm">${esc(p.name)}</span><small>${esc(p.repo || '')}</small>`, p.url)).join('');
         h += node('folder', 'c:' + k, 2, `<span class="tw" data-jtog="c:${esc(k)}">${j.children.length ? (cOpen ? '▾' : '▸') : ''}</span>☑ ${esc(prefix)} items <span class="n">${j.children.length}</span>`);
-        if (cOpen) h += j.children.map((c, i) => node('child', `ch:${k}:${i}`, 3, `<b>${esc(c.key)}</b> <span class="nm">${esc(c.summary)}</span><span class="jstat">${esc(c.status)}</span>`, `${c.relation}: ${c.summary}`)).join('');
+        if (cOpen) h += j.children.map((c, i) => node('child', `ch:${k}:${i}`, 3, `<a class="jkey" href="${esc(c.url)}" data-jlink="${esc(c.url)}" title="Open ${esc(c.key)} in Jira">${esc(c.key)}</a> <span class="nm">${esc(c.summary)}</span><span class="jstat">${esc(c.status)}</span>`, `${c.relation}: ${c.summary}`)).join('');
+        // Child work items (all sub-tasks and children, any key): open unless closed by the user.
+        const kids = j.kids || [], kOpen = !this.open.has('-k:' + k);
+        if (kids.length) {
+          h += node('folder', 'k:' + k, 2, `<span class="tw" data-jtog="-k:${esc(k)}">${kOpen ? '▾' : '▸'}</span>🧩 Child work items <span class="n">${kids.length}</span>`);
+          if (kOpen) h += kids.map((c, i) => node('child', `kid:${k}:${i}`, 3, `<a class="jkey" href="${esc(c.url)}" data-jlink="${esc(c.url)}" title="Open ${esc(c.key)} in Jira">${esc(c.key)}</a> <span class="nm">${esc(c.summary)}</span>${c.type ? `<small>${esc(c.type)}</small>` : ''}<span class="jstat">${esc(c.status)}</span>`, `${c.relation}: ${c.summary}`)).join('');
+        }
       }
       return h;
     };
@@ -57,6 +63,7 @@ const Jira = {
     if (!j) return null;
     if (kind === 'pr') return { kind, j, item: j.prs[+i] };
     if (kind === 'ch') return { kind, j, item: j.children[+i] };
+    if (kind === 'kid') return { kind: 'ch', j, item: (j.kids || [])[+i] };
     return { kind, j };
   },
 
@@ -64,15 +71,16 @@ const Jira = {
     const f = this.find(this.sel), el = $('#jiraDetail');
     if (!f) { el.innerHTML = '<div class="empty">Select an issue, pull request or item on the left.<br>Double-click opens it in the browser.</div>'; return; }
     const j = f.j;
-    const head = `<div class="ghead"><h3>${esc(j.key)}</h3><span class="jstat">${esc(j.status || '')}</span><span class="spacer"></span>
+    const head = `<div class="ghead"><h3><a class="jkey" href="${esc(j.url)}" data-jlink="${esc(j.url)}" title="Open in Jira">${esc(j.key)}</a></h3><span class="jstat">${esc(j.status || '')}</span><span class="spacer"></span>
       <button data-ja="thread" title="${typeof Work !== 'undefined' && Work.byJira(j.key) ? 'Open the task thread linked to this issue' : 'Start a task thread linked to this issue'}">🧵 ${typeof Work !== 'undefined' && Work.byJira(j.key) ? 'Thread' : 'Start thread'}</button><button data-ja="open" data-url="${esc(j.url)}">Open in browser</button><button data-ja="refresh">↻ Refresh</button><button data-ja="remove" class="danger">Remove</button></div>`;
-    const info = `<div class="gsec"><b>${esc(j.summary || '')}</b><div class="muted tiny">${esc(j.type || '')}${j.assignee ? ' · ' + esc(j.assignee) : ''}${j.fetched ? ' · checked ' + esc(new Date(j.fetched).toLocaleString()) : ''}</div>
+    const info = `<div class="gsec"><a href="${esc(j.url)}" data-jlink="${esc(j.url)}" class="jsumlink"><b>${esc(j.summary || '')}</b></a><div class="muted tiny">${esc(j.type || '')}${j.assignee ? ' · ' + esc(j.assignee) : ''}${j.fetched ? ' · checked ' + esc(new Date(j.fetched).toLocaleString()) : ''}</div>
       ${j.error ? `<div class="dberr" style="margin-top:6px">⚠ ${esc(j.error)}</div>` : ''}</div>`;
     let body = '';
     if (f.kind === 'pr') body = `<div class="gsec"><h4>Pull request</h4><div class="grow">${this.prBadge(f.item.status)} <a href="${esc(f.item.url)}" target="_blank" rel="noopener">${esc(f.item.name)}</a></div><div class="muted tiny">${esc(f.item.repo || '')}${f.item.author ? ' · ' + esc(f.item.author) : ''}</div></div>`;
-    else if (f.kind === 'ch') body = `<div class="gsec"><h4>${esc(f.item.relation)}</h4><div class="grow"><b>${esc(f.item.key)}</b> <a href="${esc(f.item.url)}" target="_blank" rel="noopener">${esc(f.item.summary)}</a> <span class="jstat">${esc(f.item.status)}</span></div><div class="muted tiny">${esc(f.item.type || '')}</div></div>`;
+    else if (f.kind === 'ch') body = `<div class="gsec"><h4>${esc(f.item.relation)}</h4><div class="grow"><a class="jkey" href="${esc(f.item.url)}" data-jlink="${esc(f.item.url)}">${esc(f.item.key)}</a> <a href="${esc(f.item.url)}" target="_blank" rel="noopener">${esc(f.item.summary)}</a> <span class="jstat">${esc(f.item.status)}</span></div><div class="muted tiny">${esc(f.item.type || '')}</div></div>`;
     else body = `<div class="gsec"><h4>Pull requests <span class="n">${j.prs.length}</span></h4>${j.prs.map(p => `<div class="grow">${this.prBadge(p.status)} <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a> <span class="muted tiny">${esc(p.repo || '')}</span></div>`).join('') || '<div class="muted tiny">None found in Jira\'s development panel or links.</div>'}</div>
-      <div class="gsec"><h4>${esc(this.cfg?.child_prefix || 'CM-')} items <span class="n">${j.children.length}</span></h4>${j.children.map(c => `<div class="grow"><b>${esc(c.key)}</b> <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.summary)}</a> <span class="jstat">${esc(c.status)}</span> <span class="muted tiny">${esc(c.relation)}</span></div>`).join('') || '<div class="muted tiny">No sub-tasks or linked issues starting with that prefix.</div>'}</div>`;
+      <div class="gsec"><h4>🧩 Child work items <span class="n">${(j.kids || []).length}</span></h4>${(j.kids || []).map(c => `<div class="grow"><a class="jkey" href="${esc(c.url)}" data-jlink="${esc(c.url)}">${esc(c.key)}</a> <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.summary)}</a> ${c.type ? `<span class="muted tiny">${esc(c.type)}</span>` : ''} <span class="jstat">${esc(c.status)}</span></div>`).join('') || '<div class="muted tiny">No sub-tasks or child issues.</div>'}</div>
+      <div class="gsec"><h4>${esc(this.cfg?.child_prefix || 'CM-')} items <span class="n">${j.children.length}</span></h4>${j.children.map(c => `<div class="grow"><a class="jkey" href="${esc(c.url)}" data-jlink="${esc(c.url)}">${esc(c.key)}</a> <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.summary)}</a> <span class="jstat">${esc(c.status)}</span> <span class="muted tiny">${esc(c.relation)}</span></div>`).join('') || '<div class="muted tiny">No sub-tasks or linked issues starting with that prefix.</div>'}</div>`;
     el.innerHTML = head + info + body;
   },
 
@@ -166,6 +174,11 @@ $('#jiraDlg').addEventListener('close', async () => {
   setTimeout(() => Jira.load(), 2500);
   Jira.load();
 });
+// Jira keys are links: open the ticket in the browser (not inside WorkHub).
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-jlink]'); if (!a) return;
+  e.preventDefault(); e.stopPropagation(); openExternal(a.dataset.jlink);
+}, true);
 $('#jiraTree').addEventListener('click', e => {
   const tog = e.target.closest('[data-jtog]');
   if (tog && tog.textContent) { const k = tog.dataset.jtog; Jira.open.has(k) ? Jira.open.delete(k) : Jira.open.add(k); Jira.persist(); return Jira.render(); }

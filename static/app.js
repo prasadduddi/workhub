@@ -885,7 +885,7 @@ function jiraMatches(q) {
   if (!words.length || filters.length || typeof Jira === 'undefined') return []; // key:value filters are about connections
   return Jira.issues.filter(j => {
     const text = [j.key, j.summary, j.status, j.assignee, j.type, j.done ? 'completed done' : 'open',
-      ...j.prs.map(p => `${p.name} ${p.repo} ${p.status}`), ...j.children.map(c => `${c.key} ${c.summary} ${c.status}`)].join(' ').toLowerCase();
+      ...j.prs.map(p => `${p.name} ${p.repo} ${p.status}`), ...j.children.map(c => `${c.key} ${c.summary} ${c.status}`), ...(j.kids || []).map(c => `${c.key} ${c.summary} ${c.status}`)].join(' ').toLowerCase();
     return words.every(w => text.includes(w));
   });
 }
@@ -915,10 +915,10 @@ function jiraResultsHTML(list) {
   const state = j => `<span class="jstat${j.done ? ' done' : ''}">${esc(j.status || '')}</span> <span class="muted tiny">${j.done ? '✅ Completed' : '📂 In progress'}</span>`;
   const body = S.layout === 'table'
     ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Pull requests</th><th>${esc(Jira.cfg?.child_prefix || 'CM-')} items</th></tr></thead><tbody>${list.map(j => `<tr data-jira="${esc(j.key)}" title="Show in Jira page">
-        <td><b>${esc(j.key)}</b></td><td>${esc(j.summary || '')}</td><td>${state(j)}</td>
+        <td><a class="jkey" href="${esc(j.url)}" data-jlink="${esc(j.url)}" title="Open in Jira">${esc(j.key)}</a></td><td>${esc(j.summary || '')}</td><td>${state(j)}</td>
         <td>${j.prs.map(p => `${Jira.prBadge(p.status)} ${esc(p.name)}`).join('<br>')}</td><td>${j.children.map(c => `<b>${esc(c.key)}</b> ${esc(c.status)}`).join('<br>')}</td></tr>`).join('')}</tbody></table></div>`
     : `<div class="cards">${list.map(j => `<div class="card jcard" data-jira="${esc(j.key)}" title="Show in Jira page">
-        <div class="card-head"><b class="host">◆ ${esc(j.key)}</b> ${state(j)}<span class="spacer"></span><button class="icon" data-jopen="${esc(j.url)}">Open in Jira ↗</button></div>
+        <div class="card-head"><b class="host">◆ <a class="jkey" href="${esc(j.url)}" data-jlink="${esc(j.url)}" title="Open in Jira">${esc(j.key)}</a></b> ${state(j)}<span class="spacer"></span><button class="icon" data-jopen="${esc(j.url)}">Open in Jira ↗</button></div>
         <div class="jsum">${esc(j.summary || '')}</div>
         ${j.prs.length ? `<div class="muted tiny">⇄ ${j.prs.map(p => `${Jira.prBadge(p.status)} ${esc(p.name)}`).join(' · ')}</div>` : ''}
         ${j.children.length ? `<div class="muted tiny">☑ ${j.children.map(c => `<b>${esc(c.key)}</b> ${esc(c.status)}`).join(' · ')}</div>` : ''}</div>`).join('')}</div>`;

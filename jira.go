@@ -58,7 +58,8 @@ type JiraIssue struct {
 	Assignee string      `json:"assignee"`
 	URL      string      `json:"url"`
 	PRs      []JiraPR    `json:"prs"`
-	Children []JiraChild `json:"children"`
+	Children []JiraChild `json:"children"`           // CM- items (sub-tasks / linked issues with the prefix)
+	Kids     []JiraChild `json:"kids,omitempty"`     // child work items: all sub-tasks and issues whose parent is this one
 	Done     bool        `json:"done,omitempty"`     // status category "Done"
 	Resolved string      `json:"resolved,omitempty"` // resolution date from Jira
 	Mine     bool        `json:"mine,omitempty"`     // added automatically as one of my completed issues
@@ -281,6 +282,25 @@ func fetchJira(cfg JiraConfig, key string) JiraIssue {
 		j.Children[i].Start, j.Children[i].End = cmWindow(c, j.Children[i].Key)
 	}
 
+	// Child work items: every sub-task, plus issues whose parent is this one
+	// (an epic's stories on Jira Cloud; "Epic Link" on older Jira Server).
+	seenKid := map[string]bool{}
+	for _, st := range f.Subtasks {
+		seenKid[st.Key] = true
+		j.Kids = append(j.Kids, JiraChild{st.Key, st.Fields.Summary, st.Fields.Status.Name, st.Fields.IssueType.Name, cfg.BaseURL + "/browse/" + st.Key, "sub-task", "", ""})
+	}
+	kids, err := searchChildren(cfg, "parent = "+key+" ORDER BY created ASC")
+	if err != nil || (len(kids) == 0 && strings.EqualFold(j.Type, "epic")) {
+		kids, _ = searchChildren(cfg, `"Epic Link" = `+key+" ORDER BY created ASC")
+	}
+	for _, k := range kids {
+		if !seenKid[k.Key] {
+			seenKid[k.Key] = true
+			k.URL = cfg.BaseURL + "/browse/" + k.Key
+			j.Kids = append(j.Kids, k)
+		}
+	}
+
 	// Pull requests from the development panel (GitHub, Bitbucket, GitLab…).
 	seen := map[string]bool{}
 	var summary struct {
@@ -432,6 +452,34 @@ func searchKeys(cfg JiraConfig, jqlText string, limit int) ([]string, error) {
 		}
 	}
 	return keys, nil
+}
+
+// searchChildren lists issues for a JQL with their summary, status and type
+// (up to 100), using the same Cloud-then-Server searches as searchKeys.
+func searchChildren(cfg JiraConfig, jqlText string) ([]JiraChild, error) {
+	c := &jiraClient{cfg: cfg, http: &http.Client{Timeout: 30 * time.Second}}
+	jql := url.QueryEscape(jqlText)
+	var p struct {
+		Issues []struct {
+			Key    string `json:"key"`
+			Fields struct {
+				Summary   string                `json:"summary"`
+				Status    struct{ Name string } `json:"status"`
+				IssueType struct{ Name string } `json:"issuetype"`
+			} `json:"fields"`
+		} `json:"issues"`
+	}
+	err := c.get("/rest/api/3/search/jql?jql="+jql+"&fields=summary,status,issuetype&maxResults=100", &p)
+	if err != nil {
+		if err2 := c.get("/rest/api/2/search?jql="+jql+"&fields=summary,status,issuetype&maxResults=100", &p); err2 != nil {
+			return nil, err2
+		}
+	}
+	out := make([]JiraChild, 0, len(p.Issues))
+	for _, i := range p.Issues {
+		out = append(out, JiraChild{Key: i.Key, Summary: i.Fields.Summary, Status: i.Fields.Status.Name, Type: i.Fields.IssueType.Name, Relation: "child"})
+	}
+	return out, nil
 }
 
 // My issues: everything assigned to me that is open, and my completed ones.

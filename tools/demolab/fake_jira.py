@@ -43,6 +43,8 @@ ISSUES = {
         "subtasks": [], "issuelinks": [link("CM-4301", "Certificate change window", "Closed")]}, []),
 }
 MINE_DONE = ["PAY-101", "PAY-088", "OPS-61"]
+CHILDREN = {"PAY-123": [("PAY-140", "Validate refund limits in the API", "In Progress", "Story"),
+                         ("PAY-141", "Show limit errors to merchants", "To Do", "Story")]}
 MINE_OPEN = ["PAY-123", "PAY-130"]  # assigned to me, not done (found by "Add my issues")
 
 # CM change issues with an implementation window (times relative to today, so
@@ -69,7 +71,11 @@ class H(BaseHTTPRequestHandler):
         parts = u.path.split("/")
         if u.path in ("/rest/api/3/search/jql", "/rest/api/2/search"):
             from urllib.parse import unquote_plus
-            keys = MINE_OPEN if "!=" in unquote_plus(q.get("jql", "")) else MINE_DONE
+            jql = unquote_plus(q.get("jql", ""))
+            if jql.startswith("parent = "):  # child work items (Jira Cloud style)
+                kids = CHILDREN.get(jql.split()[2], [])
+                return self.send({"issues": [{"key": k, "fields": {"summary": s, "status": {"name": st}, "issuetype": {"name": t}}} for k, s, st, t in kids]})
+            keys = MINE_OPEN if "!=" in jql else MINE_DONE
             return self.send({"issues": [{"key": k} for k in keys], "total": len(keys)})
         if u.path.startswith("/rest/api/2/issue/CM-") and parts[5] in CM:
             summary, status, start, end = CM[parts[5]]

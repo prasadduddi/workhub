@@ -122,6 +122,7 @@ const HELP_TOPICS = [
     'Press 👤 Add my issues on the Jira page: it adds everything assigned to you — open ones under 📂 In progress, done ones under ✅ Completed.',
     'If it shows an error, check Jira settings (address, sign-in) — with browser sign-in, press 🔑 Sign in again.',
     'Other issues: type their keys or paste links in the box at the top of the Jira page.',
+    'Each issue lists its 🧩 Child work items (sub-tasks and child issues, any key) and its CM- items; click a key to open the ticket in the browser.',
     'It is checked again every 15 minutes.'] },
 
   // ---- Calendar ----

@@ -30,6 +30,9 @@ func fakeJira(t *testing.T) *httptest.Server {
 					map[string]any{"type": map[string]any{"inward": "is implemented by", "outward": "implements"}, "outwardIssue": map[string]any{"key": "CM-4411", "fields": map[string]any{"summary": "Prod release", "status": map[string]any{"name": "Scheduled"}, "issuetype": map[string]any{"name": "Change"}}}},
 					map[string]any{"type": map[string]any{"inward": "relates", "outward": "relates"}, "inwardIssue": map[string]any{"key": "OPS-9", "fields": map[string]any{"summary": "Unrelated", "status": map[string]any{"name": "Open"}, "issuetype": map[string]any{"name": "Task"}}}},
 				}}})
+		case r.URL.Path == "/rest/api/2/search" && strings.Contains(r.URL.Query().Get("jql"), "parent = PAY-123"):
+			json.NewEncoder(w).Encode(map[string]any{"issues": []any{map[string]any{"key": "PAY-140", "fields": map[string]any{
+				"summary": "Validate limits in the API", "status": map[string]any{"name": "In Progress"}, "issuetype": map[string]any{"name": "Story"}}}}})
 		case r.URL.Path == "/rest/api/2/search" && strings.Contains(r.URL.Query().Get("jql"), "statusCategory != Done"):
 			json.NewEncoder(w).Encode(map[string]any{"total": 1, "issues": []map[string]string{{"key": "PAY-123"}}})
 		case r.URL.Path == "/rest/api/2/search" && strings.Contains(r.URL.Query().Get("jql"), "statusCategory = Done"):
@@ -81,6 +84,14 @@ func TestJira(t *testing.T) {
 		t.Fatalf("CM window not read: %+v", c)
 	} else if st, _ := time.Parse(time.RFC3339, c.Start); !st.Equal(time.Date(2026, 12, 1, 22, 0, 0, 0, time.UTC)) {
 		t.Fatalf("CM start %s", c.Start)
+	}
+	// Child work items: every sub-task (any key) and issues whose parent is PAY-123.
+	var kids []string
+	for _, k := range j.Kids {
+		kids = append(kids, k.Key)
+	}
+	if !strings.Contains(strings.Join(kids, ","), "PAY-124") || !strings.Contains(strings.Join(kids, ","), "PAY-140") {
+		t.Fatalf("child work items: %v", kids)
 	}
 	if bad := fetchJira(JiraConfig{BaseURL: srv.URL, Mode: "server", Token: "wrong"}, "PAY-123"); !strings.Contains(bad.Error, "401") {
 		t.Fatalf("bad token error: %q", bad.Error)
