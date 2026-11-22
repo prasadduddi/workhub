@@ -48,6 +48,7 @@ const Work = {
     this.list = (await api('GET', '/api/work').catch(() => [])) || [];
     this.renderList();
     this.renderCapture();
+    if ($('#search').value.trim() && $('#view-dashboard').classList.contains('active')) renderBoard(); // threads in the main search
   },
   active() { return S.settings?.active_thread || ''; },
 
@@ -218,6 +219,10 @@ function insertAtCaret(html, box = $('#tbox')) {
   document.execCommand('insertHTML', false, html);
 }
 const linkHTML = u => { const label = linkLabel(u); return `${label ? `<b>${esc(label)}:</b> ` : ''}<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>&nbsp;`; };
+
+// Loaded at start too, so the main search finds threads; kept fresh.
+setTimeout(() => Work.loadList().then(() => { if ($('#search').value.trim()) renderBoard(); }), 600);
+setInterval(() => Work.loadList(), 5 * 60 * 1000);
 
 // ---- events ----
 $('#workNew').onclick = () => Work.create();

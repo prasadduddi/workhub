@@ -31,7 +31,7 @@ function pwHTML(pw) {
 // Raw captured text with passwords masked: every saved password, plus values
 // after "password:", "pwd=", "-pw" and in user:password@host.
 function secretsIn(text) {
-  const out = new Set((S.allEntries || []).map(e => e.password).filter(p => p && p.length >= 3 && text.includes(p)));
+  const out = new Set((S.allEntries || []).flatMap(e => [e.password, e.password?.toLowerCase()]).filter(p => p && p.length >= 3 && text.includes(p)));
   for (const re of [/\b(?:password|passwd|pwd|pass|pw)\s*[:=]\s*(\S+)/gi, /(?:^|\s)-pw\s+(\S+)/g, /:\/\/[^:\s/@]+:([^@\s]+)@/g,
     /(?:^|\s)[\w.@-]+ \/ ([^\s/]+)/g]) // "user / password"
     for (const m of text.matchAll(re)) if (m[1].length >= 2) out.add(m[1]);
@@ -816,8 +816,8 @@ function renderBoard() {
     board.innerHTML = `<div class="empty">Nothing collected yet.<br><br>Turn on <b>Watch clipboard</b> and copy text that contains hosts, URLs or logins,<br>or paste it on the <b>Captured</b> page.</div>`;
     return;
   }
-  const jira = jiraMatches($('#search').value);
-  if (!list.length && !jira.length) { board.innerHTML = '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); Saved.render(); return; }
+  const jira = jiraMatches($('#search').value), threads = threadMatches($('#search').value);
+  if (!list.length && !jira.length && !threads.length) { board.innerHTML = '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); Saved.render(); return; }
   const keyOf = {
     env: e => e.env || 'No environment', protocol: e => e.protocol || 'other', status: e => ({ ok: 'Working', fail: 'Failed' }[e.status] || 'Not tried'),
     host: e => e.host || e.url || e.name, none: () => 'All', project: e => e.project || 'General',
@@ -829,14 +829,14 @@ function renderBoard() {
   const fixNote = S.fixes ? `<div class="fuzzy-note">No exact match — showing ${Object.entries(S.fixes).map(([a, b]) => `<b>${esc(b)}</b> for “${esc(a)}”`).join(', ')}. <a href="#" data-usefix>Use this spelling</a></div>` : '';
   const inbox = list.filter(e => e.unsorted), sortable = inbox.filter(suggestPlace).length;
   const inboxNote = /\bis:(unsorted|new)\b/.test($('#search').value) && inbox.length ? `<div class="fuzzy-note">📥 ${inbox.length} new capture(s) to sort. ${sortable ? `<button class="primary" data-acceptall>✓ Move all ${sortable} to their suggested folders</button>` : ''} <button data-keepall>Keep all where they are</button></div>` : '';
-  if (S.layout === 'grid') { board.innerHTML = fixNote + inboxNote + gridHTML(list) + jiraResultsHTML(jira); markKbSel(); Bulk.bar(); return; }
+  if (S.layout === 'grid') { board.innerHTML = fixNote + inboxNote + gridHTML(list) + threadResultsHTML(threads) + jiraResultsHTML(jira); markKbSel(); Bulk.bar(); return; }
   // Searching: the group holding the best match comes first (Object keys keep list order).
   board.innerHTML = fixNote + inboxNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
     const items = groups[g];
     const body = S.layout === 'table' ? tableHTML(items) : cardsHTML(items);
     return `<div class="group"><div class="group-head"><h3>${esc(g)}</h3><span class="n">${items.length}</span>
       ${S.groupBy === 'project' ? `<button class="icon ghost" data-act="rename-project" data-project="${esc(g)}" title="Rename project">✎</button>` : ''}</div>${body}</div>`;
-  }).join('') + jiraResultsHTML(jira);
+  }).join('') + threadResultsHTML(threads) + jiraResultsHTML(jira);
   markKbSel();
   Bulk.bar();
 }
@@ -859,6 +859,27 @@ function jiraMatches(q) {
     return words.every(w => text.includes(w));
   });
 }
+// Task threads matching the main search: every word in the title or any post.
+function threadMatches(q) {
+  const { words: ws, filters } = parseQuery(q.trim().toLowerCase()), words = ws.filter(w => !w.neg).map(w => w.v);
+  if (!words.length || filters.length || typeof Work === 'undefined') return [];
+  return Work.list.filter(w => words.every(x => (w.title.toLowerCase() + ' ' + w.search).includes(x)));
+}
+function threadResultsHTML(list) {
+  if (!list.length) return '';
+  const words = parseQuery($('#search').value.trim().toLowerCase()).words.filter(w => !w.neg).map(w => w.v);
+  // A few words around the first match, passwords dotted out.
+  const snippet = w => {
+    const t = w.search.replace(/\s+/g, ' '), i = Math.max(0, ...words.map(x => t.indexOf(x)).filter(i => i >= 0).slice(0, 1));
+    if (w.title.toLowerCase().includes(words[0]) && !t.includes(words[0])) return '';
+    return (i > 50 ? '…' : '') + t.slice(Math.max(0, i - 50), i + 110) + '…';
+  };
+  const st = w => `<span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>`;
+  return `<div class="group"><div class="group-head"><h3>🧵 Tasks</h3><span class="n">${list.length}</span></div><div class="cards">${list.map(w =>
+    `<div class="card tcard" data-thread="${w.id}" title="Open the thread"><div class="card-head">${st(w)} <b>${esc(w.title)}</b><span class="spacer"></span><span class="muted tiny">${fmtTime(w.updated)} · ${w.posts || 0} posts</span></div>
+      ${snippet(w) ? `<div class="muted tiny tsnip">${maskedText(snippet(w))}</div>` : ''}</div>`).join('')}</div></div>`;
+}
+
 function jiraResultsHTML(list) {
   if (!list.length) return '';
   const state = j => `<span class="jstat${j.done ? ' done' : ''}">${esc(j.status || '')}</span> <span class="muted tiny">${j.done ? '✅ Completed' : '📂 In progress'}</span>`;
@@ -963,6 +984,7 @@ $('#board').addEventListener('contextmenu', ev => {
 });
 $('#board').addEventListener('click', async ev => {
   const jo = ev.target.closest('[data-jopen]'); if (jo) return openExternal(jo.dataset.jopen);
+  const th = !ev.target.closest('[data-eye]') && ev.target.closest('[data-thread]'); if (th) return Work.open(th.dataset.thread);
   const jr = ev.target.closest('[data-jira]');
   if (jr) { show('jira'); Jira.sel = 'i:' + jr.dataset.jira; const j = Jira.issues.find(x => x.key === jr.dataset.jira); Jira.open.add(j?.done ? 'f:done' : 'f:open'); Jira.open.delete('-f:open'); return Jira.render(); }
   const c = ev.target.closest('[data-copy]');

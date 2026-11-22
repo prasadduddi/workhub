@@ -806,3 +806,5 @@ body.side-collapsed .navhead:first-child { border-top: 0; }
 .tbox:empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; }
 .tbox img { max-height: 160px; border-radius: 6px; }
 #captureThread { padding-left: 2px; }
+.tcard { cursor: pointer; } .tcard:hover { border-color: var(--accent); }
+.tsnip { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
