@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +27,7 @@ type extTool struct {
 var extTools = []extTool{
 	{"putty", "PuTTY", "putty.exe", []string{`PuTTY\putty.exe`, `putty\putty.exe`}},
 	{"dbeaver", "DBeaver", "dbeaver.exe", []string{`DBeaver\dbeaver.exe`, `dbeaver\dbeaver.exe`}},
+	{"filezilla", "FileZilla", "filezilla.exe", []string{`FileZilla FTP Client\filezilla.exe`, `FileZilla\filezilla.exe`}},
 	{"sqldev", "SQL Developer", "sqldeveloper.exe", []string{`sqldeveloper\sqldeveloper.exe`}},
 }
 
@@ -125,6 +127,34 @@ func puttyArgs(e Entry) []string {
 		}
 	}
 	return append(args, e.Host)
+}
+
+// filezillaArgs: filezilla.exe sftp://user:pass@host:port (FileZilla connects
+// to a URL given on its command line).
+func filezillaArgs(e Entry) []string {
+	scheme, port := "sftp", e.Port
+	switch e.Protocol {
+	case "ftp", "ftps":
+		scheme = e.Protocol
+	default:
+		if port == 0 || (e.Protocol != "" && e.Protocol != "ssh" && e.Protocol != "sftp" && e.Protocol != "scp") {
+			port = 22
+		}
+	}
+	u := &url.URL{Scheme: scheme, Host: e.Host}
+	if port != 0 {
+		u.Host = fmt.Sprintf("%s:%d", e.Host, port)
+	}
+	if e.Username != "" {
+		u.User = url.UserPassword(e.Username, e.Password)
+		if e.Password == "" {
+			u.User = url.User(e.Username)
+		}
+	}
+	if e.LastDir != "" {
+		u.Path = e.LastDir
+	}
+	return []string{u.String()}
 }
 
 // dbeaverArgs: dbeaver.exe -con "driver=…|host=…|…|connect=true" (DBeaver's
@@ -227,6 +257,8 @@ func (a *App) handleExternalOpen(w http.ResponseWriter, r *http.Request) {
 	switch t.Key {
 	case "putty":
 		args = puttyArgs(e)
+	case "filezilla":
+		args = filezillaArgs(e)
 	case "dbeaver", "sqldev":
 		if dbKind(e) == "" {
 			writeErr(w, 400, errors.New("not a database connection"))

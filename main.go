@@ -492,6 +492,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/jira", a.handleJiraList)
 	mux.HandleFunc("POST /api/jira", a.handleJiraAdd)
 	mux.HandleFunc("POST /api/jira/refresh", a.handleJiraRefresh)
+	mux.HandleFunc("POST /api/jira/mine", a.handleJiraMine)
 	mux.HandleFunc("DELETE /api/jira/{key}", a.handleJiraRemove)
 	mux.HandleFunc("GET /api/tunnels", a.handleTunnelsList)
 	mux.HandleFunc("POST /api/tunnels/{id}/start", a.handleTunnelsStart)

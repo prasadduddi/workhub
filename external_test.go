@@ -48,3 +48,12 @@ func TestFindToolSetPath(t *testing.T) {
 		t.Fatalf("found %q, want %q", got, exe)
 	}
 }
+
+func TestFileZillaArgs(t *testing.T) {
+	if a := filezillaArgs(Entry{Host: "app01", Port: 22, Protocol: "sftp", Username: "ops", Password: "p@ss#1", LastDir: "/var/log"}); a[0] != "sftp://ops:p%40ss%231@app01:22/var/log" {
+		t.Fatalf("sftp: %v", a)
+	}
+	if a := filezillaArgs(Entry{Host: "ftp.partner", Port: 21, Protocol: "ftp", Username: "u"}); a[0] != "ftp://u@ftp.partner:21" {
+		t.Fatalf("ftp: %v", a)
+	}
+}

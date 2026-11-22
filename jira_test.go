@@ -29,6 +29,11 @@ func fakeJira(t *testing.T) *httptest.Server {
 					map[string]any{"type": map[string]any{"inward": "is implemented by", "outward": "implements"}, "outwardIssue": map[string]any{"key": "CM-4411", "fields": map[string]any{"summary": "Prod release", "status": map[string]any{"name": "Scheduled"}, "issuetype": map[string]any{"name": "Change"}}}},
 					map[string]any{"type": map[string]any{"inward": "relates", "outward": "relates"}, "inwardIssue": map[string]any{"key": "OPS-9", "fields": map[string]any{"summary": "Unrelated", "status": map[string]any{"name": "Open"}, "issuetype": map[string]any{"name": "Task"}}}},
 				}}})
+		case r.URL.Path == "/rest/api/2/search" && strings.Contains(r.URL.Query().Get("jql"), "statusCategory = Done"):
+			json.NewEncoder(w).Encode(map[string]any{"total": 2, "issues": []any{map[string]any{"key": "PAY-90"}, map[string]any{"key": "PAY-91"}}})
+		case r.URL.Path == "/rest/api/2/issue/PAY-90" || r.URL.Path == "/rest/api/2/issue/PAY-91":
+			json.NewEncoder(w).Encode(map[string]any{"id": "9", "key": r.URL.Path[len("/rest/api/2/issue/"):], "fields": map[string]any{
+				"summary": "Old work", "status": map[string]any{"name": "Closed", "statusCategory": map[string]any{"key": "done"}}, "resolutiondate": "2026-10-01T10:00:00.000+0000"}})
 		case r.URL.Path == "/rest/dev-status/latest/issue/summary":
 			json.NewEncoder(w).Encode(map[string]any{"summary": map[string]any{"pullrequest": map[string]any{"byInstanceType": map[string]any{"GitHub": map[string]any{"count": 1}}}}})
 		case r.URL.Path == "/rest/dev-status/latest/issue/detail" && r.URL.Query().Get("applicationType") == "GitHub":
@@ -75,5 +80,26 @@ func TestJira(t *testing.T) {
 	s.SetJiraConfig(JiraConfig{BaseURL: srv.URL, Mode: "server"})
 	if c := s.JiraConfig(); c.Token != "tok" || c.ChildPrefix != "CM-" {
 		t.Fatalf("config: %+v", c)
+	}
+}
+
+func TestJiraMine(t *testing.T) {
+	srv := fakeJira(t)
+	defer srv.Close()
+	a := &App{}
+	a.store, _ = OpenStore(t.TempDir())
+	a.store.SetJiraConfig(JiraConfig{BaseURL: srv.URL, Mode: "server", Token: "tok"})
+	if n, err := a.addMine(); err != nil || n != 2 {
+		t.Fatalf("added %d, %v", n, err)
+	}
+	for _, j := range a.store.JiraIssues() {
+		if !j.Done || !j.Mine || j.Resolved == "" {
+			t.Fatalf("completed issue: %+v", j)
+		}
+	}
+	// Removed by the user: not added again.
+	a.store.removeJiraIssue("PAY-90")
+	if n, _ := a.addMine(); n != 0 || len(a.store.JiraIssues()) != 1 {
+		t.Fatalf("removed issue came back (%d added)", n)
 	}
 }

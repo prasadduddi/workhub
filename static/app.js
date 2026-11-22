@@ -576,7 +576,8 @@ function renderBoard() {
     board.innerHTML = `<div class="empty">Nothing collected yet.<br><br>Turn on <b>Watch clipboard</b> and copy text that contains hosts, URLs or logins,<br>or paste it on the <b>Captured</b> page.</div>`;
     return;
   }
-  if (!list.length) { board.innerHTML = '<div class="empty">No matches.</div>'; return; }
+  const jira = jiraMatches($('#search').value);
+  if (!list.length && !jira.length) { board.innerHTML = '<div class="empty">No matches.</div>'; return; }
   const keyOf = {
     env: e => e.env || 'No environment', protocol: e => e.protocol || 'other', status: e => ({ ok: 'Working', fail: 'Failed' }[e.status] || 'Not tried'),
     host: e => e.host || e.url || e.name, none: () => 'All', project: e => e.project || 'General',
@@ -588,7 +589,33 @@ function renderBoard() {
     const body = S.layout === 'table' ? tableHTML(items) : cardsHTML(items);
     return `<div class="group"><div class="group-head"><h3>${esc(g)}</h3><span class="n">${items.length}</span>
       ${S.groupBy === 'project' ? `<button class="icon ghost" data-act="rename-project" data-project="${esc(g)}" title="Rename project">✎</button>` : ''}</div>${body}</div>`;
-  }).join('');
+  }).join('') + jiraResultsHTML(jira);
+}
+
+// Jira issues matching the main search (every word must appear somewhere:
+// key, summary, status, assignee, pull requests or CM- items).
+function jiraMatches(q) {
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length || typeof Jira === 'undefined') return [];
+  return Jira.issues.filter(j => {
+    const text = [j.key, j.summary, j.status, j.assignee, j.type, j.done ? 'completed done' : 'open',
+      ...j.prs.map(p => `${p.name} ${p.repo} ${p.status}`), ...j.children.map(c => `${c.key} ${c.summary} ${c.status}`)].join(' ').toLowerCase();
+    return words.every(w => text.includes(w));
+  });
+}
+function jiraResultsHTML(list) {
+  if (!list.length) return '';
+  const state = j => `<span class="jstat${j.done ? ' done' : ''}">${esc(j.status || '')}</span> <span class="muted tiny">${j.done ? '✅ Completed' : '📂 In progress'}</span>`;
+  const body = S.layout === 'table'
+    ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Pull requests</th><th>${esc(Jira.cfg?.child_prefix || 'CM-')} items</th></tr></thead><tbody>${list.map(j => `<tr data-jira="${esc(j.key)}" title="Show in Jira page">
+        <td><b>${esc(j.key)}</b></td><td>${esc(j.summary || '')}</td><td>${state(j)}</td>
+        <td>${j.prs.map(p => `${Jira.prBadge(p.status)} ${esc(p.name)}`).join('<br>')}</td><td>${j.children.map(c => `<b>${esc(c.key)}</b> ${esc(c.status)}`).join('<br>')}</td></tr>`).join('')}</tbody></table></div>`
+    : `<div class="cards">${list.map(j => `<div class="card jcard" data-jira="${esc(j.key)}" title="Show in Jira page">
+        <div class="card-head"><b class="host">◆ ${esc(j.key)}</b> ${state(j)}<span class="spacer"></span><button class="icon" data-jopen="${esc(j.url)}">Open in Jira ↗</button></div>
+        <div class="jsum">${esc(j.summary || '')}</div>
+        ${j.prs.length ? `<div class="muted tiny">⇄ ${j.prs.map(p => `${Jira.prBadge(p.status)} ${esc(p.name)}`).join(' · ')}</div>` : ''}
+        ${j.children.length ? `<div class="muted tiny">☑ ${j.children.map(c => `<b>${esc(c.key)}</b> ${esc(c.status)}`).join(' · ')}</div>` : ''}</div>`).join('')}</div>`;
+  return `<div class="group"><div class="group-head"><h3>◆ Jira</h3><span class="n">${list.length}</span></div>${body}</div>`;
 }
 
 function cardsHTML(items) {
@@ -666,6 +693,9 @@ function tableHTML(items) {
 }
 
 $('#board').addEventListener('click', async ev => {
+  const jo = ev.target.closest('[data-jopen]'); if (jo) return openExternal(jo.dataset.jopen);
+  const jr = ev.target.closest('[data-jira]');
+  if (jr) { show('jira'); Jira.sel = 'i:' + jr.dataset.jira; const j = Jira.issues.find(x => x.key === jr.dataset.jira); Jira.open.add(j?.done ? 'f:done' : 'f:open'); Jira.open.delete('-f:open'); return Jira.render(); }
   const c = ev.target.closest('[data-copy]');
   if (c) return copyText(c.dataset.copy);
   const b = ev.target.closest('[data-act]');
@@ -701,6 +731,7 @@ const External = {
   items(e) {
     const out = [];
     if (canSSH(e)) out.push(['Open in PuTTY (the real one) ↗', () => this.open(e, 'putty')]);
+    if (canFiles(e)) out.push(['Open in FileZilla (the real one) ↗', () => this.open(e, 'filezilla')]);
     if (canDB(e)) {
       const sd = ['Open in SQL Developer ↗', () => this.open(e, 'sqldev')], db = ['Open in DBeaver ↗', () => this.open(e, 'dbeaver')];
       out.push(...(dbKindOf(e) === 'oracle' ? [sd, db] : [db]));
@@ -745,9 +776,10 @@ const lastCapture = e => e.captures?.at(-1) || (e.created ? { at: e.created, sou
 const shortWhen = t => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const captureText = e => (c => c ? `${shortWhen(c.at)} · ${c.source ? sourceName(c) : 'source not recorded'}` : '')(lastCapture(e));
 
+const COPY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
 // Full details of one connection in a pop-up: every field with its own Copy button.
-function showDetails(e) {
-  if (!e) return;
+// Every detail of an entry as [label, value] rows (details pop-up, Copy all).
+function detailRows(e) {
   const svc = dbService(e), when = t => t ? new Date(t).toLocaleString() : '';
   const rows = [
     ['Name', e.name], ['Host', e.host], ['Port', e.port || ''], ['Type', e.protocol || dbKindOf(e)],
@@ -762,9 +794,16 @@ function showDetails(e) {
     ...(e.captures?.length ? e.captures.slice().reverse().map((c, i) => [i ? 'Also captured' : 'Captured', `${when(c.at)} · ${sourceName(c)}`]) : [['Captured', captureText(e)]]),
     ['Status', e.status ? `${e.status === 'ok' ? 'Worked' : 'Failed'} · ${when(e.status_at)}${e.status_msg ? '\n' + e.status_msg : ''}` : ''],
   ].filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '');
-  showDetails.text = rows.map(([k, v]) => `${k}: ${v}`).join('\n');
+  return rows;
+}
+const detailsText = e => detailRows(e).map(([k, v]) => `${k}: ${v}`).join('\n');
+
+function showDetails(e) {
+  if (!e) return;
+  const rows = detailRows(e);
+  showDetails.text = detailsText(e);
   $('#detailTitle').innerHTML = `${ruleName(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`;
-  $('#detailBody').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span><button class="icon" data-copy="${esc(v)}">Copy</button>`).join('');
+  $('#detailBody').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span><button class="icon copyic" data-copy="${esc(v)}" title="Copy ${esc(k)}" aria-label="Copy ${esc(k)}">${COPY_ICON}</button>`).join('');
   $('#detailActs').innerHTML = [
     canSSH(e) && ['ssh', 'SSH'], canFiles(e) && ['sftp', isFTP(e) ? 'FTP' : 'SFTP'], canDB(e) && ['sql', 'SQL'], e.url && !/^jdbc:/i.test(e.url) && ['open', 'Open'], ['edit', 'Edit'],
   ].filter(Boolean).map(([a, t]) => `<button data-dact="${a}">${t}</button>`).join('') + External.items(e).map(([t], i) => `<button data-dext="${i}">${esc(t.replace('Open in ', '').replace(' (the real one)', ''))}</button>`).join('');
@@ -1474,6 +1513,7 @@ const Tree = {
         ['Copy host', () => copyText(e.host)]);
       if (e.username) items.push(['Copy username', () => copyText(e.username)]);
       if (e.password) items.push(['Copy password', () => copyText(e.password, 'Password copied')]);
+      items.push(['Copy all details', () => copyText(detailsText(e), 'All details copied')]);
       items.push(['Copy ssh command', () => copyText(`ssh ${e.username ? e.username + '@' : ''}${e.host}${sshPort(e) !== 22 ? ' -p ' + sshPort(e) : ''}`)], '-',
         ['Edit…', () => openEntryDialog(e)],
         ['Duplicate', async () => { await api('POST', '/api/entries', { ...entryInput(e), id: '', name: e.name + ' (copy)', password: e.password }); poll(); }],

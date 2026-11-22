@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -20,11 +22,13 @@ import (
 )
 
 type JiraConfig struct {
-	BaseURL     string `json:"base_url"`
-	Mode        string `json:"mode"`  // cloud (email + API token), server (personal access token), basic
-	User        string `json:"user"`  // email or username
-	Token       string `json:"token"` // never sent to the page
-	ChildPrefix string `json:"child_prefix"`
+	BaseURL     string   `json:"base_url"`
+	Mode        string   `json:"mode"`  // cloud (email + API token), server (personal access token), basic
+	User        string   `json:"user"`  // email or username
+	Token       string   `json:"token"` // never sent to the page
+	ChildPrefix string   `json:"child_prefix"`
+	NoMine      bool     `json:"no_mine,omitempty"` // don't add my completed issues automatically
+	Removed     []string `json:"removed,omitempty"` // completed issues the user removed: not added again
 }
 
 type JiraPR struct {
@@ -53,6 +57,9 @@ type JiraIssue struct {
 	URL      string      `json:"url"`
 	PRs      []JiraPR    `json:"prs"`
 	Children []JiraChild `json:"children"`
+	Done     bool        `json:"done,omitempty"`     // status category "Done"
+	Resolved string      `json:"resolved,omitempty"` // resolution date from Jira
+	Mine     bool        `json:"mine,omitempty"`     // added automatically as one of my completed issues
 	Error    string      `json:"error,omitempty"`
 	Fetched  time.Time   `json:"fetched,omitzero"`
 	Added    time.Time   `json:"added"`
@@ -97,6 +104,7 @@ func (s *Store) SetJiraConfig(c JiraConfig) {
 	if c.Token == "" { // blank keeps the saved token
 		c.Token = s.st.Jira.Token
 	}
+	c.Removed = s.st.Jira.Removed
 	c.BaseURL = strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
 	s.st.Jira = c
 	s.changed()
@@ -118,7 +126,7 @@ func (s *Store) putJiraIssue(j JiraIssue) {
 	defer s.mu.Unlock()
 	for _, x := range s.st.JiraIssues {
 		if x.Key == j.Key {
-			j.Added = x.Added
+			j.Added, j.Mine = x.Added, x.Mine || j.Mine
 			*x = j
 			s.changed()
 			return
@@ -136,6 +144,9 @@ func (s *Store) removeJiraIssue(key string) {
 	defer s.mu.Unlock()
 	for i, x := range s.st.JiraIssues {
 		if x.Key == key {
+			if x.Mine && !slices.Contains(s.st.Jira.Removed, key) {
+				s.st.Jira.Removed = append(s.st.Jira.Removed, key)
+			}
 			s.st.JiraIssues = append(s.st.JiraIssues[:i], s.st.JiraIssues[i+1:]...)
 			s.changed()
 			return
@@ -178,9 +189,17 @@ func (c *jiraClient) get(path string, out any) error {
 	return json.Unmarshal(body, out)
 }
 
+type jiraStatus struct {
+	Name     string `json:"name"`
+	Category struct {
+		Key string `json:"key"`
+	} `json:"statusCategory"`
+}
+
 type jiraFields struct {
 	Summary   string                `json:"summary"`
-	Status    struct{ Name string } `json:"status"`
+	Status    jiraStatus            `json:"status"`
+	Resolved  string                `json:"resolutiondate"`
 	IssueType struct{ Name string } `json:"issuetype"`
 	Assignee  *struct {
 		DisplayName string `json:"displayName"`
@@ -224,12 +243,13 @@ func fetchJira(cfg JiraConfig, key string) JiraIssue {
 		Key    string     `json:"key"`
 		Fields jiraFields `json:"fields"`
 	}
-	if err := c.get("/rest/api/2/issue/"+url.PathEscape(key)+"?fields=summary,status,issuetype,assignee,subtasks,issuelinks", &issue); err != nil {
+	if err := c.get("/rest/api/2/issue/"+url.PathEscape(key)+"?fields=summary,status,issuetype,assignee,subtasks,issuelinks,resolutiondate", &issue); err != nil {
 		j.Error = err.Error()
 		return j
 	}
 	f := issue.Fields
 	j.Summary, j.Status, j.Type = f.Summary, f.Status.Name, f.IssueType.Name
+	j.Done, j.Resolved = f.Status.Category.Key == "done", f.Resolved
 	if f.Assignee != nil {
 		j.Assignee = f.Assignee.DisplayName
 	}
@@ -325,6 +345,9 @@ func (a *App) refreshJira(keys ...string) {
 	cfg := a.store.JiraConfig()
 	if len(keys) == 0 {
 		for _, j := range a.store.JiraIssues() {
+			if j.Done && time.Since(j.Fetched) < 24*time.Hour {
+				continue // completed issues rarely change: once a day is enough
+			}
 			keys = append(keys, j.Key)
 		}
 	}
@@ -333,10 +356,105 @@ func (a *App) refreshJira(keys ...string) {
 	}
 }
 
+const maxMineDone = 300
+
+// searchMine lists my completed issues, newest first (Cloud's new search
+// endpoint, else the classic one Server/Data Center has).
+func searchMine(cfg JiraConfig) ([]string, error) {
+	c := &jiraClient{cfg: cfg, http: &http.Client{Timeout: 30 * time.Second}}
+	jql := url.QueryEscape("assignee = currentUser() AND statusCategory = Done ORDER BY resolved DESC")
+	var keys []string
+	type page struct {
+		Issues []struct {
+			Key string `json:"key"`
+		} `json:"issues"`
+		Total         int    `json:"total"`
+		NextPageToken string `json:"nextPageToken"`
+	}
+	if cfg.Mode == "cloud" || cfg.Mode == "" {
+		token := ""
+		for len(keys) < maxMineDone {
+			var p page
+			q := "/rest/api/3/search/jql?jql=" + jql + "&fields=key&maxResults=100"
+			if token != "" {
+				q += "&nextPageToken=" + url.QueryEscape(token)
+			}
+			if err := c.get(q, &p); err != nil {
+				if len(keys) == 0 {
+					break // older Jira: try the classic search below
+				}
+				return keys, nil
+			}
+			for _, i := range p.Issues {
+				keys = append(keys, i.Key)
+			}
+			if token = p.NextPageToken; token == "" || len(p.Issues) == 0 {
+				return keys, nil
+			}
+		}
+		if len(keys) > 0 {
+			return keys, nil
+		}
+	}
+	for start := 0; start < maxMineDone; start += 100 {
+		var p page
+		if err := c.get(fmt.Sprintf("/rest/api/2/search?jql=%s&fields=key&maxResults=100&startAt=%d", jql, start), &p); err != nil {
+			if len(keys) > 0 {
+				return keys, nil
+			}
+			return nil, err
+		}
+		for _, i := range p.Issues {
+			keys = append(keys, i.Key)
+		}
+		if len(p.Issues) == 0 || start+len(p.Issues) >= p.Total {
+			break
+		}
+	}
+	return keys, nil
+}
+
+// addMine adds my completed issues not tracked yet (or removed by the user).
+func (a *App) addMine() (int, error) {
+	cfg := a.store.JiraConfig()
+	if cfg.BaseURL == "" || cfg.Token == "" {
+		return 0, errors.New("set up Jira first (address and token in Jira settings)")
+	}
+	keys, err := searchMine(cfg)
+	if err != nil {
+		return 0, err
+	}
+	have := map[string]bool{}
+	for _, j := range a.store.JiraIssues() {
+		have[j.Key] = true
+	}
+	for _, k := range cfg.Removed {
+		have[k] = true
+	}
+	n := 0
+	jiraMu.Lock()
+	defer jiraMu.Unlock()
+	for _, k := range keys {
+		if have[k] {
+			continue
+		}
+		j := fetchJira(cfg, k)
+		j.Mine = true
+		a.store.putJiraIssue(j)
+		n++
+	}
+	return n, nil
+}
+
 func (a *App) jiraWatcher() {
 	for range time.Tick(15 * time.Minute) {
-		if a.store.JiraConfig().BaseURL != "" {
+		if c := a.store.JiraConfig(); c.BaseURL != "" {
 			a.refreshJira()
+			if !c.NoMine && c.Token != "" {
+				if _, err := a.addMine(); err != nil {
+					log.Println("jira: my completed issues:", err)
+				}
+			}
 		}
 	}
 }
@@ -357,7 +475,12 @@ func (a *App) handleJiraConfigPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.store.SetJiraConfig(c)
-	go a.refreshJira()
+	go func() {
+		a.refreshJira()
+		if c := a.store.JiraConfig(); !c.NoMine && c.Token != "" {
+			_, _ = a.addMine()
+		}
+	}()
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
@@ -405,6 +528,15 @@ func (a *App) handleJiraRefresh(w http.ResponseWriter, r *http.Request) {
 		a.refreshJira()
 	}
 	writeJSON(w, a.store.JiraIssues())
+}
+
+func (a *App) handleJiraMine(w http.ResponseWriter, r *http.Request) {
+	n, err := a.addMine()
+	if err != nil {
+		writeErr(w, 502, err)
+		return
+	}
+	writeJSON(w, map[string]any{"added": n, "issues": a.store.JiraIssues()})
 }
 
 func (a *App) handleJiraRemove(w http.ResponseWriter, r *http.Request) {

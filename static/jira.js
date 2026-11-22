@@ -10,6 +10,7 @@ const Jira = {
     const [list, c] = await Promise.all([api('GET', '/api/jira').catch(() => []), api('GET', '/api/jira/config').catch(() => ({}))]);
     this.issues = list || []; this.cfg = c.config || {}; this.hasToken = !!c.has_token;
     this.render();
+    if ($('#search').value.trim()) renderBoard(); // main search shows Jira issues too
   },
   persist() { try { localStorage.setItem('jiraOpen', JSON.stringify([...this.open])); } catch { /* ignore */ } },
 
@@ -22,18 +23,27 @@ const Jira = {
     const list = this.issues.filter(j => !q || [j.key, j.summary, j.status, j.assignee, ...j.prs.map(p => p.name + ' ' + p.repo), ...j.children.map(c => c.key + ' ' + c.summary)].join(' ').toLowerCase().includes(q));
     const prefix = this.cfg?.child_prefix || 'CM-';
     const node = (cls, key, depth, html, title = '') => `<div class="tnode jn ${cls} ${this.sel === key ? 'sel' : ''}" data-jk="${esc(key)}" style="padding-left:${8 + depth * 16}px" title="${esc(title)}">${html}</div>`;
-    $('#jiraTree').innerHTML = list.map(j => {
+    const issueHTML = j => {
       const k = j.key, open = this.open.has(k) || !!q;
-      let h = node('issue', 'i:' + k, 0, `<span class="tw" data-jtog="${esc(k)}">${open ? '▾' : '▸'}</span><b>${esc(k)}</b> <span class="nm">${esc(j.summary || '')}</span>${j.status ? `<span class="jstat">${esc(j.status)}</span>` : ''}${j.error ? '<span class="dot fail" title="' + esc(j.error) + '"></span>' : ''}`, j.error || j.summary);
+      let h = node('issue', 'i:' + k, 1, `<span class="tw" data-jtog="${esc(k)}">${open ? '▾' : '▸'}</span><b>${esc(k)}</b> <span class="nm">${esc(j.summary || '')}</span>${j.status ? `<span class="jstat${j.done ? ' done' : ''}">${esc(j.status)}</span>` : ''}${j.error ? '<span class="dot fail" title="' + esc(j.error) + '"></span>' : ''}`, j.error || j.summary);
       if (open) {
         const pOpen = this.open.has('p:' + k), cOpen = this.open.has('c:' + k);
-        h += node('folder', 'p:' + k, 1, `<span class="tw" data-jtog="p:${esc(k)}">${j.prs.length ? (pOpen ? '▾' : '▸') : ''}</span>⇄ Pull requests <span class="n">${j.prs.length}</span>`);
-        if (pOpen) h += j.prs.map((p, i) => node('pr', `pr:${k}:${i}`, 2, `${this.prBadge(p.status)} <span class="nm">${esc(p.name)}</span><small>${esc(p.repo || '')}</small>`, p.url)).join('');
-        h += node('folder', 'c:' + k, 1, `<span class="tw" data-jtog="c:${esc(k)}">${j.children.length ? (cOpen ? '▾' : '▸') : ''}</span>☑ ${esc(prefix)} items <span class="n">${j.children.length}</span>`);
-        if (cOpen) h += j.children.map((c, i) => node('child', `ch:${k}:${i}`, 2, `<b>${esc(c.key)}</b> <span class="nm">${esc(c.summary)}</span><span class="jstat">${esc(c.status)}</span>`, `${c.relation}: ${c.summary}`)).join('');
+        h += node('folder', 'p:' + k, 2, `<span class="tw" data-jtog="p:${esc(k)}">${j.prs.length ? (pOpen ? '▾' : '▸') : ''}</span>⇄ Pull requests <span class="n">${j.prs.length}</span>`);
+        if (pOpen) h += j.prs.map((p, i) => node('pr', `pr:${k}:${i}`, 3, `${this.prBadge(p.status)} <span class="nm">${esc(p.name)}</span><small>${esc(p.repo || '')}</small>`, p.url)).join('');
+        h += node('folder', 'c:' + k, 2, `<span class="tw" data-jtog="c:${esc(k)}">${j.children.length ? (cOpen ? '▾' : '▸') : ''}</span>☑ ${esc(prefix)} items <span class="n">${j.children.length}</span>`);
+        if (cOpen) h += j.children.map((c, i) => node('child', `ch:${k}:${i}`, 3, `<b>${esc(c.key)}</b> <span class="nm">${esc(c.summary)}</span><span class="jstat">${esc(c.status)}</span>`, `${c.relation}: ${c.summary}`)).join('');
       }
       return h;
-    }).join('') || `<div class="empty">${this.issues.length ? 'No matches.' : 'No Jira issues yet.<br>Type a key (PAY-123) or paste an issue link above.'}</div>`;
+    };
+    // Two folders: what's in progress, and Completed (newest first) with the same hierarchy inside.
+    const active = list.filter(j => !j.done), done = list.filter(j => j.done).sort((a, b) => (b.resolved || '').localeCompare(a.resolved || ''));
+    const folder = (key, label, items, defOpen) => {
+      const open = !!q || (defOpen ? !this.open.has('-' + key) : this.open.has(key));
+      return node('folder top', key, 0, `<span class="tw" data-jtog="${defOpen ? '-' : ''}${key}">${open ? '▾' : '▸'}</span>${label} <span class="n">${items.length}</span>`) + (open ? items.map(issueHTML).join('') : '');
+    };
+    $('#jiraTree').innerHTML = list.length
+      ? folder('f:open', '📂 In progress', active, true) + folder('f:done', '✅ Completed', done, false)
+      : `<div class="empty">${this.issues.length ? 'No matches.' : 'No Jira issues yet.<br>Type a key (PAY-123) or paste an issue link above.'}</div>`;
     this.renderDetail();
   },
 
@@ -94,6 +104,13 @@ $('#jiraAdd').addEventListener('keydown', e => { if (e.key === 'Enter') Jira.add
 $('#jiraFilter').addEventListener('input', () => Jira.render());
 $('#jiraSettings').onclick = () => Jira.settings();
 $('#jiraSetupLink').onclick = () => Jira.settings();
+$('#jiraMine').onclick = async () => {
+  toast('Looking for your completed issues in Jira…');
+  try { const r = await api('POST', '/api/jira/mine'); Jira.issues = r.issues; Jira.open.add('f:done'); Jira.persist(); Jira.render(); toast(r.added ? `Added ${r.added} completed issue(s) to ✅ Completed` : 'No new completed issues'); }
+  catch (err) { toast(err.message, true); }
+};
+// Loaded at start too, so the main search finds Jira issues; kept fresh.
+Jira.load(); setInterval(() => Jira.load(), 5 * 60 * 1000);
 $('#jiraRefreshAll').onclick = async () => { toast('Refreshing from Jira…'); Jira.issues = await api('POST', '/api/jira/refresh', {}).catch(err => (toast(err.message, true), Jira.issues)); Jira.render(); };
 $('#jiraMode').onchange = e => ($('#jiraUserRow').hidden = e.target.value === 'server');
 $('#jiraDlg').addEventListener('close', async () => {
