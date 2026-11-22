@@ -12,6 +12,9 @@ import (
 // A pretend Jira answering like the real REST API.
 func fakeJira(t *testing.T) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("WorkHub must only read from Jira, but sent %s %s", r.Method, r.URL.Path)
+		}
 		if r.Header.Get("Authorization") != "Bearer tok" {
 			w.WriteHeader(401)
 			return
@@ -123,5 +126,16 @@ func TestJiraMine(t *testing.T) {
 	a.store.removeJiraIssue("PAY-90")
 	if n, _ := a.addMine(); n != 0 || len(a.store.JiraIssues()) != 2 {
 		t.Fatalf("removed issue came back (%d added)", n)
+	}
+}
+
+func TestJiraReadOnlyGuard(t *testing.T) {
+	srv := fakeJira(t)
+	defer srv.Close()
+	for _, m := range []string{"POST", "PUT", "DELETE", "PATCH"} {
+		req, _ := http.NewRequest(m, srv.URL+"/rest/api/2/issue/PAY-123", nil)
+		if _, err := (readOnlyJira{}).RoundTrip(req); err == nil || !strings.Contains(err.Error(), "only reads") {
+			t.Fatalf("%s to Jira was not refused: %v", m, err)
+		}
 	}
 }

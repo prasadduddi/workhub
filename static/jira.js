@@ -72,7 +72,7 @@ const Jira = {
     if (!f) { el.innerHTML = '<div class="empty">Select an issue, pull request or item on the left.<br>Double-click opens it in the browser.</div>'; return; }
     const j = f.j;
     const head = `<div class="ghead"><h3><a class="jkey" href="${esc(j.url)}" data-jlink="${esc(j.url)}" title="Open in Jira">${esc(j.key)}</a></h3><span class="jstat">${esc(j.status || '')}</span><span class="spacer"></span>
-      <button data-ja="thread" title="${typeof Work !== 'undefined' && Work.byJira(j.key) ? 'Open the task thread linked to this issue' : 'Start a task thread linked to this issue'}">🧵 ${typeof Work !== 'undefined' && Work.byJira(j.key) ? 'Thread' : 'Start thread'}</button><button data-ja="open" data-url="${esc(j.url)}">Open in browser</button><button data-ja="refresh">↻ Refresh</button><button data-ja="remove" class="danger">Remove</button></div>`;
+      <button data-ja="thread" title="${typeof Work !== 'undefined' && Work.byJira(j.key) ? 'Open the task thread linked to this issue' : 'Start a task thread linked to this issue'}">🧵 ${typeof Work !== 'undefined' && Work.byJira(j.key) ? 'Thread' : 'Start thread'}</button><button data-ja="open" data-url="${esc(j.url)}">Open in browser</button><button data-ja="refresh">↻ Refresh</button><button data-ja="remove" title="Stop tracking it in WorkHub — nothing changes in Jira (WorkHub only reads from Jira)">Stop tracking</button></div>`;
     const info = `<div class="gsec"><a href="${esc(j.url)}" data-jlink="${esc(j.url)}" class="jsumlink"><b>${esc(j.summary || '')}</b></a><div class="muted tiny">${esc(j.type || '')}${j.assignee ? ' · ' + esc(j.assignee) : ''}${j.fetched ? ' · checked ' + esc(new Date(j.fetched).toLocaleString()) : ''}</div>
       ${j.error ? `<div class="dberr" style="margin-top:6px">⚠ ${esc(j.error)}</div>` : ''}</div>`;
     let body = '';
@@ -195,5 +195,5 @@ $('#jiraDetail').addEventListener('click', async e => {
   if (b.dataset.ja === 'open') return openExternal(b.dataset.url);
   if (b.dataset.ja === 'thread') return Work.forJira(j.key, j.summary);
   if (b.dataset.ja === 'refresh') { Jira.issues = await api('POST', '/api/jira/refresh', { key: j.key }); return Jira.render(); }
-  if (b.dataset.ja === 'remove' && confirm(`Stop tracking ${j.key}?`)) { await api('DELETE', '/api/jira/' + encodeURIComponent(j.key)); Jira.sel = null; return Jira.load(); }
+  if (b.dataset.ja === 'remove' && confirm(`Stop tracking ${j.key} in WorkHub?\n\nNothing changes in Jira — WorkHub only reads from it.`)) { await api('DELETE', '/api/jira/' + encodeURIComponent(j.key)); Jira.sel = null; return Jira.load(); }
 });

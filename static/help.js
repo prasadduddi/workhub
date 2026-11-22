@@ -114,6 +114,10 @@ const HELP_TOPICS = [
     'Jira Cloud (…atlassian.net): sign-in type “email + API token” — create the token at id.atlassian.com → Security → API tokens.',
     'Jira Server / Data Center: “personal access token” — your Jira profile → Personal Access Tokens.',
     'Or, in the Desktop version, “Sign in with browser” (no token, SSO works).'] },
+  { t: 'Does WorkHub change anything in Jira?', k: 'jira change edit write update modify safe read only comment transition delete', v: 'jira', s: [
+    'No. WorkHub only reads from Jira — issues, statuses, sub-tasks, child items, CM windows and pull requests.',
+    'It never creates, edits, comments on, moves or deletes anything in Jira; anything else is refused before it leaves your PC.',
+    '“Stop tracking” on the Jira page only removes the issue from WorkHub.'] },
   { t: 'Sign in to Jira with the browser (Desktop)', k: 'jira browser sign in login sso session desktop', v: 'jira', s: [
     'Use WorkHub-Desktop.exe. Jira → Jira settings… → Sign-in type “Sign in with browser”.',
     'Press 🔑 Sign in with browser…, log in as usual in the window that opens (tick “Remember me”).',

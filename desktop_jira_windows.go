@@ -150,7 +150,7 @@ func setupJiraWindow(main webview2.WebView) {
 		js := `(async () => { let s = 0, t = '';
   try {
     if (location.origin === ` + string(jo) + `) {
-      const r = await fetch(` + string(ju) + `, { credentials: 'include', headers: { 'Accept': 'application/json', 'X-Atlassian-Token': 'no-check' } });
+      const r = await fetch(` + string(ju) + `, { method: 'GET', credentials: 'include', headers: { 'Accept': 'application/json' } }); // read only
       s = r.redirected && new URL(r.url).origin !== location.origin ? 401 : r.status; t = await r.text();
     }
   } catch (e) { t = String(e); }

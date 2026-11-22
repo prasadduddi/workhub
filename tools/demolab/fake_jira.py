@@ -41,11 +41,27 @@ ISSUES = {
         [("PAY-088 batch retry", "https://bitbucket.acme.local/projects/PAY/repos/pay-batch/pull-requests/12", "MERGED", "pay-batch")]),
     "OPS-61": ("10061", {**f("Rotate Touchpoint TLS certificates", "Resolved", "Task", "2026-10-02T09:40:00.000+0000"), "assignee": {"displayName": "Me"},
         "subtasks": [], "issuelinks": [link("CM-4301", "Certificate change window", "Closed")]}, []),
+    # An epic whose stories point to it (Jira Cloud "parent"): found as child work items.
+    "PAY-200": ("10200", {**f("Merchant refunds 2.0", "In Progress", "Epic"), "assignee": {"displayName": "Me"}, "subtasks": [],
+        "issuelinks": [link("CM-4433", "Refunds 2.0 go-live", "Scheduled")]}, []),
+    "PAY-201": ("10201", {**f("Refund approval workflow", "In Progress", "Story"), "assignee": {"displayName": "Me"},
+        "subtasks": [sub("PAY-202", "Approval rules engine", "In Progress"), sub("PAY-203", "Approval emails", "To Do"),
+                     sub("PAY-204", "CM- deploy approval workflow to UAT", "Done")],
+        "issuelinks": [link("CM-4433", "Refunds 2.0 go-live", "Scheduled"), link("QA-31", "Regression pack for approvals", "Open", "is tested by", "tests")]},
+        [("PAY-201 approval workflow", "https://bitbucket.acme.local/projects/PAY/repos/pay-api/pull-requests/57", "OPEN", "pay-api"),
+         ("PAY-201 approval emails", "https://bitbucket.acme.local/projects/PAY/repos/pay-notify/pull-requests/9", "MERGED", "pay-notify")]),
+    "OPS-90": ("10090", {**f("Scale refund batch for 2.0 volumes", "To Do", "Task"), "assignee": {"displayName": "Me"},
+        "subtasks": [sub("OPS-91", "Add batch node", "To Do")], "issuelinks": []}, []),
+    "PAY-205": ("10205", {**f("Refund limits per merchant tier", "Blocked", "Story"), "assignee": {"displayName": "Me"}, "subtasks": [], "issuelinks": []},
+        [("PAY-205 tier limits (draft)", "https://bitbucket.acme.local/projects/PAY/repos/pay-api/pull-requests/61", "DECLINED", "pay-api")]),
 }
 MINE_DONE = ["PAY-101", "PAY-088", "OPS-61"]
 CHILDREN = {"PAY-123": [("PAY-140", "Validate refund limits in the API", "In Progress", "Story"),
-                         ("PAY-141", "Show limit errors to merchants", "To Do", "Story")]}
-MINE_OPEN = ["PAY-123", "PAY-130"]  # assigned to me, not done (found by "Add my issues")
+                         ("PAY-141", "Show limit errors to merchants", "To Do", "Story")],
+            # the epic's stories, from two projects
+            "PAY-200": [("PAY-201", "Refund approval workflow", "In Progress", "Story"), ("PAY-205", "Refund limits per merchant tier", "Blocked", "Story"),
+                        ("OPS-90", "Scale refund batch for 2.0 volumes", "To Do", "Task"), ("PAY-206", "Refund reports for finance", "Done", "Story")]}
+MINE_OPEN = ["PAY-123", "PAY-130", "PAY-200", "PAY-201", "OPS-90", "PAY-205"]  # assigned to me, not done (found by "Add my issues")
 
 # CM change issues with an implementation window (times relative to today, so
 # the demo calendar always has some).
@@ -57,6 +73,7 @@ CM = {
     "CM-4411": ("PROD release 4.2.1", "Scheduled", _at(2, 21), _at(2, 23, 30)),
     "CM-4420": ("Certificate renewal window", "Approved", _at(6, 19), _at(6, 20)),
     "CM-4390": ("PROD release 4.1.7", "Closed", _at(-10, 21), _at(-10, 22)),
+    "CM-4433": ("Refunds 2.0 go-live", "Scheduled", _at(1, 20), _at(1, 23)),
 }
 
 class H(BaseHTTPRequestHandler):
@@ -72,8 +89,8 @@ class H(BaseHTTPRequestHandler):
         if u.path in ("/rest/api/3/search/jql", "/rest/api/2/search"):
             from urllib.parse import unquote_plus
             jql = unquote_plus(q.get("jql", ""))
-            if jql.startswith("parent = "):  # child work items (Jira Cloud style)
-                kids = CHILDREN.get(jql.split()[2], [])
+            if jql.startswith("parent = ") or jql.startswith('"Epic Link" = '):  # child work items (Cloud parent / Server Epic Link)
+                kids = CHILDREN.get(jql.split(" = ")[1].split()[0], [])
                 return self.send({"issues": [{"key": k, "fields": {"summary": s, "status": {"name": st}, "issuetype": {"name": t}}} for k, s, st, t in kids]})
             keys = MINE_OPEN if "!=" in jql else MINE_DONE
             return self.send({"issues": [{"key": k} for k in keys], "total": len(keys)})

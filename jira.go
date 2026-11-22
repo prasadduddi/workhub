@@ -158,6 +158,25 @@ func (s *Store) removeJiraIssue(key string) {
 }
 
 // ---- Jira REST ----
+//
+// WorkHub only ever READS from Jira: the one way it talks to Jira is
+// jiraClient.get, which sends GET requests (through readOnlyJira, which
+// refuses anything else). Nothing in Jira is created, edited, commented on,
+// moved or deleted. "Remove" on the Jira page only stops tracking in WorkHub.
+
+// readOnlyJira refuses any request to Jira that could change something.
+type readOnlyJira struct{ next http.RoundTripper }
+
+func (t readOnlyJira) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return nil, fmt.Errorf("WorkHub only reads from Jira (refused %s %s)", r.Method, r.URL.Path)
+	}
+	next := t.next
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	return next.RoundTrip(r)
+}
 
 type jiraClient struct {
 	cfg  JiraConfig
@@ -168,7 +187,7 @@ func (c *jiraClient) get(path string, out any) error {
 	if c.cfg.Mode == "browser" {
 		return c.browserGet(path, out)
 	}
-	req, _ := http.NewRequest("GET", c.cfg.BaseURL+path, nil)
+	req, _ := http.NewRequest(http.MethodGet, c.cfg.BaseURL+path, nil)
 	req.Header.Set("Accept", "application/json")
 	switch c.cfg.Mode {
 	case "server":
@@ -176,7 +195,12 @@ func (c *jiraClient) get(path string, out any) error {
 	default: // cloud (email + API token) and basic (username + password)
 		req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(c.cfg.User+":"+c.cfg.Token)))
 	}
-	resp, err := c.http.Do(req)
+	hc := http.Client{Timeout: 30 * time.Second}
+	if c.http != nil {
+		hc = *c.http
+	}
+	hc.Transport = readOnlyJira{next: hc.Transport} // reads only, whatever happens elsewhere
+	resp, err := hc.Do(req)
 	if err != nil {
 		return err
 	}
