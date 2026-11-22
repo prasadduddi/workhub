@@ -4,7 +4,8 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
-  { v: '1.8', title: 'Organise and find faster, Jira browser sign-in, macros', items: [
+  { v: '1.8', title: 'Task threads, organise and find faster, Jira browser sign-in', items: [
+    ['🧵', 'Tasks: a thread per task (replaces work items)', 'Tasks in the sidebar: one thread per ticket or change. Post notes, paste screenshots (Win+Shift+S, Ctrl+V), drop files. Press 📥 Capture here and everything the clipboard watcher catches lands in the thread too. Right-click any server or capture → Add to task thread. Your old work items are threads now, with their page as the first post; the Word copy is kept up to date.', 'tasks'],
     ['🔑', 'Key / SSO logins', 'Edit a server and tick “Logs in with a key / SSO” (or use ⋯ / the Table bulk bar): it stops being flagged for a missing password.', 'dashboard'],
     ['📋', 'No duplicate captures', 'Copying the same text again no longer adds another capture.', 'inbox'],
     ['🌓', 'Light or dark', '☰ → Theme: follow Windows, light or dark.', ''],

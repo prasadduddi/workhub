@@ -28,7 +28,7 @@ const CMD = (() => {
     inbox: ['captured', 'capture', 'captures', 'inbox', 'clips', 'capture history', 'clipboard history', 'outlook'],
     terminal: ['putty', 'terminal', 'terminals', 'ssh page', 'console'], jira: ['jira', 'jira page', 'tickets', 'pull requests', 'prs'], cal: ['calendar', 'diary', 'schedule', 'agenda', 'meetings', 'events', 'reminders', 'cm windows', 'change windows'], files: ['filezilla', 'file manager', 'files', 'sftp page', 'ftp page', 'transfers'],
     sql: ['sql', 'sql page', 'query window', 'database page', 'db page', 'sql developer'], git: ['git', 'repos', 'repositories', 'source control'],
-    notes: ['notepad', 'notepad++', 'notes', 'editor', 'note'], ref: ['folders', 'folder tree', 'reference', 'reference files', 'properties', 'properties page', 'property files', 'configs', 'config files', 'json schemas', 'schemas', 'yaml files', 'app docs'],
+    tasks: ['tasks', 'task', 'threads', 'thread', 'task threads', 'work items', 'work item'], notes: ['notepad', 'notepad++', 'notes', 'editor', 'note'], ref: ['folders', 'folder tree', 'reference', 'reference files', 'properties', 'properties page', 'property files', 'configs', 'config files', 'json schemas', 'schemas', 'yaml files', 'app docs'],
   };
   const SORTS = {
     name: ['name', 'names', 'alphabet', 'alphabetical', 'a-z', 'a to z'], host: ['host', 'hostname', 'server', 'ip', 'address'],
@@ -542,22 +542,21 @@ async function runCommand(text) {
       case 'jiraAdd': show('jira'); await Jira.add(a.ref); said.push(`Added ${esc(a.ref.toUpperCase())} to the Jira page — its pull requests and ${esc(Jira.cfg?.child_prefix || 'CM-')} items appear under it.`); break;
       case 'jiraRefresh': show('jira'); $('#jiraRefreshAll').click(); said.push('Refreshing all Jira issues.'); break;
       case 'workNew': {
-        show('notes');
-        const w = await Work.create(a.title || 'New work item');
-        said.push(`Created work item <b>${esc(w.title)}</b> in Notes. Paste screenshots, links or notes onto the page.`);
+        const w = await Work.create(a.title || 'New task');
+        if (w) said.push(`Started the task thread <b>${esc(w.title)}</b>. Post notes, paste screenshots, or press 📥 Capture here.`);
         break;
       }
       case 'workOpen': {
         await Work.loadList();
         const q = a.q.toLowerCase();
         const w = Work.list.find(x => x.title.toLowerCase() === q) || Work.list.find(x => x.title.toLowerCase().includes(q)) || Work.list.find(x => x.search.includes(q));
-        if (!w) { said.push(`No work item matching "${esc(a.q)}".`); break; }
-        show('notes'); await Work.open(w.id); said.push(`Opened work item <b>${esc(w.title)}</b>.`); break;
+        if (!w) { said.push(`No task thread matching "${esc(a.q)}".`); break; }
+        await Work.open(w.id); said.push(`Opened the thread <b>${esc(w.title)}</b>.`); break;
       }
       case 'workList': {
         await Work.loadList();
         const open = Work.list.filter(w => w.status !== 'done');
-        said.push(open.length ? 'Open work items: ' + open.map(w => `<b>${esc(w.title)}</b> (${(STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1]})`).join(' · ') : 'No open work items.');
+        said.push(open.length ? 'Open task threads: ' + open.map(w => `<b>${esc(w.title)}</b> (${(STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1]})`).join(' · ') : 'No open task threads.');
         break;
       }
       case 'linkBrowser':

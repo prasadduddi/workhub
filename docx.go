@@ -301,7 +301,7 @@ func buildDocx(s *Store, w WorkItem) ([]byte, error) {
 	}
 	meta += "   ·   Updated: " + w.Updated.Format("2006-01-02 15:04")
 	d.para("Subtitle", d.run(meta, runStyle{}))
-	root, err := html.Parse(strings.NewReader("<html><body>" + w.Doc + "</body></html>"))
+	root, err := html.Parse(strings.NewReader("<html><body>" + s.threadHTML(w) + "</body></html>"))
 	if err != nil {
 		return nil, err
 	}

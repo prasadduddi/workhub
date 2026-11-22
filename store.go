@@ -111,6 +111,7 @@ type Settings struct {
 	Mail          MailSettings `json:"mail"`
 	NameRules     []NameRule   `json:"name_rules,omitempty"` // e.g. -BAT- → Batch (this workspace only)
 	Saved         []SavedQuery `json:"saved_searches,omitempty"`
+	ActiveThread  string       `json:"active_thread,omitempty"` // the task thread captures are added to
 }
 
 // SavedQuery is a search kept in the sidebar, e.g. "PROD Batch" = env:prod app:batch.
@@ -215,6 +216,7 @@ func OpenStore(dir string) (*Store, error) {
 			return nil, fmt.Errorf("corrupt data file %s: %w", s.path, err)
 		}
 		s.applyNameRules() // automatic names follow the current rules and labels
+		s.migrateThreads() // work item documents become thread posts
 	}
 	go s.saver()
 	return s, nil
@@ -810,6 +812,9 @@ func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 	}
 	s.applyNameRules()
 	s.st.Clips = append(s.st.Clips, clip)
+	if s.st.Settings.ActiveThread != "" && (source == "clipboard" || source == "paste") {
+		s.captureToThread(text, clip.ID, now)
+	}
 	if len(s.st.Clips) > maxClips {
 		s.st.Clips = s.st.Clips[len(s.st.Clips)-maxClips:]
 	}

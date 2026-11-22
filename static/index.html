@@ -17,6 +17,7 @@
   <nav id="nav">
     <div class="navhead">Find</div>
     <div class="navrow"><button data-view="dashboard" class="active"><svg class="ni" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2" fill="#5b8ff0"/><rect x="13" y="3" width="8" height="5" rx="2" fill="#9db8f5"/><rect x="13" y="10" width="8" height="11" rx="2" fill="#5b8ff0"/><rect x="3" y="13" width="8" height="8" rx="2" fill="#9db8f5"/></svg><span class="nl">Dashboard</span></button><button id="navSearch" class="navsearch" title="Search everything (Ctrl+K)"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>
+    <button data-view="tasks"><svg class="ni" viewBox="0 0 24 24"><path d="M4 4.5h16v11H10l-4.5 4v-4H4z" fill="#7c5cd6"/><path d="M8 8.5h8M8 11.5h5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg><span class="nl">Tasks</span></button>
     <button data-view="groups"><svg class="ni" viewBox="0 0 24 24"><rect x="2.5" y="3" width="8.5" height="8.5" rx="2" fill="#2a9d8f"/><rect x="13" y="3" width="8.5" height="8.5" rx="2" fill="#d9822b"/><rect x="2.5" y="13" width="8.5" height="8.5" rx="2" fill="#8e6bd8"/><rect x="13" y="13" width="8.5" height="8.5" rx="2" fill="#2f6fde"/></svg><span class="nl">Groups</span><span id="groupCount" class="count"></span></button>
     <button data-view="bookmarks"><svg class="ni" viewBox="0 0 24 24"><path d="M6 2.5h12a1 1 0 0 1 1 1V21l-7-4.5L5 21V3.5a1 1 0 0 1 1-1z" fill="#f2a900" stroke="#b07a00" stroke-width="1" stroke-linejoin="round"/><path d="m12 6 1.3 2.7 2.9.4-2.1 2 .5 2.9-2.6-1.4-2.6 1.4.5-2.9-2.1-2 2.9-.4z" fill="#fff"/></svg><span class="nl">Bookmarks</span></button>
     <button data-view="inbox"><svg class="ni" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2" fill="none" stroke="#8a93a1" stroke-width="2"/><rect x="8.5" y="2" width="7" height="4" rx="1.2" fill="#8a93a1"/><path d="M8 11h8M8 15h5" stroke="#2f6fde" stroke-width="2" stroke-linecap="round"/></svg><span class="nl">Captured</span><span id="inboxCount" class="count"></span></button>
@@ -39,6 +40,7 @@
       <input id="captureProject" list="projectList" placeholder="General">
       <label class="switch small"><input type="checkbox" id="captureAll"><span></span> Keep clips with no info</label>
     </details>
+    <div id="captureThread" class="muted tiny" hidden></div>
   </div>
   <div class="side-foot">
     <div class="foot-row"><button id="profileBtn" class="ghost" title="Your profile"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg> <span id="profileName">Your profile</span></button><button id="lockBtn" class="ghost icon" title="Lock WorkHub with your PIN (Ctrl+L)"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button></div>
@@ -307,13 +309,22 @@
     </div>
   </section>
 
+  <!-- TASKS: one thread per task (replaced the Notes work items) -->
+  <section id="view-tasks" class="view">
+    <div class="tasks-layout">
+      <div class="tasks-side">
+        <button id="workNew" class="primary">+ New thread</button>
+        <input id="workSearch" type="search" placeholder="Search threads…">
+        <div id="workList"></div>
+      </div>
+      <div id="taskMain" class="task-main"></div>
+    </div>
+  </section>
+
   <!-- NOTES -->
   <section id="view-notes" class="view">
     <div class="notes-layout">
       <div class="notes-side">
-        <h4 class="whdr">Work items <button id="workNew" class="icon primary" title="New work item page">+ New</button></h4>
-        <input id="workSearch" type="search" placeholder="Search work items…">
-        <div id="workList"></div>
         <button id="newNote" class="primary">+ New note</button>
         <h4>Notes</h4><div id="noteList"></div>
         <h4>Open file</h4>
@@ -321,7 +332,6 @@
         <button id="browseFile" class="openbrowse">Browse for a file…</button>
         <h4>Recent files</h4><div id="recentList"></div>
       </div>
-      <div id="workPage" class="workpage" hidden></div>
       <div class="editor-wrap">
         <div id="docTabs" class="tabs"></div>
         <div class="editor" id="editorHost"></div>

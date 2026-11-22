@@ -208,8 +208,11 @@ def seed_api(sim, port):
     except Exception:
         pass
     git_repo(os.path.join(sim, "repos", "pay-api"))
-    a.call("POST", "/api/work", {"title": "PAY-123 Refund limits – UAT testing", "status": "In progress", "tags": ["PAY-123", "UAT"],
-                                 "doc": "<h2>What</h2><p>Raise refund limits for merchants (PAY-123).</p><h2>Links</h2><p><a href=\"https://jenkins.acme.local/job/Payments/job/pay-api-deploy/412/console\">Deploy #412</a></p><h2>Notes</h2><ul><li>Batch frozen 01:00–05:30</li><li>Check Touchpoint gateway timeouts</li></ul>"})
+    w = a.call("POST", "/api/work", {"title": "PAY-123 Refund limits – UAT testing", "status": "doing", "tags": ["PAY-123", "UAT"]})
+    for h in ["<p><b>What:</b> raise refund limits for merchants (PAY-123).</p>",
+              "<p>Deployed to UAT — <a href=\"https://jenkins.acme.local/job/Payments/job/pay-api-deploy/412/console\">Deploy #412</a></p>",
+              "<ul><li>Batch frozen 01:00–05:30</li><li>Check Touchpoint gateway timeouts</li></ul>"]:
+        a.call("POST", "/api/work/%s/posts" % w["id"], {"kind": "note", "html": h})
     a.call("POST", "/api/notes", {"title": "Handover", "content": "Release 4.2.1 handover\n- pay-api deployed to UAT\n- batch EOD passed\n- PROD change CM-4411 scheduled\n"})
     # Jira (pretend server from fake_jira.py)
     try:

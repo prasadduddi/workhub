@@ -1,8 +1,8 @@
 'use strict';
-// Work items (Notepad++): one free-form rich-text document per ticket/change/
-// incident. Type anywhere; paste screenshots, links or formatted text where
-// the cursor is; drop files. Markdown-style shortcuts while typing:
-// "# " heading, "## " sub-heading, "- " bullets, "1. " numbers, "[] " checkbox.
+// Tasks: one thread per ticket / change / incident (these replaced the Notes
+// work items). Posts are time-stamped notes with pasted screenshots and files,
+// text captured from the clipboard while the thread is "capturing", and
+// servers added from any right-click menu. A Word copy is kept up to date.
 
 const STATUSES = [['todo', 'To do'], ['doing', 'In progress'], ['blocked', 'Blocked'], ['done', 'Done']];
 
@@ -42,100 +42,154 @@ function sanitizeHTML(html) {
 }
 
 const Work = {
-  list: [], current: null, saveTimer: null, headTimer: null,
+  list: [], current: null,
 
   async loadList() {
     this.list = (await api('GET', '/api/work').catch(() => [])) || [];
     this.renderList();
+    this.renderCapture();
   },
+  active() { return S.settings?.active_thread || ''; },
 
   renderList() {
     const q = ($('#workSearch')?.value || '').trim().toLowerCase();
-    const items = this.list.filter(w => !q || q.split(/\s+/).every(t => w.search.includes(t)));
-    $('#workList').innerHTML = items.map(w => `<div class="li ${this.current?.id === w.id ? 'active' : ''}" data-work="${w.id}">
-      <span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span> ${esc(w.title)}
-      <small>${fmtTime(w.updated)}${w.links ? ` · ${w.links} link${w.links > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}${w.tags?.length ? ' · ' + esc(w.tags.join(', ')) : ''}</small></div>`).join('')
-      || `<div class="muted tiny">${q ? 'No matches' : 'No work items yet'}</div>`;
+    const items = this.list.filter(w => !q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t)));
+    $('#workList').innerHTML = items.map(w => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''}" data-work="${w.id}">
+      <div class="tli-top"><span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>${w.id === this.active() ? '<span class="tcap" title="Captures are being added here">● capturing</span>' : ''}</div>
+      <b>${esc(w.title)}</b><small>${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} post${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`).join('')
+      || `<div class="muted tiny" style="padding:8px">${q ? 'No matches' : 'No task threads yet — press + New thread.'}</div>`;
+  },
+
+  // Sidebar line under Watch clipboard: where captures go.
+  renderCapture() {
+    const w = this.list.find(x => x.id === this.active());
+    const el = $('#captureThread'); if (!el) return;
+    el.hidden = !w;
+    if (w) el.innerHTML = `and thread <a href="#" data-gothread="${w.id}">${esc(w.title)}</a> <a href="#" data-stopthread title="Stop adding captures to this thread">✕</a>`;
+  },
+
+  async show() {
+    await this.loadList();
+    if (!this.current) {
+      let sel = ''; try { sel = localStorage.getItem('workSel') || ''; } catch { /* ignore */ }
+      const id = this.list.some(w => w.id === sel) ? sel : this.list[0]?.id;
+      if (id) await this.open(id); else this.render();
+    }
   },
 
   async open(id) {
-    await this.flush();
     try { this.current = await api('GET', '/api/work/' + id); } catch (err) { return toast(err.message, true); }
     try { localStorage.setItem('workSel', id); } catch { /* ignore */ }
-    $('.editor-wrap').hidden = true;
-    $('#workPage').hidden = false;
-    $$('#noteList .li, #recentList .li').forEach(li => li.classList.remove('active'));
-    // Older pages made of blocks become one document.
-    if (!this.current.doc && this.current.blocks?.length) { this.current.doc = blocksToHTML(this.current.blocks); this.saveDoc(true); }
-    this.render();
-    this.renderList();
-  },
-
-  async close() {
-    await this.flush();
-    this.current = null;
-    try { localStorage.removeItem('workSel'); } catch { /* ignore */ }
-    $('#workPage').hidden = true;
-    $('.editor-wrap').hidden = false;
+    if (!$('#view-tasks').classList.contains('active')) show('tasks');
+    this.render(true);
     this.renderList();
   },
 
   async create(title) {
-    const w = await api('POST', '/api/work', { title: title || 'New work item' });
+    title = title || prompt('Thread name (e.g. PAY-123 refund limits, CM-456 UAT release):', '');
+    if (!title?.trim()) return null;
+    const w = await api('POST', '/api/work', { title: title.trim() });
     await this.loadList();
     await this.open(w.id);
-    setTimeout(() => $('#workDoc')?.focus());
+    setTimeout(() => $('#tbox')?.focus());
     return w;
   },
 
-  render() {
+  async setCapture(on) {
     const w = this.current; if (!w) return;
-    $('#workPage').innerHTML = `
-      <div class="whero">
-        <input id="workTitle" class="wtitle" value="${esc(w.title)}" placeholder="Work item title (e.g. PAY-123 refund limits)">
-        <select id="workStatus">${STATUSES.map(([v, l]) => `<option value="${v}" ${w.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
-        <input id="workTags" value="${esc((w.tags || []).join(', '))}" placeholder="tags, comma separated">
-        <span id="workSaved" class="muted tiny"></span>
-        <span class="spacer"></span><button data-wact="word" title="Open the Word copy saved in workhub-data\\work-items">Open in Word</button><button data-wact="folder" title="Show the work-items folder">Open folder</button>
-        <button data-wact="delete" class="danger">Delete</button><button data-wact="close" title="Back to notes">✕</button>
-      </div>
-      <div id="workDoc" class="wdoc" contenteditable="true" spellcheck="true" data-placeholder="Start typing. Paste screenshots (Win+Shift+S then Ctrl+V), links or text anywhere. Drop files here.
-Shortcuts: # heading · ## sub-heading · - bullets · 1. numbers · [] checkbox · Ctrl+B/I/U · Ctrl+click opens a link">${sanitizeHTML(w.doc || '')}</div>`;
-    document.execCommand('defaultParagraphSeparator', false, 'p'); // Enter makes <p>, not <div>
-    const d = $('#workDoc');
-    if (!d.innerHTML.trim()) d.innerHTML = '<p><br></p>'; // typing starts inside a paragraph
-    this.updateEmpty();
+    await saveSettings({ active_thread: on ? w.id : '' });
+    this.render(); this.renderList(); this.renderCapture();
+    toast(on ? `Captures now also go to “${w.title}”` : 'Captures no longer go to a thread');
   },
 
-  updateEmpty() { const d = $('#workDoc'); if (d) d.classList.toggle('empty', !d.textContent.trim() && !d.querySelector('img')); },
-
-  saveDoc(now) {
-    const w = this.current; if (!w) return;
-    clearTimeout(this.saveTimer);
-    $('#workSaved') && ($('#workSaved').textContent = 'saving…');
-    const go = async () => {
-      const d = $('#workDoc');
-      if (d && this.current === w) w.doc = sanitizeHTML(d.innerHTML);
-      try {
-        const res = await fetch(`/api/work/${w.id}/doc`, { method: 'PUT', body: w.doc }).then(r => r.json()).catch(() => ({}));
-        if (this.current === w && $('#workSaved')) $('#workSaved').textContent = res.docx_error ? '⚠ ' + res.docx_error : 'saved ' + new Date().toLocaleTimeString() + ' (+ Word copy)';
-        this.loadList();
-      } catch (err) { toast('Save failed: ' + err.message, true); }
-    };
-    if (now) return go();
-    this.saveTimer = setTimeout(go, 800);
-  },
-  async flush() { if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; await this.saveDoc(true); } },
-
-  saveHeader() {
+  render(scroll) {
     const w = this.current;
-    w.title = $('#workTitle').value; w.status = $('#workStatus').value;
-    w.tags = $('#workTags').value.split(',').map(s => s.trim()).filter(Boolean);
-    clearTimeout(this.headTimer);
-    this.headTimer = setTimeout(async () => { await api('POST', '/api/work', { id: w.id, title: w.title, status: w.status, tags: w.tags }); this.loadList(); }, 600);
+    if (!w) { $('#taskMain').innerHTML = '<div class="empty">Start a thread for a task, ticket or change — then post notes, paste screenshots, and let captures land in it.<br><br><button class="primary" data-tact="new">+ New thread</button></div>'; return; }
+    const capturing = w.id === this.active();
+    $('#taskMain').innerHTML = `
+      <div class="thead">
+        <input id="workTitle" class="wtitle" value="${esc(w.title)}" placeholder="Thread name">
+        <select id="workStatus">${STATUSES.map(([v, l]) => `<option value="${v}" ${w.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <button data-tact="capture" class="${capturing ? 'primary' : ''}" title="While on, everything Watch clipboard captures is also posted here">${capturing ? '● Capturing here' : '📥 Capture here'}</button>
+        <span class="spacer"></span>
+        <button data-tact="word" title="Open the Word copy (kept in the work-items folder)">Open in Word</button>
+        <button data-tact="more" class="icon more" title="More">⋯</button>
+      </div>
+      <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
+      <div class="tcompose">
+        <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Write a note… paste a screenshot (Win+Shift+S, then Ctrl+V) or drop files. Enter posts · Shift+Enter new line"></div>
+        <button id="tsend" class="primary" title="Post (Enter)">Post</button>
+      </div>`;
+    if (scroll) this.scrollEnd();
+  },
+  scrollEnd() { const el = $('#tposts'); if (el) el.scrollTop = el.scrollHeight; },
+
+  postsHTML(w) {
+    if (!w.posts?.length) return '<div class="muted tiny" style="padding:16px">Nothing here yet. Write the first note below.</div>';
+    let day = '';
+    const dayName = d => { const t = new Date(); const y = new Date(Date.now() - 864e5);
+      return d.toDateString() === t.toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); };
+    return w.posts.map(p => {
+      const at = new Date(p.at), d = dayName(at);
+      const sep = d !== day ? `<div class="tday"><span>${esc((day = d))}</span></div>` : '';
+      const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return sep + `<div class="tpost k-${p.kind}" data-post="${p.id}"><div class="tmeta"><span class="tkind">${{ note: '📝', capture: '📋', entry: '🖥' }[p.kind] || '📝'}</span>
+        <span class="ttime" title="${esc(at.toLocaleString())}">${time}</span>${p.kind === 'capture' ? '<span class="muted tiny">captured</span>' : ''}${p.edited ? '<span class="muted tiny">(edited)</span>' : ''}
+        <span class="tacts">${p.kind === 'note' ? '<button class="icon" data-pact="edit" title="Edit">✎</button>' : ''}<button class="icon more" data-pact="more" title="More">⋯</button></span></div>
+        <div class="tbody">${this.postBody(p)}</div></div>`;
+    }).join('');
   },
 
-  // Store files and return HTML to place in the document.
+  postBody(p) {
+    if (p.kind === 'capture') {
+      const clip = S.clips.find(c => c.id === p.ref);
+      const chips = (clip?.entry_ids || []).map(byId).filter(Boolean).map(e => `<span class="chip" data-tentry="${e.id}" title="Details">${dot(e)} ${esc(e.name)}</span>`).join('');
+      return `<pre>${maskedText(p.text || '')}</pre>${chips ? `<div class="chips">${chips}</div>` : ''}`;
+    }
+    if (p.kind === 'entry') {
+      const e = byId(p.ref);
+      if (!e) return '<span class="muted">(this connection was deleted)</span>';
+      return `<div class="tentry">${dot(e)} <b>${ruleName(e)}</b> <span class="muted">${esc([e.username, e.host || e.url].filter(Boolean).join(' @ '))}${e.port ? ':' + e.port : ''}</span>${e.env ? ` <span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}
+        <span class="spacer"></span>${canSSH(e) ? `<button class="icon" data-tconn="ssh" data-id="${e.id}">SSH</button>` : ''}${canDB(e) ? `<button class="icon" data-tconn="sql" data-id="${e.id}">SQL</button>` : ''}${e.url ? `<button class="icon" data-tconn="open" data-id="${e.id}">Open</button>` : ''}<button class="icon" data-tentry="${e.id}">Details</button></div>${p.html ? sanitizeHTML(p.html) : ''}`;
+    }
+    return sanitizeHTML(p.html || '');
+  },
+
+  async post(kind, fields, threadId) {
+    const id = threadId || this.current?.id; if (!id) return;
+    const p = await api('POST', `/api/work/${id}/posts`, { kind, ...fields });
+    if (this.current?.id === id) { this.current.posts = [...(this.current.posts || []), p].sort((a, b) => new Date(a.at) - new Date(b.at)); this.render(); this.scrollEnd(); }
+    this.loadList();
+    return p;
+  },
+
+  async send() {
+    const box = $('#tbox'); if (!box) return;
+    const html = sanitizeHTML(box.innerHTML).replace(/^(<p><br><\/p>|<br>)+|(<p><br><\/p>|<br>)+$/g, '');
+    if (!box.textContent.trim() && !box.querySelector('img')) return;
+    box.innerHTML = '';
+    try { await this.post('note', { html }); } catch (err) { toast(err.message, true); box.innerHTML = html; }
+    $('#tbox')?.focus();
+  },
+
+  // Pick a thread (recent first) for "Add to task thread…".
+  pick(ev, then) {
+    const r = ev.target?.getBoundingClientRect?.() || { left: ev.clientX, bottom: ev.clientY };
+    const open = [...this.list].filter(w => w.status !== 'done').slice(0, 12);
+    setTimeout(() => Tree.showMenu({ clientX: r.left, clientY: r.bottom }, [
+      ...open.map(w => [`${w.id === this.active() ? '● ' : ''}${w.title}`, () => then(w.id, w.title)]),
+      ...(open.length ? ['-'] : []), ['+ New thread…', async () => { const w = await this.create(); if (w) then(w.id, w.title); }]]));
+  },
+  async addEntry(e, ev) {
+    if (!this.list.length) await this.loadList();
+    this.pick(ev, async (id, title) => { await this.post('entry', { ref: e.id }, id); toast(`Added ${e.name} to “${title}”`); });
+  },
+  async addClip(c, ev) {
+    if (!this.list.length) await this.loadList();
+    this.pick(ev, async (id, title) => { await this.post('capture', { text: c.text, ref: c.id }, id); toast(`Added the capture to “${title}”`); });
+  },
+
+  // Store files and return HTML for them (images inline, others as links).
   async storeFiles(files) {
     const w = this.current, fd = new FormData();
     for (const f of files) fd.append('file', f, f.name);
@@ -146,139 +200,130 @@ Shortcuts: # heading · ## sub-heading · - bullets · 1. numbers · [] checkbox
       ? `<p><img src="/api/props/files/${a.id}" alt="${esc(a.name)}"></p>`
       : `<p>📎 <a href="${location.origin}/api/props/files/${a.id}?download=1" target="_blank" rel="noopener">${esc(a.name)}</a> <span class="muted">(${fmtSize(a.size)})</span></p>`).join('');
   },
+
+  saveHeader() {
+    const w = this.current;
+    w.title = $('#workTitle').value; w.status = $('#workStatus').value;
+    clearTimeout(this.headTimer);
+    this.headTimer = setTimeout(async () => { await api('POST', '/api/work', { id: w.id, title: w.title, status: w.status, tags: w.tags || [] }); this.loadList(); }, 600);
+  },
 };
 
-function blocksToHTML(blocks) {
-  return blocks.map(b => {
-    const when = `<p class="muted"><small>${esc(new Date(b.added).toLocaleString())}</small></p>`;
-    if (b.kind === 'text') return `<p>${esc(b.text || '').replace(/\n/g, '<br>')}</p>`;
-    if (b.kind === 'link') return `<p>🔗 ${b.title ? esc(b.title) + ': ' : ''}<a href="${esc(b.url)}">${esc(b.url)}</a></p>`;
-    if (b.kind === 'image' && b.file) return `<p><img src="/api/props/files/${b.file.id}" alt="${esc(b.title || '')}"></p>`;
-    if (b.file) return `<p>📎 <a href="${location.origin}/api/props/files/${b.file.id}?download=1">${esc(b.file.name)}</a></p>`;
-    return when;
-  }).join('');
-}
-
-// Insert HTML at the caret inside the document.
-function insertAtCaret(html) {
-  const d = $('#workDoc'); if (!d) return;
-  d.focus();
+// Insert HTML at the caret in the box being written (composer or an edited post).
+function insertAtCaret(html, box = $('#tbox')) {
+  if (!box) return;
+  box.focus();
   const sel = window.getSelection();
-  if (!sel.rangeCount || !d.contains(sel.anchorNode)) { const r = document.createRange(); r.selectNodeContents(d); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); }
+  if (!sel.rangeCount || !box.contains(sel.anchorNode)) { const r = document.createRange(); r.selectNodeContents(box); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); }
   document.execCommand('insertHTML', false, html);
-  Work.updateEmpty();
-  Work.saveDoc();
 }
-
 const linkHTML = u => { const label = linkLabel(u); return `${label ? `<b>${esc(label)}:</b> ` : ''}<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>&nbsp;`; };
 
 // ---- events ----
 $('#workNew').onclick = () => Work.create();
 $('#workSearch').addEventListener('input', () => Work.renderList());
 $('#workList').addEventListener('click', e => { const li = e.target.closest('[data-work]'); if (li) Work.open(li.dataset.work); });
-$('#view-notes').addEventListener('click', e => { if (e.target.closest('[data-open]') || e.target.closest('#newNote')) Work.close(); }, true);
-
-const page = $('#workPage');
-page.addEventListener('input', e => {
-  if (['workTitle', 'workTags'].includes(e.target.id)) return Work.saveHeader();
-  if (e.target.id === 'workDoc') { Work.updateEmpty(); Work.saveDoc(); }
+$('#captureThread')?.addEventListener('click', e => {
+  const go = e.target.closest('[data-gothread]'); if (go) { e.preventDefault(); return Work.open(go.dataset.gothread); }
+  if (e.target.closest('[data-stopthread]')) { e.preventDefault(); saveSettings({ active_thread: '' }).then(() => { Work.renderCapture(); Work.renderList(); if (Work.current) Work.render(); }); }
 });
-page.addEventListener('change', e => { if (e.target.id === 'workStatus') Work.saveHeader(); if (e.target.matches?.('#workDoc input[type=checkbox]')) { e.target.toggleAttribute('checked', e.target.checked); Work.saveDoc(); } });
+
+const page = $('#taskMain');
+page.addEventListener('input', e => { if (e.target.id === 'workTitle') Work.saveHeader(); });
+page.addEventListener('change', e => { if (e.target.id === 'workStatus') Work.saveHeader(); });
+page.addEventListener('keydown', e => {
+  if (e.target.id === 'tbox' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); Work.send(); }
+  if (e.target.closest?.('.tbody[contenteditable]') && e.key === 'Escape') Work.render();
+});
 page.addEventListener('click', async e => {
-  const w = Work.current; if (!w) return;
-  const act = e.target.closest('[data-wact]')?.dataset.wact;
-  if (act === 'close') return Work.close();
+  const w = Work.current;
+  const act = e.target.closest('[data-tact]')?.dataset.tact;
+  if (act === 'new') return Work.create();
+  if (!w) return;
+  if (e.target.closest('#tsend')) return Work.send();
+  if (act === 'capture') return Work.setCapture(w.id !== Work.active());
   if (act === 'word' || act === 'folder') {
-    await Work.flush();
-    try {
-      const r = await api('POST', `/api/work/${w.id}/word${act === 'folder' ? '?what=folder' : ''}`);
-      toast(r.warning ? r.warning : act === 'word' ? 'Opening in Word: ' + r.path.split(/[\\/]/).pop() : 'Opened the work-items folder');
-    } catch (err) { toast(err.message, true); }
+    try { const r = await api('POST', `/api/work/${w.id}/word${act === 'folder' ? '?what=folder' : ''}`); toast(r.warning ? r.warning : act === 'word' ? 'Opening in Word: ' + r.path.split(/[\\/]/).pop() : 'Opened the work-items folder'); }
+    catch (err) { toast(err.message, true); }
     return;
   }
-  if (act === 'delete') {
-    if (!confirm(`Delete work item "${w.title}" and everything in it?`)) return;
-    clearTimeout(Work.saveTimer); Work.saveTimer = null;
-    await api('DELETE', '/api/work/' + w.id); Work.current = null; await Work.close(); return Work.loadList();
+  if (act === 'more') {
+    const r = e.target.closest('[data-tact]').getBoundingClientRect();
+    return setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
+      ['Open the work-items folder', () => page.querySelector('[data-tact=word]') && api('POST', `/api/work/${w.id}/word?what=folder`).catch(err => toast(err.message, true))],
+      ['Delete this thread…', async () => {
+        if (!confirm(`Delete the thread "${w.title}" and everything in it?`)) return;
+        if (w.id === Work.active()) await saveSettings({ active_thread: '' });
+        await api('DELETE', '/api/work/' + w.id); Work.current = null; await Work.loadList(); Work.show();
+      }]]));
   }
-  // Ctrl/Cmd+click opens a link (plain click just places the cursor, like Word).
-  const a = e.target.closest('#workDoc a[href]');
-  if (a && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return openExternal(a.href); }
-  if (a) e.preventDefault();
+  const conn = e.target.closest('[data-tconn]');
+  if (conn) { const x = byId(conn.dataset.id); return x && ({ ssh: () => Term.open(x), sql: () => SQL.open(x), open: () => openURL(x) })[conn.dataset.tconn](); }
+  const ent = e.target.closest('[data-tentry]'); if (ent) return showDetails(byId(ent.dataset.tentry));
+  const postEl = e.target.closest('[data-post]'), pact = e.target.closest('[data-pact]')?.dataset.pact;
+  if (postEl && pact) {
+    const p = w.posts.find(x => x.id === postEl.dataset.post); if (!p) return;
+    if (pact === 'edit') {
+      const body = postEl.querySelector('.tbody');
+      body.contentEditable = 'true'; body.classList.add('editing'); body.focus();
+      body.insertAdjacentHTML('afterend', '<div class="row tedit"><button class="primary" data-pact="save">Save</button><button data-pact="cancel">Cancel</button><span class="muted tiny">Esc cancels</span></div>');
+      return;
+    }
+    if (pact === 'cancel') return Work.render();
+    if (pact === 'save') {
+      const html = sanitizeHTML(postEl.querySelector('.tbody').innerHTML);
+      await api('PUT', `/api/work/${w.id}/posts/${p.id}`, { html }).catch(err => toast(err.message, true));
+      p.html = html; p.edited = new Date().toISOString(); return Work.render();
+    }
+    if (pact === 'more') {
+      const r = e.target.closest('[data-pact]').getBoundingClientRect();
+      return setTimeout(() => Tree.showMenu({ clientX: r.left - 140, clientY: r.bottom }, [
+        ['Copy text', () => copyText(p.text || postEl.querySelector('.tbody').innerText)],
+        ['Delete post', async () => {
+          await api('DELETE', `/api/work/${w.id}/posts/${p.id}`);
+          w.posts = w.posts.filter(x => x !== p); Work.render(); Work.loadList();
+          toast('Post deleted', false, async () => { await Work.post(p.kind, { html: p.html, text: p.text, ref: p.ref, at: p.at }, w.id); toast('Restored'); });
+        }]]));
+    }
+  }
+  // Links in posts open in the browser.
+  const a = e.target.closest('.tbody a[href]');
+  if (a && !e.target.closest('[contenteditable=true]')) { e.preventDefault(); openExternal(a.href); }
 });
-page.addEventListener('dblclick', e => { const img = e.target.closest('#workDoc img'); if (img) { $('#lightboxImg').src = img.src; $('#lightbox').hidden = false; } });
+page.addEventListener('dblclick', e => { const img = e.target.closest('.tposts img, .tbox img'); if (img) { $('#lightboxImg').src = img.src; $('#lightbox').hidden = false; } });
 
-// Markdown-style shortcuts as you type, at the start of a line.
-page.addEventListener('keydown', e => {
-  if (e.target.id !== 'workDoc') return;
-  if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return Work.saveDoc(true); }
-  if (e.key !== ' ') return;
-  const sel = window.getSelection(); if (!sel.rangeCount) return;
-  const node = sel.anchorNode; if (node.nodeType !== 3) return;
-  const before = node.textContent.slice(0, sel.anchorOffset);
-  const line = node.parentElement.closest('div, p, li, h1, h2, h3') || node.parentElement;
-  if (line.closest('li') && before !== '[]') return;
-  const cmds = { '#': 'h1', '##': 'h2', '###': 'h3', '-': 'ul', '*': 'ul', '1.': 'ol', '>': 'blockquote', '[]': 'check' };
-  const c = cmds[before.trim()];
-  if (!c || before !== before.trimStart()) return;
-  e.preventDefault();
-  // Remove the typed marker with the editor's own command so the cursor and undo stay right.
-  const r = document.createRange(); r.setStart(node, sel.anchorOffset - before.length); r.setEnd(node, sel.anchorOffset);
-  sel.removeAllRanges(); sel.addRange(r);
-  document.execCommand('delete');
-  if (c === 'ul') document.execCommand('insertUnorderedList');
-  else if (c === 'ol') document.execCommand('insertOrderedList');
-  else if (c === 'check') document.execCommand('insertHTML', false, '<input type="checkbox">&nbsp;');
-  else document.execCommand('formatBlock', false, `<${c}>`);
-  Work.saveDoc();
-});
-
-// Paste: screenshots → images at the cursor; links → clickable links;
-// formatted text (Outlook, Confluence, web) → kept, cleaned.
+// Paste into the composer (or a post being edited): screenshots → stored and
+// shown inline; formatted text kept (cleaned); links made clickable.
 page.addEventListener('paste', async e => {
-  if (e.target.closest('#workTitle, #workTags')) return;
-  if (!e.target.closest('#workDoc')) return;
+  const box = e.target.closest('#tbox, .tbody[contenteditable=true]'); if (!box) return;
   const cd = e.clipboardData;
   const imgs = [...(cd?.items || [])].filter(i => i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean);
   const html = cd?.getData('text/html') || '';
   const text = cd?.getData('text/plain') || '';
+  e.preventDefault();
   if (imgs.length && !html.trim()) {
-    e.preventDefault();
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     toast('Adding screenshot…');
-    return insertAtCaret(await Work.storeFiles(imgs.map((f, i) => new File([f], `screenshot-${stamp}${i ? '-' + i : ''}.png`, { type: f.type }))));
+    return insertAtCaret(await Work.storeFiles(imgs.map((f, i) => new File([f], `screenshot-${stamp}${i ? '-' + i : ''}.png`, { type: f.type }))), box);
   }
-  e.preventDefault();
   if (html.trim()) {
-    // Pictures inside pasted HTML as data: URLs are stored as files.
     let clean = sanitizeHTML(html.replace(/<!--[\s\S]*?-->/g, ''));
-    const datas = [...clean.matchAll(/src="(data:image\/(\w+);base64,[^"]+)"/g)];
-    for (const [, uri, ext] of datas) {
+    for (const [, uri, ext] of [...clean.matchAll(/src="(data:image\/(\w+);base64,[^"]+)"/g)]) {
       const bin = Uint8Array.from(atob(uri.split(',')[1]), ch => ch.charCodeAt(0));
       const stored = await Work.storeFiles([new File([bin], `pasted.${ext}`, { type: 'image/' + ext })]);
       const id = (stored.match(/files\/([0-9a-f]+)/) || [])[1];
       clean = clean.replace(uri, id ? '/api/props/files/' + id : '');
     }
-    return insertAtCaret(clean);
+    return insertAtCaret(clean, box);
   }
-  if (/^\s*https?:\/\/\S+\s*$/.test(text)) return insertAtCaret(linkHTML(text.trim()));
-  // Plain text: keep line breaks, turn URLs into links.
-  const out = esc(text).replace(/https?:\/\/[^\s<>"']+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`).replace(/\r?\n/g, '<br>');
-  insertAtCaret(out);
+  if (/^\s*https?:\/\/\S+\s*$/.test(text)) return insertAtCaret(linkHTML(text.trim()), box);
+  insertAtCaret(esc(text).replace(/https?:\/\/[^\s<>"']+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`).replace(/\r?\n/g, '<br>'), box);
 });
-
-// Drop files where the mouse is.
-page.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files') && e.target.closest('#workDoc')) { e.preventDefault(); page.classList.add('dragover'); } });
+page.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files') && Work.current) { e.preventDefault(); page.classList.add('dragover'); } });
 page.addEventListener('dragleave', e => { if (e.target === page) page.classList.remove('dragover'); });
 page.addEventListener('drop', async e => {
-  if (!e.dataTransfer.files.length || !e.target.closest('#workDoc')) return;
+  if (!e.dataTransfer.files.length || !Work.current) return;
   e.preventDefault(); page.classList.remove('dragover');
-  const pos = document.caretRangeFromPoint?.(e.clientX, e.clientY);
-  if (pos) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(pos); }
   toast(`Adding ${e.dataTransfer.files.length} file(s)…`);
   insertAtCaret(await Work.storeFiles([...e.dataTransfer.files]));
-});
-window.addEventListener('beforeunload', () => {
-  const w = Work.current, d = $('#workDoc');
-  if (w && Work.saveTimer && d) navigator.sendBeacon?.(`/api/work/${w.id}/doc`, new Blob([sanitizeHTML(d.innerHTML)], { type: 'text/html' }));
 });

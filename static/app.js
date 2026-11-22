@@ -360,11 +360,8 @@ function show(view) {
   history.replaceState(null, '', '#' + view);
   if (view === 'terminal') fitActiveTerm();
   if (view === 'files' && !Local.loaded) Local.load('');
-  if (view === 'notes') {
-    Work.loadList();
-    if (!Work.current) { let sel = ''; try { sel = localStorage.getItem('workSel') || ''; } catch { /* ignore */ } if (sel) Work.open(sel).catch(() => {}); }
-    if (!Work.current) { Notes.cm.refresh(); Notes.cm.focus(); }
-  }
+  if (view === 'notes') { Notes.cm.refresh(); Notes.cm.focus(); }
+  if (view === 'tasks') Work.show();
   if (view === 'bookmarks') {
     Bookmarks.sync(false);
     // Re-check links not checked in the last hour.
@@ -1403,6 +1400,7 @@ $('#clips').addEventListener('click', async e => {
     const r = more.getBoundingClientRect();
     setTimeout(() => Tree.showMenu({ clientX: r.left - 150, clientY: r.bottom }, [
       ['Copy the text', () => copyText(c.text)],
+      ['🧵 Add to task thread…', () => Work.addClip(c, { clientX: r.left - 150, clientY: r.bottom })],
       ['Delete this capture', async () => {
         await api('DELETE', `/api/clips/${c.id}`); poll();
         toast('Capture deleted', false, async () => { await api('POST', '/api/ingest', { text: c.text, source: c.source, project: c.project }); poll(); toast('Restored'); });
@@ -1985,6 +1983,7 @@ const Tree = {
         }], ['Stop tunnels', async () => { await api('POST', `/api/tunnels/${e.id}/stop`); toast('Tunnels stopped' + (e.extra.tunnels_auto === '1' ? ' (they restart within a minute while "Start when WorkHub starts" is on)' : '')); Tunnels.load(); }], '-');
       }
       if (problems(e).some(p => p[0] === 'password')) items.push(['🔑 Logs in with a key / SSO (no password)', async () => { await api('POST', '/api/entries', { ...entryInput(e), password: e.password, extra: { ...(e.extra || {}), auth: 'key' } }); poll(); toast(`${e.name}: marked as key login`); }]);
+      items.push(['🧵 Add to task thread…', () => Work.addEntry(e, ev)]);
       items.push('-',
         ['Copy host', () => copyText(e.host)]);
       if (e.username) items.push(['Copy username', () => copyText(e.username)]);

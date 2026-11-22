@@ -24,7 +24,8 @@ type WorkItem struct {
 	Tags    []string     `json:"tags,omitempty"`
 	Blocks  []*Block     `json:"blocks"`          // older format, converted into Doc by the page
 	Doc     string       `json:"doc"`             // the free-form document (sanitised HTML)
-	Files   []Attachment `json:"files,omitempty"` // images/files placed in Doc
+	Files   []Attachment `json:"files,omitempty"` // images/files placed in Doc or posts
+	Posts   []*Post      `json:"posts,omitempty"` // the thread (see threads.go); Doc/Blocks are its older forms
 	Created time.Time    `json:"created"`
 	Updated time.Time    `json:"updated"`
 }
@@ -70,6 +71,11 @@ func (s *Store) GetWorkItem(id string) (WorkItem, bool) {
 	}
 	c := *w
 	c.Blocks = append([]*Block{}, w.Blocks...)
+	c.Posts = make([]*Post, len(w.Posts))
+	for i, p := range w.Posts {
+		cp := *p
+		c.Posts[i] = &cp
+	}
 	return c, true
 }
 
@@ -235,6 +241,11 @@ func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 		for _, m := range hrefRe.FindAllStringSubmatch(wi.Doc, -1) {
 			sb.WriteString(" " + strings.ToLower(m[1]))
 		}
+		for _, p := range wi.Posts {
+			n["post"]++
+			sb.WriteString(" " + strings.ToLower(html.UnescapeString(tagRe.ReplaceAllString(strings.ReplaceAll(p.HTML, "<", " <"), " "))+" "+p.Text))
+			n["image"] += strings.Count(p.HTML, "<img")
+		}
 		for _, b := range wi.Blocks {
 			n[b.Kind]++
 			sb.WriteString(" " + strings.ToLower(b.Text+" "+b.URL+" "+b.Title))
@@ -243,7 +254,7 @@ func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "updated": wi.Updated,
-			"notes": n["text"], "links": n["link"], "images": n["image"], "files": n["file"], "search": sb.String()})
+			"notes": n["text"], "links": n["link"], "images": n["image"], "files": n["file"], "posts": n["post"], "search": sb.String()})
 	}
 	writeJSON(w, out)
 }
