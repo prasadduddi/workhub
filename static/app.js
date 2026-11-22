@@ -354,17 +354,21 @@ CodeMirror.commands.duplicateLine = cm => {
 };
 
 // ---------- navigation ----------
-// Opening a connection shrinks the sidebar to icons, so the server tree and
-// the session get the room; it comes back on leaving SSH / FTP / SQL (or with »).
-const WORK_VIEWS = ['terminal', 'files', 'sql'];
+// Pages with their own list or tree on the left (SSH, FTP, SQL, Tasks…) shrink
+// the sidebar to icons when opened — from the sidebar or by connecting — so
+// the tree and the window get the room; Dashboard, Bookmarks, Captured and
+// Calendar bring it back (» expands it any time).
+const WORK_VIEWS = ['terminal', 'files', 'sql', 'tasks', 'ref', 'jira', 'groups', 'notes', 'git'];
 function roomForWork() {
-  if (document.body.classList.contains('side-collapsed')) return;
+  if (S.userSide || document.body.classList.contains('side-collapsed')) return;
   document.body.classList.add('side-collapsed'); S.autoSide = true;
   $('#sideToggle').textContent = '»';
   setTimeout(() => { fitActiveTerm(); window.dispatchEvent(new Event('resize')); }, 50);
 }
 function show(view) {
-  if (S.autoSide && !WORK_VIEWS.includes(view)) { // put the sidebar back as it was
+  if (WORK_VIEWS.includes(view)) roomForWork();
+  else if (S.userSide) S.userSide = false;
+  else if (S.autoSide) { // put the sidebar back as it was
     S.autoSide = false;
     applySide();
   }
@@ -3452,7 +3456,7 @@ dragBar($('#sideSplit'), {
 });
 function toggleSide() {
   const c = document.body.classList.toggle('side-collapsed');
-  S.autoSide = false; // the user decides now
+  S.autoSide = false; S.userSide = !c; // expanded by hand: leave it open until the user collapses it or goes back to the dashboard
   if (!narrowWin.matches) store.set('sideCollapsed', c); // on a narrow window: just for now
   $('#sideToggle').textContent = c ? '»' : '«';
   fitActiveTerm();
