@@ -373,6 +373,7 @@ function show(view) {
     applySide();
   }
   $$('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  $('#pageTitle').textContent = $(`#nav [data-view="${view}"] .nl`)?.textContent || '';
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   history.replaceState(null, '', '#' + view);
   if (view === 'terminal') fitActiveTerm();
@@ -405,8 +406,7 @@ $('#navSearch').onclick = () => { show('dashboard'); $('#search').focus(); $('#s
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
-    show('dashboard');
-    $('#search').select();
+    $('#search').focus(); $('#search').select(); // the search at the top right, from any page
   }
 });
 
@@ -1137,7 +1137,10 @@ $('#detailDlg').addEventListener('click', ev => {
 $('#detailCopyAll').onclick = () => copyText(showDetails.text);
 $('#detailClose').onclick = () => $('#detailDlg').close();
 
-['#search', '#fProject', '#fEnv'].forEach(s => $(s).addEventListener('input', () => { S.kbSel = 0; renderBoard(); }));
+['#search', '#fProject', '#fEnv'].forEach(s => $(s).addEventListener('input', () => {
+  if (s === '#search' && !$('#view-dashboard').classList.contains('active')) show('dashboard'); // results are on the dashboard
+  S.kbSel = 0; renderBoard();
+}));
 $('#stats').addEventListener('click', ev => { const b = ev.target.closest('[data-find]'); if (b) { $('#search').value = b.dataset.find; S.kbSel = 0; renderBoard(); } });
 // Keyboard: ↑/↓ choose a result, Enter connects or opens it, Shift+Enter shows
 // its details, Alt+P / U / H / J copy password, user, host, JDBC or URL.
@@ -3441,6 +3444,22 @@ for (const [sel, k] of [['#termWrap', 'term'], ['.editor', 'editor'], ['.sql-lef
 const setSide = w => root.style.setProperty('--side-w', clamp(w, 170, 420) + 'px');
 setSide(store.get('sideW', 236));
 Fonts.apply();
+// The menu can sit on the left (default) or across the top (remembered).
+function applySideTop(top) {
+  document.body.classList.toggle('side-top', top);
+  (top ? $('.side') : $('.appbar')).append($('#gsearch')); // search stays at the top right
+  const b = $('#sideFlip');
+  b.title = top ? 'Move this menu back to the left' : 'Move this menu to the top of the window';
+  b.innerHTML = top ? '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>' : '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>';
+  setTimeout(() => { fitActiveTerm(); window.dispatchEvent(new Event('resize')); }, 50);
+}
+applySideTop((() => { try { return localStorage.getItem('sideTop') === '1'; } catch { return false; } })());
+$('#sideFlip').onclick = () => {
+  const top = !document.body.classList.contains('side-top');
+  try { localStorage.setItem('sideTop', top ? '1' : '0'); } catch { /* ignore */ }
+  applySideTop(top);
+};
+
 // Narrow windows (under 1000px) show the sidebar as icons only.
 const narrowWin = matchMedia('(max-width: 1000px)');
 const applySide = () => {

@@ -827,3 +827,59 @@ body.side-collapsed .brand-tools { flex-direction: column; align-items: center; 
 .tasks-side .row { gap: 6px; } .tasks-side .row button { flex: 1; }
 .tjira { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 .tjira .linklike { color: #2684ff; }
+/* Menu across the top (☰ → Menu at the top, or the ▭ button) */
+body.side-top { flex-direction: column; }
+body.side-top .side { width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 6px 12px; gap: 6px 10px; border-right: 0; border-bottom: 1px solid var(--border); overflow: visible; }
+body.side-top #sideSplit, body.side-top #sideToggle, body.side-top #appVersion { display: none; }
+body.side-top .brand, body.side-top.side-collapsed .brand { flex-direction: row; padding: 0; }
+body.side-top .brand-text { flex: none; }
+body.side-top .brand-tools, body.side-top.side-collapsed .brand-tools { flex-direction: row; padding: 0; }
+body.side-top .upd-pill { margin: 0; }
+body.side-top .ws { margin: 0; max-width: 140px; white-space: nowrap; }
+body.side-top #nav { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 2px; }
+body.side-top #nav button { padding: 5px 7px; gap: 5px; font-size: 13px; }
+body.side-top .ni { width: 18px; height: 18px; }
+body.side-top .brand { font-size: 15px; }
+body.side-top .brand .logo { transform: scale(.85); }
+body.side-top .capture-box { background: none; padding: 0; }
+body.side-top .capture-opts:not([open]) summary { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.side-top .capture-opts[open] { position: absolute; top: 100%; z-index: 30; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+body.side-top .capture-box { position: relative; }
+body.side-top .brand-tools > button.icon { width: 28px; height: 28px; }
+body.side-top .navrow { align-items: center; }
+body.side-top .navhead, body.side-top.side-collapsed .navhead { font-size: 0; padding: 0; width: 1px; height: 22px; background: var(--border); margin: 0 4px; border: 0; }
+body.side-top .saved-list { flex-direction: row; flex-wrap: wrap; align-items: center; margin: 0; }
+body.side-top .saved-head { display: none; }
+body.side-top .saved-list button { padding: 4px 8px; font-size: 13px; }
+body.side-top .capture-box { flex-direction: row; align-items: center; padding: 4px 10px; gap: 8px; }
+body.side-top .side-foot { margin: 0 0 0 auto; flex-direction: row; align-items: center; word-break: normal; }
+body.side-top .foot-row #profileBtn { max-width: 160px; }
+body.side-top main { min-height: 0; }
+/* The search: always at the top right */
+.appbar { display: flex; align-items: center; gap: 10px; padding: 8px 18px 0; flex: none; }
+.apptitle { font-size: 13px; font-weight: 600; color: var(--muted); }
+.gsearch { position: relative; display: flex; gap: 4px; align-items: center; width: min(460px, 45vw); }
+#view-dashboard .toolbar #search, .gsearch #search { flex: 1; min-width: 0; }
+.gsearch #search { padding: 7px 10px; }
+.gsearch .search-hint { position: absolute; top: calc(100% + 6px); right: 0; width: min(620px, 90vw); z-index: 40; margin: 0; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+body.side-top .appbar { display: none; }
+body.side-top .gsearch { margin-left: auto; order: 49; width: min(340px, 24vw); }
+body.side-top #nav { order: 50; flex-basis: 100%; } /* row 2: the pages; row 1: everything else */
+body.side-top .side-foot { margin-left: 8px; }
+body.side-top .capture-box { flex: none; width: auto; max-width: 270px; overflow: hidden; }
+body.side-top .capture-opts:not([open]) > :not(summary) { display: none; }
+body.side-top .capture-box .switch { white-space: nowrap; }
+body.side-top #captureThread { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; flex: none; }
+#view-dashboard .toolbar { justify-content: flex-end; }
+/* Collapsed sidebar (on the left): a little wider, and every icon stays exactly
+   where it is when open — only the words go. */
+body.side-collapsed:not(.side-top) .side { width: 76px; padding: 14px 10px; }
+body.side-collapsed:not(.side-top) .brand { flex-direction: row; padding: 0 6px; gap: 4px; }
+body.side-collapsed:not(.side-top) #sideToggle { width: 24px; height: 32px; padding: 0; }
+body.side-collapsed:not(.side-top) .brand-tools { flex-direction: row; align-items: center; padding: 2px 4px 0; }
+body.side-collapsed:not(.side-top) .brand-tools > button:not(#mainMenuBtn) { display: none; }
+body.side-collapsed:not(.side-top) .ws { display: block; visibility: hidden; }
+body.side-collapsed:not(.side-top) .navhead { font-size: 12px; color: transparent; padding: 10px 12px 2px; border-top: 0; margin: 0; }
+body.side-collapsed:not(.side-top) .navhead:first-child { padding-top: 2px; }
+body.side-collapsed:not(.side-top) #nav button { justify-content: flex-start; padding: 8px 10px; }
+body.side-collapsed:not(.side-top) .saved-list button { padding: 6px 12px; }

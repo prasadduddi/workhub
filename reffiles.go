@@ -544,6 +544,29 @@ func (a *App) handleRefReveal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"path": target})
 }
 
+// handleRefOpen opens a file (or folder) in its default program, like
+// double-clicking it in Explorer — linked files open where they are.
+func (a *App) handleRefOpen(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Path string `json:"path"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	loc, err := a.refLoc(in.Path)
+	if err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	if _, err := os.Stat(loc.abs); err != nil {
+		writeErr(w, 404, errors.New("can't find it on this PC (moved, or the drive isn't connected?)"))
+		return
+	}
+	openPath(loc.abs)
+	writeJSON(w, map[string]string{"path": loc.abs})
+}
+
 // handleRefSearch: files whose name or text content contains q (linked
 // folders included).
 func (a *App) handleRefSearch(w http.ResponseWriter, r *http.Request) {

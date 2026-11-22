@@ -74,7 +74,7 @@ const Ref = {
     const json = /\.(json|jsonc|avsc)$/i.test(p);
     el.innerHTML = `<div class="ghead"><h3>${this.icon(it)} ${esc(this.base(p))}</h3><span class="muted tiny">${esc(p)} · ${fmtSize(it.size)} · ${esc(fmtDateTime(it.mod))}</span><span class="spacer"></span>
         ${this.isText(p) ? '<button class="primary" data-ra="save" title="Ctrl+S">Save</button>' : ''}
-        <a class="btnlike" href="${this.url(p, 1)}">Download</a><button data-ra="history">Older copies</button>
+        <button data-ra="openfile" title="Open it in its default program (Word, Excel, Notepad…)">↗ Open</button><a class="btnlike" href="${this.url(p, 1)}">Download</a><button data-ra="history">Older copies</button>
         <button data-ra="reveal">Open in Explorer</button>${it.linked ? '' : it.link ? '<button data-ra="rename">Rename link</button><button data-ra="delete" class="danger" title="Removes only the link — the file stays where it is">Remove link</button>' : '<button data-ra="rename">Rename</button><button data-ra="delete" class="danger">Delete</button>'}</div>
       ${this.linkNote(it)}
       ${json ? `<div class="row" style="margin-bottom:6px"><button data-rjson="format">Format</button><button data-rjson="check">Check JSON</button>
@@ -308,8 +308,9 @@ $('#refTree').addEventListener('contextmenu', e => {
   const n = e.target.closest('[data-rp]'); e.preventDefault();
   if (n) Ref.select(n.dataset.rp);
   const it = n && Ref.item(n.dataset.rp);
-  const items = it?.linked ? [['Open in Explorer', () => api('POST', '/api/ref/reveal', { path: Ref.sel })]]
-    : [['+ New folder here', () => Ref.newFolder()], ['+ New file here', () => Ref.newFile()], ['🔗 Link to a path here…', () => Ref.linkPath()], ['Open in Explorer', () => api('POST', '/api/ref/reveal', { path: Ref.sel })]];
+  const openIt = it && !it.dir && !it.missing ? [['↗ Open (in its default program)', () => api('POST', '/api/ref/open', { path: it.path }).then(r => toast('Opening ' + r.path.split(/[\\/]/).pop())).catch(err => toast(err.message, true))], '-'] : [];
+  const items = it?.linked ? [...openIt, ['Open in Explorer', () => api('POST', '/api/ref/reveal', { path: Ref.sel })]]
+    : [...openIt, ['+ New folder here', () => Ref.newFolder()], ['+ New file here', () => Ref.newFile()], ['🔗 Link to a path here…', () => Ref.linkPath()], ['Open in Explorer', () => api('POST', '/api/ref/reveal', { path: Ref.sel })]];
   if (it?.link) items.push('-', ['Rename link', () => Ref.rename()], ['Remove link (files stay)', () => Ref.remove()]);
   else if (n && !it?.linked) items.push('-', ['Rename', () => Ref.rename()], ['Delete', () => Ref.remove()]);
   Tree.showMenu(e, items);
@@ -319,7 +320,7 @@ $('#refDetail').addEventListener('click', e => {
   const j = e.target.closest('[data-rjson]'); if (j) return Ref.jsonTool(j.dataset.rjson);
   const rs = e.target.closest('[data-rrestore]'); if (rs) return Ref.restore(rs.dataset.rrestore);
   const a = e.target.closest('[data-ra]')?.dataset.ra; if (!a) return;
-  ({ link: () => Ref.linkPath(), folder: () => Ref.newFolder(), newfile: () => Ref.newFile(), save: () => Ref.save(), rename: () => Ref.rename(), delete: () => Ref.remove(),
+  ({ openfile: () => api('POST', '/api/ref/open', { path: Ref.sel }).then(r => toast('Opening ' + r.path.split(/[\\/]/).pop())).catch(err => toast(err.message, true)), link: () => Ref.linkPath(), folder: () => Ref.newFolder(), newfile: () => Ref.newFile(), save: () => Ref.save(), rename: () => Ref.rename(), delete: () => Ref.remove(),
     history: () => Ref.history(), reveal: () => api('POST', '/api/ref/reveal', { path: Ref.sel }) })[a]?.();
 });
 $('#refDetail').addEventListener('change', e => {

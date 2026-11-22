@@ -573,6 +573,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/ref/move", a.handleRefMove)
 	mux.HandleFunc("DELETE /api/ref/file", a.handleRefDelete)
 	mux.HandleFunc("POST /api/ref/reveal", a.handleRefReveal)
+	mux.HandleFunc("POST /api/ref/open", a.handleRefOpen)
 	mux.HandleFunc("GET /api/ref/search", a.handleRefSearch)
 	mux.HandleFunc("GET /api/ref/history", a.handleRefHistory)
 	mux.HandleFunc("GET /api/props", a.handlePropsList)

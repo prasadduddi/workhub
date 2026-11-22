@@ -12,7 +12,7 @@
 <body>
 <aside class="side">
   <div class="brand"><span class="logo">W</span><span class="brand-text">WorkHub</span><button id="sideToggle" class="ghost icon" title="Hide/show sidebar (Ctrl+B)">«</button></div>
-  <div class="brand-tools"><button id="chatFab" class="ghost icon" title="Ask the assistant (Ctrl+J)"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></button><button id="whatsNewTop" class="ghost icon" title="What's new &amp; tips"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg></button><button id="mainMenuBtn" class="ghost icon" title="Menu: updates, theme, profile, lock, programs, backups…"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
+  <div class="brand-tools"><button id="sideFlip" class="ghost icon" title="Move this menu to the top of the window (or back to the left)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg></button><button id="chatFab" class="ghost icon" title="Ask the assistant (Ctrl+J)"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></button><button id="whatsNewTop" class="ghost icon" title="What's new &amp; tips"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg></button><button id="mainMenuBtn" class="ghost icon" title="Menu: updates, theme, profile, lock, programs, backups…"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
   <button id="updPill" class="upd-pill" hidden title="Click to see what's new and install it">⬆ <span id="updPillText">A new version is available</span></button>
   <button id="wsName" class="ws" title="Workspace — click to rename"></button>
   <nav id="nav">
@@ -53,10 +53,13 @@
 
 <div id="sideSplit" class="vsplit" title="Drag to resize"></div>
 <main>
+  <header class="appbar"><span id="pageTitle" class="apptitle"></span><span class="spacer"></span>
+    <div id="gsearch" class="gsearch"><input id="search" type="search" placeholder="Search everything…  (Ctrl+K)"><button id="saveSearchBtn" hidden title="Keep this search in the sidebar, with a live count">☆</button>
+      <div id="searchHint" class="muted tiny search-hint" hidden><div id="recentSearches" hidden></div><b>↵</b> connect / open the highlighted one · <b>Shift+↵</b> details · <b>↑↓</b> choose · <b>Alt+P</b> password · <b>Alt+U</b> user · <b>Alt+H</b> host · <b>Alt+J</b> JDBC/URL &nbsp;|&nbsp; Filters: <code>env:prod</code> <code>type:db</code> <code>user:ops</code> <code>app:batch</code> <code>port:1521</code> <code>has:password</code> <code>no:env</code> <code>is:fail</code> <code>needs:attention</code> <code>is:stale</code> <code>is:unsorted</code> <code>-word</code> &nbsp;|&nbsp; Desktop: <b>Ctrl+Alt+W</b> anywhere opens this search</div></div>
+  </header>
   <!-- DASHBOARD -->
   <section id="view-dashboard" class="view active">
     <header class="toolbar">
-      <input id="search" type="search" placeholder="Search hosts, IPs, URLs, users, notes…  (Ctrl+K)"><button id="saveSearchBtn" hidden title="Keep this search in the sidebar, with a live count">☆ Save search</button>
       <div class="viewwrap"><button id="viewBtn" title="Filter, group, layout, card size and passwords"><span id="viewSummary">View</span> ▾</button>
       <div id="viewPanel" class="viewpanel" hidden>
         <div class="vp-row"><span class="vp-k">Show only</span><select id="fProject"><option value="">All projects</option></select><select id="fEnv"><option value="">All envs</option></select></div>
@@ -71,7 +74,6 @@
       </div></div>
       <button id="newEntry" class="primary">+ New</button>
     </header>
-    <div id="searchHint" class="muted tiny search-hint" hidden><div id="recentSearches" hidden></div><b>↵</b> connect / open the highlighted one · <b>Shift+↵</b> details · <b>↑↓</b> choose · <b>Alt+P</b> password · <b>Alt+U</b> user · <b>Alt+H</b> host · <b>Alt+J</b> JDBC/URL &nbsp;|&nbsp; Filters: <code>env:prod</code> <code>type:db</code> <code>user:ops</code> <code>app:batch</code> <code>port:1521</code> <code>has:password</code> <code>no:env</code> <code>is:fail</code> <code>needs:attention</code> <code>is:stale</code> <code>is:unsorted</code> <code>-word</code> &nbsp;|&nbsp; Desktop: <b>Ctrl+Alt+W</b> anywhere opens this search</div>
     <div id="bulkBar" class="bulkbar" hidden><b id="bulkCount"></b>
       <select id="bulkEnv" title="Set the environment of the selected entries"><option value="">Set environment…</option><option>PROD</option><option>UAT</option><option>TEST</option><option>STAGE</option><option>DEV</option><option>DR</option><option value="-">(none)</option></select>
       <button data-bulk="move">Move to folder…</button><button data-bulk="tag">Add tag…</button><button data-bulk="test">↻ Re-test</button><button data-bulk="key" title="These log in with an SSH key or SSO: stop flagging them for a missing password">🔑 Key login</button><button data-bulk="delete" class="danger">Delete</button><span class="spacer"></span><button data-bulk="clear">✕ Clear selection</button></div>
