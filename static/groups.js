@@ -41,8 +41,8 @@ const Groups = {
   // Everything in the app that belongs to group g.
   collect(g) {
     const entries = S.entries.filter(e => this.matches(g, this.entryText(e)));
-    const servers = entries.filter(e => !/^https?:/i.test(e.url || '') || canSSH(e) || canDB(e) || canFiles(e));
-    const links = entries.filter(e => /^https?:/i.test(e.url || '') && !servers.includes(e));
+    const servers = entries.filter(e => !/^https?:/i.test(e.url || '') || canSSH(e) || canDB(e) || canFiles(e)).sort(byUsage);
+    const links = entries.filter(e => /^https?:/i.test(e.url || '') && !servers.includes(e)).sort(byUsage);
     const windows = [
       ...Term.tabs.map(t => ({ kind: 'PuTTY', label: t.local ? t.local.label : `${t.creds.username || t.entry.username || ''}@${t.entry.host}`, text: t.local ? t.local.label + ' ' + t.local.dir : this.entryText(t.entry), go: () => { show('terminal'); Term.activate(t); } })),
       ...SQL.tabs.map(t => ({ kind: 'SQL', label: t.entry.name, text: this.entryText(t.entry), go: () => { show('sql'); SQL.activate(t); } })),

@@ -143,6 +143,11 @@ func (a *App) handleSyncBookmarks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleOpened(w http.ResponseWriter, r *http.Request) {
-	a.store.Opened(r.PathValue("id"))
+	if r.URL.Query().Get("only") != "searched" {
+		a.store.Opened(r.PathValue("id"))
+	}
+	if r.URL.Query().Get("searched") == "1" || r.URL.Query().Get("only") == "searched" {
+		a.store.Searched(r.PathValue("id"))
+	}
 	writeJSON(w, map[string]bool{"ok": true})
 }

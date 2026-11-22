@@ -38,12 +38,13 @@ type Entry struct {
 	Created       time.Time         `json:"created"`
 	Updated       time.Time         `json:"updated"`
 	LastUsed      time.Time         `json:"last_used,omitzero"`
-	LastDir       string            `json:"last_dir,omitempty"` // last remote folder (terminal or Files)
-	OpenCount     int               `json:"open_count,omitempty"`
-	Folder        string            `json:"folder,omitempty"` // browser bookmark folder, e.g. "Edge › Favorites bar › Infra"
-	Source        string            `json:"source,omitempty"` // "edge"/"chrome" when it came from browser bookmarks
-	Hidden        bool              `json:"hidden,omitempty"` // removed by the user but kept so it isn't imported again
-	Status        string            `json:"status,omitempty"` // last connection/link check: "ok" or "fail"
+	LastDir       string            `json:"last_dir,omitempty"`     // last remote folder (terminal or Files)
+	OpenCount     int               `json:"open_count,omitempty"`   // opened / connected
+	SearchCount   int               `json:"search_count,omitempty"` // used after searching for it
+	Folder        string            `json:"folder,omitempty"`       // browser bookmark folder, e.g. "Edge › Favorites bar › Infra"
+	Source        string            `json:"source,omitempty"`       // "edge"/"chrome" when it came from browser bookmarks
+	Hidden        bool              `json:"hidden,omitempty"`       // removed by the user but kept so it isn't imported again
+	Status        string            `json:"status,omitempty"`       // last connection/link check: "ok" or "fail"
 	StatusAt      time.Time         `json:"status_at,omitzero"`
 	StatusMsg     string            `json:"status_msg,omitempty"`
 }
@@ -459,7 +460,20 @@ func (s *Store) Touch(id string) {
 	defer s.mu.Unlock()
 	for _, e := range s.st.Entries {
 		if e.ID == id {
+			e.OpenCount++ // every connection counts as a use
 			e.LastUsed = time.Now()
+			s.changed()
+		}
+	}
+}
+
+// Searched records that the entry was used from search results.
+func (s *Store) Searched(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.st.Entries {
+		if e.ID == id {
+			e.SearchCount++
 			s.changed()
 		}
 	}
@@ -527,6 +541,7 @@ func (s *Store) SyncBookmarks(list []Bookmark) (added, removed int) {
 			k := norm(e.URL)
 			if prev := byURL[k]; prev != nil && e.Source != "" && e.Password == "" && e.Username == "" && e.Notes == "" {
 				prev.OpenCount += e.OpenCount
+				prev.SearchCount += e.SearchCount
 				continue
 			}
 			if byURL[k] == nil {

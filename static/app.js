@@ -453,9 +453,25 @@ const SORT_KEY = {
   updated: e => -(new Date(e.updated || 0).getTime() || 0), status: e => ({ fail: 0, ok: 1 }[e.status] ?? 2), opens: e => -(e.open_count || 0),
 };
 const ENV_RANK = { PROD: 0, DR: 1, UAT: 2, STAGE: 3, TEST: 4, DEV: 5 };
+// Usage score: how often (opens, connections; uses after a search count
+// double) and how recently. Recent use matters most and fades over weeks.
+function usageScore(e) {
+  const uses = (e.open_count || 0) + 2 * (e.search_count || 0), last = Date.parse(e.last_used) || 0;
+  if (!uses && !last) return 0;
+  const days = (Date.now() - last) / 864e5;
+  const recent = !last ? 0 : days < 1 ? 100 : days < 3 ? 70 : days < 7 ? 50 : days < 30 ? 30 : days < 90 ? 15 : 5;
+  return Math.log2(1 + uses) * 20 + recent;
+}
+const byUsage = (a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || usageScore(b) - usageScore(a) || (a.name || '').localeCompare(b.name || '');
+// A use right after searching counts as "searched for".
+let lastSearchAt = 0;
+document.addEventListener('input', ev => { if (ev.target.matches?.('input[type=search], #search') && ev.target.value.trim()) lastSearchAt = Date.now(); }, true);
+function fromSearch() { return Date.now() - lastSearchAt < 120000 && $$('input[type=search], #search').some(i => i.value.trim()); }
+function markSearched(e) { if (e?.id && fromSearch()) api('POST', `/api/entries/${e.id}/opened?only=searched`).catch(() => {}); }
+SORT_KEY.usage = e => -usageScore(e);
 function sortEntries(list) {
   const f = SORT_KEY[S.view.sort];
-  if (!f) return list;
+  if (!f) return [...list].sort(byUsage); // default: most used and most recent first
   const d = S.view.sortDir || 1;
   return [...list].sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * d; });
 }
@@ -498,6 +514,11 @@ const canFiles = e => canSSH(e) || (!!e.host && isFTP(e));
 const dbKindOf = e => ['oracle'].includes(e.protocol) || (!e.protocol && [1521, 1522].includes(e.port)) ? 'oracle'
   : ['postgres', 'postgresql'].includes(e.protocol) || (!e.protocol && e.port === 5432) ? 'postgres' : '';
 const canDB = e => !!e.host && !!dbKindOf(e);
+// Service name / SID / database of a DB connection: { name, sid }.
+function dbService(e) {
+  const x = e.extra || {}, svc = x.service || x.service_name || x.database || x.db_name || x.dbname;
+  return svc ? { name: svc, sid: false } : x.sid ? { name: x.sid, sid: true } : null;
+}
 // Status dot: green = last connection/link check worked, red = failed, grey = not tried.
 function dot(e) {
   const when = e.status_at ? new Date(e.status_at).toLocaleString() : '';
@@ -550,8 +571,9 @@ function cardsHTML(items) {
     const k = (e.host || e.url || e.name).toLowerCase();
     (hosts[k] ||= []).push(e);
   });
+  const best = es => Math.max(...es.map(usageScore));
   const cards = S.view.sort ? Object.values(hosts) // already in the chosen order
-    : Object.values(hosts).sort((a, b) => (b.some(e => e.favorite) - a.some(e => e.favorite)) || (a[0].host || a[0].name).localeCompare(b[0].host || b[0].name));
+    : Object.values(hosts).sort((a, b) => (b.some(e => e.favorite) - a.some(e => e.favorite)) || best(b) - best(a) || (a[0].host || a[0].name).localeCompare(b[0].host || b[0].name));
   return '<div class="cards">' + cards.map(es => {
     const h = es[0], env = es.find(e => e.env)?.env || '', fav = es.some(e => e.favorite);
     const title = h.host || h.name;
@@ -1129,6 +1151,8 @@ const Tree = {
     const root = { kids: {}, items: [] };
     const want = { ssh: canSSH, sftp: canFiles, db: canDB }[mode];
     const g = this.groupMode(mode);
+    root.mode = mode;
+    if (!q) root.top = S.entries.filter(want).filter(e => usageScore(e) > 0).sort(byUsage).slice(0, 6);
     if (g !== 'folder') {
       for (const e of S.entries.filter(want).filter(e => matches(e, q)))
         for (const k of this.keysOf(e, g))
@@ -1152,6 +1176,11 @@ const Tree = {
 
   html(node, depth, q) {
     let out = '';
+    if (depth === 0 && node.top?.length) {
+      const key = 'top:' + node.mode, open = !this.collapsed.has(key);
+      out += `<div class="tnode folder topused" style="padding-left:8px" data-key="${esc(key)}" data-gmode="top"><span class="tw">${open ? '▾' : '▸'}</span>★ <span class="nm">Most used</span><span class="n">${node.top.length}</span></div>`;
+      if (open) out += this.html({ kids: {}, items: node.top, flat: true }, 1, q);
+    }
     const kids = Object.entries(node.kids).sort(([a, x], [b, y]) => (a[0] === '#') - (b[0] === '#') || LAST_GROUPS.has(a) - LAST_GROUPS.has(b)
       || (x.gmode === 'env' ? (ENV_ORDER[a] ?? 9) - (ENV_ORDER[b] ?? 9) : 0) || a.localeCompare(b));
     const icon = { app: '▦', domain: '🌐', type: '⚙', group: '◆', user: '👤' };
@@ -1163,15 +1192,16 @@ const Tree = {
         <span class="tw">${open ? '▾' : '▸'}</span>${k.env ? `<span class="badge ${esc(k.env)}">${esc(k.env)}</span>` : (gc ? `<span class="gdot" style="background:${Groups.color(gc)}"></span>` : (icon[k.gmode] || '📁')) + ' <span class="nm">' + esc(k.name) + '</span>'}<span class="n">${this.count(k)}</span></div>`;
       if (open) out += this.html(k, depth + 1, q);
     }
-    for (const e of node.items.sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const e of node.items.sort(byUsage)) {
       const live = Term.tabs.some(t => t.entry.id === e.id && !t.closed) || Remote.entry?.id === e.id && Remote.sid || SQL.tabs.some(t => t.entry.id === e.id);
       const port = isFTP(e) ? (e.port || 21) : sshPort(e), def = isFTP(e) ? 21 : 22;
-      const target = `${isFTP(e) ? e.protocol || 'ftp' : ''}${isFTP(e) ? '://' : ''}${e.username ? e.username + '@' : ''}${e.host}${port !== def ? ':' + port : ''}`;
+      let target = `${isFTP(e) ? e.protocol || 'ftp' : ''}${isFTP(e) ? '://' : ''}${e.username ? e.username + '@' : ''}${e.host}${port !== def ? ':' + port : ''}`;
+      if (canDB(e)) target = `${e.username ? e.username + '@' : ''}${e.host}:${e.port || (dbKindOf(e) === 'oracle' ? 1521 : 5432)}${dbService(e) ? (dbService(e).sid ? ':' : '/') + dbService(e).name : ''}`;
       // Database connections expand like SQL Developer: ▸ connects, ▾ shows the objects.
-      const isDb = canDB(e), dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
+      const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
       const dbOpen = isDb && SQL.expanded.has(e.id);
       out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc(target)}">
-        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel">${esc(rl)}</span>` : '')(ruleLabel(e.host))}${e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel">${esc(rl)}</span>` : '')(ruleLabel(e.host))}${canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
       if (dbOpen) {
         const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
         if (dbt) out += SQL.treeHTML(dbt, depth + 1);
@@ -1566,11 +1596,11 @@ document.addEventListener('click', ev => {
 }, true);
 function openURL(e) {
   openExternal(e.url);
-  api('POST', `/api/entries/${e.id}/opened`).then(poll).catch(() => {});
+  api('POST', `/api/entries/${e.id}/opened${fromSearch() ? '?searched=1' : ''}`).then(poll).catch(() => {});
 }
 document.addEventListener('click', ev => {
   const a = ev.target.closest('a[data-open]');
-  if (a) api('POST', `/api/entries/${a.dataset.open}/opened`).then(poll).catch(() => {});
+  if (a) api('POST', `/api/entries/${a.dataset.open}/opened${fromSearch() ? '?searched=1' : ''}`).then(poll).catch(() => {});
 });
 
 function siteOf(host) {
@@ -1649,7 +1679,7 @@ const Bookmarks = {
   },
 
   sortItems(a, b) {
-    return (isInternal(b) - isInternal(a)) || (b.open_count || 0) - (a.open_count || 0) || (ENV_ORDER[a.env] ?? 9) - (ENV_ORDER[b.env] ?? 9) || a.name.localeCompare(b.name);
+    return (isInternal(b) - isInternal(a)) || usageScore(b) - usageScore(a) || (ENV_ORDER[a.env] ?? 9) - (ENV_ORDER[b.env] ?? 9) || a.name.localeCompare(b.name);
   },
 
   tile(e) {
@@ -1901,7 +1931,7 @@ const SQL = {
 
   renderTabs() {
     $('#sqlTabs').innerHTML = this.tabs.map(t => `<div class="tab ${t === this.active ? 'active' : ''}" data-st="${t.sid}">
-      ${t.inTx ? '<span style="color:#e0a800" title="Uncommitted changes">●</span>' : dot(byId(t.entry.id) || t.entry)} ${typeof Groups !== 'undefined' ? Groups.chip(Groups.entryText(t.entry)) : ''}🛢 ${esc(t.entry.name)}${t.entry.env ? ` <span class="badge ${esc(t.entry.env)}">${esc(t.entry.env)}</span>` : ''}
+      ${t.inTx ? '<span style="color:#e0a800" title="Uncommitted changes">●</span>' : dot(byId(t.entry.id) || t.entry)} ${typeof Groups !== 'undefined' ? Groups.chip(Groups.entryText(t.entry)) : ''}🛢 ${esc(t.entry.name)}${(s => s && !t.entry.name.includes(s.name) ? ` <small class="muted">${s.sid ? 'SID' : 'service'} ${esc(s.name)}</small>` : '')(dbService(t.entry))}${t.entry.env ? ` <span class="badge ${esc(t.entry.env)}">${esc(t.entry.env)}</span>` : ''}
       <span class="x" data-sx="${t.sid}">✕</span></div>`).join('');
     $('#sqlCount').textContent = this.tabs.length || '';
   },
@@ -2831,3 +2861,10 @@ $$('.with-tree').forEach(wt => {
   if (document.getElementById('view-' + v)) show(v);
   if (v.startsWith('ask=')) { Chat.toggle(true); Chat.send(decodeURIComponent(v.slice(4))); }
 })();
+
+// Connecting from PuTTY/FileZilla/SQL right after a search counts as "searched for"
+// (the connection itself is counted by the server).
+for (const [obj, fn] of [[Term, 'open'], [Remote, 'connect'], [SQL, 'open']]) {
+  const orig = obj[fn].bind(obj);
+  obj[fn] = (e, ...rest) => { markSearched(e); return orig(e, ...rest); };
+}
