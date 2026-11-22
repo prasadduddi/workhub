@@ -5,6 +5,12 @@
 
 const RELEASES = [
   { v: '1.8', title: 'Smarter search, Jira browser sign-in, macros', items: [
+    ['⌨', 'Ctrl+Alt+W from anywhere (Desktop version)', 'Press Ctrl+Alt+W in any program: WorkHub comes to the front with the search box ready — type, Enter, connected.', 'dashboard'],
+    ['✍', 'Forgiving search and recent searches', 'Small typos still find things (“uta” → UAT, “jenkns” → Jenkins). Your last searches appear under the search box, one click to run again.', 'dashboard'],
+    ['☑', 'Change many at once', 'Table view: tick rows (or a whole group), then set the environment, move to a folder, add a tag, re-test or delete them together.', 'dashboard'],
+    ['↻', 'Re-test connections, spot old ones', 'The ↻ tile re-tests every connection shown and updates ✓/✗. Entries untouched for 90 days show 💤 (search is:stale).', 'dashboard'],
+    ['📋', 'See what a capture came from', 'Details now shows the text each entry was read from, so you can check it.', 'dashboard'],
+    ['🌲', 'Roomier server trees', 'The SSH, FTP and SQL trees start wider, the filter box has its own row, and hovering a server shows its full name.', 'terminal'],
     ['🔎', 'Smarter search', 'Best match first (exact host or IP on top). Naming-rule labels are searched too (“batch uat”), and acmebat01 finds acme-bat-01. Filters: env:prod type:db user:ops app:batch port:1521 has:password no:env is:fail -word.', 'dashboard'],
     ['⌨', 'Search from the keyboard', 'In the search box: ↑/↓ choose a result, Enter connects or opens it, Shift+Enter shows details, Alt+P / Alt+U / Alt+H / Alt+J copy password, user, host, JDBC or URL.', 'dashboard'],
     ['⚠', 'Needs attention', 'Connections missing a user, password, environment or service name, or whose last login failed, show a ⚠ — click it to fill in. The ⚠ tile on the dashboard lists them all (needs:attention).', 'dashboard'],

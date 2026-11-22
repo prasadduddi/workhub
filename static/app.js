@@ -504,11 +504,44 @@ function filterOK(e, { k, v }) {
     case 'has': return HAS[v] ? HAS[v](e) : has(searchText(e));
     case 'no': return HAS[v] ? !HAS[v](e) : !has(searchText(e));
     case 'is': return { ok: e.status === 'ok', working: e.status === 'ok', fail: e.status === 'fail', failed: e.status === 'fail', untested: !e.status,
-      pinned: !!e.favorite, fav: !!e.favorite, used: !!e.last_used }[v] ?? (e.env || '').toLowerCase() === v;
+      pinned: !!e.favorite, fav: !!e.favorite, used: !!e.last_used, stale: !!staleDays(e), old: !!staleDays(e) }[v] ?? (e.env || '').toLowerCase() === v;
     case 'needs': return v === 'attention' || v === 'fix' ? problems(e).length > 0 : problems(e).some(([p]) => p.startsWith(v));
   }
   return true;
 }
+// Close spellings: "uta" → uat, "pasword" → password (used when nothing matches exactly).
+// Typing mistakes between two words: a letter missing, extra, wrong or two swapped.
+function editDist(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 9;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  return d[a.length][b.length];
+}
+// The nearest word in the saved details for each word that matches nothing.
+function closeWords(entries, words) {
+  const vocab = new Set(entries.flatMap(e => searchText(e).split(/[^a-z0-9]+/).filter(t => t.length > 2)));
+  const fixes = {};
+  for (const w of words) {
+    if (w.length < 3 || [...vocab].some(t => t.includes(w))) continue;
+    let best = '', bd = (w.length > 5 ? 2 : 1) + 1; // up to 1 mistake in short words, 2 in long ones
+    for (const t of vocab) { const d = editDist(w, t); if (d < bd || (d === bd && best && t.length < best.length)) { best = t; bd = d; } }
+    if (best) fixes[w] = best;
+  }
+  return fixes;
+}
+// Not used, tested or captured for 90 days.
+const STALE_DAYS = 90;
+function staleDays(e) {
+  const t = Math.max(...[e.last_used, e.status_at, e.created, ...(e.captures || []).map(c => c.at)].filter(Boolean).map(x => +new Date(x)), 0);
+  const d = t ? Math.floor((Date.now() - t) / 864e5) : 0;
+  return d >= STALE_DAYS ? d : 0;
+}
+
 function matches(e, q) {
   if (!q) return true;
   const { words, filters } = parseQuery(q);
@@ -585,8 +618,19 @@ function sortEntries(list) {
 }
 
 function filtered() {
-  const q = $('#search').value.trim().toLowerCase(), p = $('#fProject').value, env = $('#fEnv').value;
-  const list = S.entries.filter(e => (!p || e.project === p) && (!env || e.env === env) && matches(e, q) && viewMatch(e));
+  let q = $('#search').value.trim().toLowerCase();
+  const p = $('#fProject').value, env = $('#fEnv').value;
+  const base = S.entries.filter(e => (!p || e.project === p) && (!env || e.env === env) && viewMatch(e));
+  let list = base.filter(e => matches(e, q));
+  S.fixes = null;
+  if (!list.length && q) { // nothing: try close spellings
+    const fixes = closeWords(base, parseQuery(q).words.filter(w => !w.neg).map(w => w.v));
+    if (Object.keys(fixes).length) {
+      const q2 = q.split(/\s+/).map(w => fixes[w] || w).join(' ');
+      list = base.filter(e => matches(e, q2));
+      if (list.length) { S.fixes = fixes; q = q2; }
+    }
+  }
   S.ranked = !S.view.sort && parseQuery(q).words.some(w => !w.neg); // searching: best match first
   if (!S.ranked) return sortEntries(list);
   const score = new Map(list.map(e => [e, searchScore(e, q)]));
@@ -662,6 +706,7 @@ function renderStats(list) {
   ];
   const fix = S.entries.filter(e => problems(e).length).length;
   $('#stats').innerHTML = stats.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('')
+    + `<button class="stat act" id="retestBtn" title="Try every connection shown (SSH, SFTP/FTP, databases) with its saved login and update ✓ / ✗"><b>↻</b><span>Re-test ${list.filter(isConn).length} connections</span></button>`
     + (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing (user, password, environment, service name) or a failed login — click to list them"><b>⚠ ${fix}</b><span>Need attention</span></button>` : '');
   $('#inboxCount').textContent = capturedToday || '';
 }
@@ -676,7 +721,7 @@ function renderBoard() {
     return;
   }
   const jira = jiraMatches($('#search').value);
-  if (!list.length && !jira.length) { board.innerHTML = '<div class="empty">No matches.</div>'; return; }
+  if (!list.length && !jira.length) { board.innerHTML = '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); return; }
   const keyOf = {
     env: e => e.env || 'No environment', protocol: e => e.protocol || 'other', status: e => ({ ok: 'Working', fail: 'Failed' }[e.status] || 'Not tried'),
     host: e => e.host || e.url || e.name, none: () => 'All', project: e => e.project || 'General',
@@ -684,14 +729,16 @@ function renderBoard() {
   const groups = {};
   list.forEach(e => (groups[keyOf(e)] ||= []).push(e));
   S.kbList = list; S.kbSel = Math.min(S.kbSel || 0, list.length - 1);
+  const fixNote = S.fixes ? `<div class="fuzzy-note">No exact match — showing ${Object.entries(S.fixes).map(([a, b]) => `<b>${esc(b)}</b> for “${esc(a)}”`).join(', ')}. <a href="#" data-usefix>Use this spelling</a></div>` : '';
   // Searching: the group holding the best match comes first (Object keys keep list order).
-  board.innerHTML = (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
+  board.innerHTML = fixNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
     const items = groups[g];
     const body = S.layout === 'table' ? tableHTML(items) : cardsHTML(items);
     return `<div class="group"><div class="group-head"><h3>${esc(g)}</h3><span class="n">${items.length}</span>
       ${S.groupBy === 'project' ? `<button class="icon ghost" data-act="rename-project" data-project="${esc(g)}" title="Rename project">✎</button>` : ''}</div>${body}</div>`;
   }).join('') + jiraResultsHTML(jira);
   markKbSel();
+  Bulk.bar();
 }
 // The result Enter acts on (↑/↓ in the search box move it).
 function markKbSel() {
@@ -758,7 +805,8 @@ function warnChip(e) {
 
 function svcHTML(e) {
   const rows = [];
-  const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, e.name !== e.host ? ruleName(e) : '', warnChip(e)].filter(Boolean).join(' ');
+  const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, e.name !== e.host ? ruleName(e) : '', warnChip(e),
+    staleDays(e) && `<span class="stalechip" title="Not used, tested or captured for ${staleDays(e)} days — still right? Test it or delete it">💤 ${staleDays(e)} days</span>`].filter(Boolean).join(' ');
   if (label) rows.push(['', label]);
   if (e.url) rows.push(['URL', `${linkLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span>` : ''}<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a> <button class="icon" data-copy="${esc(e.url)}">copy</button>`]);
   const jdbc = !/^jdbc:/i.test(e.url || '') && jdbcURL(e);
@@ -801,9 +849,10 @@ function tableHTML(items) {
   ];
   const hidden = S.view.hideCols.map(h => h.toLowerCase());
   const cols = TABLE_COLS.map((c, i) => i).filter(i => !hidden.includes((TABLE_COLS[i][0] || 'actions').toLowerCase()));
-  return `<div class="tblwrap"><table class="tbl"><colgroup>${cols.map(i => `<col style="width:var(--c${i}, ${TABLE_COLS[i][1]}px)">`).join('')}</colgroup>
-    <thead><tr>${cols.map(i => `<th>${TABLE_COLS[i][0]}<span class="colgrip" data-col="${i}" title="Drag to resize · double-click to reset"></span></th>`).join('')}</tr></thead><tbody>` +
-    items.map(e => `<tr data-detail="${e.id}" title="Click for full details">${cols.map(i => `<td>${cell[i](e)}</td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
+  const ids = items.map(e => e.id).join(','), all = items.every(e => Bulk.picked.has(e.id));
+  return `<div class="tblwrap"><table class="tbl"><colgroup><col style="width:34px">${cols.map(i => `<col style="width:var(--c${i}, ${TABLE_COLS[i][1]}px)">`).join('')}</colgroup>
+    <thead><tr><th><input type="checkbox" data-pickall="${ids}" ${all ? 'checked' : ''} title="Select all in this group"></th>${cols.map(i => `<th>${TABLE_COLS[i][0]}<span class="colgrip" data-col="${i}" title="Drag to resize · double-click to reset"></span></th>`).join('')}</tr></thead><tbody>` +
+    items.map(e => `<tr data-detail="${e.id}" class="${Bulk.picked.has(e.id) ? 'picked' : ''}" title="Click for full details"><td><input type="checkbox" data-pick="${e.id}" ${Bulk.picked.has(e.id) ? 'checked' : ''}></td>${cols.map(i => `<td>${cell[i](e)}</td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
 }
 
 $('#board').addEventListener('contextmenu', ev => {
@@ -927,6 +976,9 @@ function showDetails(e) {
   $('#detailTitle').innerHTML = `${ruleName(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`;
   const secret = k => /password/i.test(k);
   $('#detailBody').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span>${secret(k) ? `<span class="v pwbox"><span class="pwv" data-pw="${esc(v)}">${S.showPw ? esc(v) : PW_MASK}</span><button class="icon eye" data-eye title="Show / hide">👁</button></span>` : `<span class="v">${esc(v)}</span>`}<button class="icon copyic" data-copy="${esc(v)}" title="Copy ${esc(k)}" aria-label="Copy ${esc(k)}">${COPY_ICON}</button>`).join('');
+  const clips = S.clips.filter(c => c.entry_ids?.includes(e.id)).slice(0, 3);
+  if (clips.length) $('#detailBody').insertAdjacentHTML('beforeend', `<details class="clipsrc"><summary>Captured from — the text it was read from (${clips.length})</summary>${clips.map(c =>
+    `<div class="muted tiny">${esc(new Date(c.created).toLocaleString())} · ${esc(sourceName({ source: c.source }))}</div><pre>${esc(c.text.length > 1500 ? c.text.slice(0, 1500) + '…' : c.text)}</pre>`).join('')}</details>`);
   $('#detailActs').innerHTML = [
     canSSH(e) && ['ssh', 'SSH'], canFiles(e) && ['sftp', isFTP(e) ? 'FTP' : 'SFTP'], canDB(e) && ['sql', 'SQL'], e.url && !/^jdbc:/i.test(e.url) && ['open', 'Open'], ['edit', 'Edit'],
   ].filter(Boolean).map(([a, t]) => `<button data-dact="${a}">${t}</button>`).join('') + External.items(e).map(([t], i) => `<button data-dext="${i}">${esc(t.replace('Open in ', '').replace(' (the real one)', ''))}</button>`).join('');
@@ -974,7 +1026,93 @@ $('#search').addEventListener('keydown', ev => {
     copyText(v, `${what} copied — ${e.name || e.host}`);
   }
 });
-$('#search').addEventListener('focus', () => $('#searchHint').hidden = false);
+// Recent searches: kept when a search found something and was used (Enter)
+// or left for a couple of seconds; shown as chips when the box is empty.
+const Recent = {
+  list() { try { return JSON.parse(localStorage.getItem('recentSearches') || '[]'); } catch { return []; } },
+  add(q) {
+    q = q.trim(); if (!q || q.length < 2) return;
+    const l = [q, ...this.list().filter(x => x.toLowerCase() !== q.toLowerCase())].slice(0, 8);
+    try { localStorage.setItem('recentSearches', JSON.stringify(l)); } catch { /* ignore */ }
+  },
+  render() {
+    const l = this.list(), el = $('#recentSearches');
+    el.hidden = !l.length || !!$('#search').value.trim();
+    el.innerHTML = 'Recent: ' + l.map(q => `<button class="rchip" data-recent="${esc(q)}">${esc(q)}</button>`).join('') + ' <a href="#" data-recentclear>clear</a>';
+  },
+};
+let recentTimer;
+$('#search').addEventListener('input', () => { clearTimeout(recentTimer); Recent.render(); recentTimer = setTimeout(() => S.kbList?.length && Recent.add($('#search').value), 2500); });
+$('#search').addEventListener('keydown', ev => { if (ev.key === 'Enter' && S.kbList?.length) Recent.add($('#search').value); }, true);
+$('#searchHint').addEventListener('mousedown', ev => { // mousedown: before the box loses focus
+  const c = ev.target.closest('[data-recent]');
+  if (c) { ev.preventDefault(); $('#search').value = c.dataset.recent; S.kbSel = 0; renderBoard(); Recent.render(); return; }
+  if (ev.target.closest('[data-recentclear]')) { ev.preventDefault(); try { localStorage.removeItem('recentSearches'); } catch { /* ignore */ } Recent.render(); }
+});
+$('#board').addEventListener('click', ev => {
+  if (!ev.target.closest('[data-usefix]')) return;
+  ev.preventDefault();
+  $('#search').value = $('#search').value.split(/\s+/).map(w => S.fixes?.[w.toLowerCase()] || w).join(' ');
+  renderBoard();
+}, true);
+// Desktop version: Ctrl+Alt+W anywhere in Windows brings WorkHub up with the search box ready.
+window.whHotkey = () => { show('dashboard'); $('#search').focus(); $('#search').select(); Recent.render(); };
+
+// Table view: tick rows, then change them all at once.
+const Bulk = {
+  picked: new Set(),
+  entries() { return [...this.picked].map(byId).filter(Boolean); },
+  bar() {
+    for (const id of this.picked) if (!byId(id)) this.picked.delete(id);
+    const n = this.picked.size, el = $('#bulkBar');
+    el.hidden = !n;
+    if (n) $('#bulkCount').textContent = `${n} selected`;
+  },
+  async each(what, fn) {
+    const list = this.entries(); let ok = 0;
+    for (const e of list) { try { await fn(e); ok++; } catch (err) { toast(`${e.name}: ${err.message}`, true); } }
+    toast(`${what}: ${ok} of ${list.length}`); poll();
+  },
+  save(e, change) { return api('POST', '/api/entries', { ...entryInput(e), password: e.password, ...change }); },
+};
+$('#bulkBar').addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-bulk]'); if (!b) return;
+  switch (b.dataset.bulk) {
+    case 'move': { const p = prompt('Move to folder (use / for subfolders):', Bulk.entries()[0]?.project || ''); if (p?.trim()) await Bulk.each('Moved', e => Bulk.save(e, { project: p.trim() })); break; }
+    case 'tag': { const t = prompt('Add tag(s), comma separated:'); const add = (t || '').split(',').map(x => x.trim()).filter(Boolean); if (add.length) await Bulk.each('Tagged', e => Bulk.save(e, { tags: [...new Set([...(e.tags || []), ...add])] })); break; }
+    case 'test': return retest(Bulk.entries());
+    case 'delete': if (confirm(`Delete ${Bulk.picked.size} entries?`)) { await Bulk.each('Deleted', e => api('DELETE', `/api/entries/${e.id}`)); Bulk.picked.clear(); } break;
+    case 'clear': Bulk.picked.clear(); renderBoard(); break;
+  }
+});
+$('#bulkEnv').addEventListener('change', async ev => {
+  const v = ev.target.value; ev.target.value = '';
+  if (v) await Bulk.each('Environment set', e => Bulk.save(e, { env: v === '-' ? '' : v }));
+});
+$('#board').addEventListener('change', ev => {
+  const one = ev.target.closest('[data-pick]'), all = ev.target.closest('[data-pickall]');
+  if (one) one.checked ? Bulk.picked.add(one.dataset.pick) : Bulk.picked.delete(one.dataset.pick);
+  if (all) all.dataset.pickall.split(',').forEach(id => all.checked ? Bulk.picked.add(id) : Bulk.picked.delete(id));
+  if (one || all) renderBoard();
+});
+
+// Re-test: tries each connection with its saved login (4 at a time) and updates ✓ / ✗.
+async function retest(list) {
+  list = list.filter(isConn);
+  if (!list.length) return toast('No connections to test here', true);
+  if (list.length > 10 && !confirm(`Test ${list.length} connections now? Each one logs in once with its saved details.`)) return;
+  let done = 0, ok = 0; const queue = [...list];
+  const work = async () => { for (let e; (e = queue.shift());) {
+    try { const r = await api('POST', '/api/test', entryInput(e)); if (r.ok) ok++; } catch { /* counted as failed */ }
+    toast(`Testing… ${++done} of ${list.length}`);
+  } };
+  await Promise.all([work(), work(), work(), work()]);
+  await poll();
+  toast(`Re-tested ${list.length}: ${ok} worked, ${list.length - ok} failed${list.length - ok ? ' — search is:fail to see them' : ''}`, list.length - ok > 0);
+}
+$('#stats').addEventListener('click', ev => { if (ev.target.closest('#retestBtn')) retest(filtered()); });
+
+$('#search').addEventListener('focus', () => { $('#searchHint').hidden = false; Recent.render(); });
 $('#search').addEventListener('blur', () => setTimeout(() => ($('#searchHint').hidden = !$('#search').value.trim()), 150));
 for (const [id, key] of [['#groupBy', 'groupBy'], ['#layout', 'layout']]) {
   const seg = $(id), attr = key === 'groupBy' ? 'g' : 'l';
@@ -1558,7 +1696,7 @@ const Tree = {
       // Database connections expand like SQL Developer: ▸ connects, ▾ shows the objects.
       const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
       const dbOpen = isDb && SQL.expanded.has(e.id);
-      out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc(target)}">
+      out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
         <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${ruleName(e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
       if (dbOpen) {
         const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;

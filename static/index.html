@@ -67,7 +67,10 @@
       <label class="cardw muted tiny" title="Card width (Cards view)">▭ <input type="range" id="cardWidth" min="240" max="700" step="10"></label>
       <button id="newEntry" class="primary">+ New</button>
     </header>
-    <div id="searchHint" class="muted tiny search-hint" hidden><b>↵</b> connect / open the highlighted one · <b>Shift+↵</b> details · <b>↑↓</b> choose · <b>Alt+P</b> password · <b>Alt+U</b> user · <b>Alt+H</b> host · <b>Alt+J</b> JDBC/URL &nbsp;|&nbsp; Filters: <code>env:prod</code> <code>type:db</code> <code>user:ops</code> <code>app:batch</code> <code>port:1521</code> <code>has:password</code> <code>no:env</code> <code>is:fail</code> <code>needs:attention</code> <code>-word</code></div>
+    <div id="searchHint" class="muted tiny search-hint" hidden><div id="recentSearches" hidden></div><b>↵</b> connect / open the highlighted one · <b>Shift+↵</b> details · <b>↑↓</b> choose · <b>Alt+P</b> password · <b>Alt+U</b> user · <b>Alt+H</b> host · <b>Alt+J</b> JDBC/URL &nbsp;|&nbsp; Filters: <code>env:prod</code> <code>type:db</code> <code>user:ops</code> <code>app:batch</code> <code>port:1521</code> <code>has:password</code> <code>no:env</code> <code>is:fail</code> <code>needs:attention</code> <code>is:stale</code> <code>-word</code> &nbsp;|&nbsp; Desktop: <b>Ctrl+Alt+W</b> anywhere opens this search</div>
+    <div id="bulkBar" class="bulkbar" hidden><b id="bulkCount"></b>
+      <select id="bulkEnv" title="Set the environment of the selected entries"><option value="">Set environment…</option><option>PROD</option><option>UAT</option><option>TEST</option><option>STAGE</option><option>DEV</option><option>DR</option><option value="-">(none)</option></select>
+      <button data-bulk="move">Move to folder…</button><button data-bulk="tag">Add tag…</button><button data-bulk="test">↻ Re-test</button><button data-bulk="delete" class="danger">Delete</button><span class="spacer"></span><button data-bulk="clear">✕ Clear selection</button></div>
     <div id="viewChips" class="vchips"></div>
     <div id="stats" class="stats"></div>
     <div id="board"></div>

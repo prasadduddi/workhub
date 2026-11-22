@@ -60,7 +60,8 @@ func runDesktop(url string, openLink func(string, bool)) bool {
 	_ = w.Bind("whOpenExternal", func(u string, newWindow bool) error { openLink(u, newWindow); return nil })
 	// The page reports its title ("WorkHub — <workspace>") for the taskbar.
 	_ = w.Bind("whSetTitle", func(t string) error { w.Dispatch(func() { w.SetTitle(t) }); return nil })
-	setupJiraWindow(w) // "Sign in with browser" for Jira
+	setupJiraWindow(w)      // "Sign in with browser" for Jira
+	registerHotkey(w, hwnd) // Ctrl+Alt+W brings WorkHub up
 	w.Init(`window.WH_DESKTOP = true;` + desktopLinkScript)
 	w.Navigate(url)
 	w.Run()
