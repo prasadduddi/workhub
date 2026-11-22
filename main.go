@@ -554,6 +554,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/lock/set", a.handleLockSet)
 	mux.HandleFunc("POST /api/lock/recover", a.handleLockRecover)
 	mux.HandleFunc("POST /api/lock/email", a.handleLockEmail)
+	mux.HandleFunc("GET /api/lock/reminders", a.handleLockReminders)
 	mux.HandleFunc("GET /api/tips", a.handleTipsGet)
 	mux.HandleFunc("POST /api/tips", a.handleTipsHide)
 	mux.HandleFunc("GET /api/ref", a.handleRefTree)

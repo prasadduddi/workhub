@@ -50,7 +50,8 @@ const Cal = {
     }
     if (this.pref('cm', true) && typeof Jira !== 'undefined') {
       const seen = new Set();
-      for (const j of Jira.issues) for (const c of j.children || []) {
+      const issues = Jira.issues.length ? Jira.issues : (this.lockedCM || []).map(c => ({ key: c.Parent, children: [{ key: c.Key, summary: c.Summary, status: c.Status, start: c.Start, end: c.End, url: c.URL }] }));
+      for (const j of issues) for (const c of j.children || []) {
         if (!c.start || seen.has(c.key)) continue;
         seen.add(c.key);
         const s = new Date(c.start), en = c.end ? new Date(c.end) : null;
@@ -133,8 +134,12 @@ const Cal = {
 
   // ---- reminders ----
   notified() { try { return new Set(JSON.parse(localStorage.getItem('calNotified') || '[]')); } catch { return new Set(); } },
-  remindTick() {
-    if (typeof Lock !== 'undefined' && Lock.shown) return; // after unlocking
+  async remindTick() {
+    if (typeof Lock !== 'undefined' && Lock.shown) { // locked: just the events and CM windows, from the lock endpoint
+      const r = await fetch('/api/lock/reminders').then(x => x.json()).catch(() => null);
+      if (!r) return;
+      this.events = r.events || []; this.lockedCM = r.cm || [];
+    }
     const now = new Date(), from = new Date(now.getTime() - 12 * 3600e3), to = new Date(now.getTime() + 26 * 3600e3);
     const done = this.notified(), due = [];
     const cmBefore = +this.pref('cmRemind', 30);
@@ -155,7 +160,9 @@ const Cal = {
   popup(due) {
     $('#remBody').innerHTML = due.map(({ o, when }) => `<div class="cal-item k-${o.kind}"><div class="cal-time">${o.allDay ? 'All day' : this.hm(o.start) + (o.end ? '–' + this.hm(o.end) : '')}</div>
       <div class="cal-body"><b>${esc(o.title)}</b><div class="muted tiny">${esc(when)}${o.sub ? ' · ' + esc(o.sub) : ''}</div>${o.url ? `<button class="icon" data-remurl="${esc(o.url)}">Open ↗</button>` : ''}</div></div>`).join('');
-    if (!$('#remDlg').open) $('#remDlg').showModal();
+    $('#remCal').hidden = typeof Lock !== 'undefined' && Lock.shown;
+    if ($('#remDlg').open) $('#remDlg').close();
+    $('#remDlg').showModal(); // on top, even over the lock screen
     try {
       if (window.Notification && Notification.permission === 'granted') for (const { o, when } of due) new Notification('WorkHub · ' + (o.kind === 'cm' ? 'CM ' : '') + when, { body: o.title });
     } catch { /* desktop window may not support it */ }

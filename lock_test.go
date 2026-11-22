@@ -91,3 +91,28 @@ func TestPINEmailCode(t *testing.T) {
 		t.Fatal("emailed code worked twice")
 	}
 }
+
+func TestLockReminders(t *testing.T) {
+	dir := t.TempDir()
+	a := &App{lockPath: filepath.Join(dir, "pin-lock.json")}
+	a.store, _ = OpenStore(filepath.Join(dir, "data"))
+	a.store.SaveEvent(Event{Title: "Release call", Date: "2026-12-01", Start: "16:00", Remind: 10})
+	a.setPIN("2468", 10, "")
+	get := func() string {
+		w := httptest.NewRecorder()
+		a.handleLockReminders(w, httptest.NewRequest("GET", "/", nil))
+		return w.Body.String()
+	}
+	if !strings.Contains(get(), "Release call") {
+		t.Fatal("reminders missing while locked")
+	}
+	c, _ := a.lockConf()
+	c.Quiet = true
+	a.saveLockConf(&c)
+	if strings.Contains(get(), "Release call") {
+		t.Fatal("quiet mode still shows reminders")
+	}
+	if !a.lockAllowed("/api/lock/reminders") {
+		t.Fatal("reminders blocked by the lock")
+	}
+}

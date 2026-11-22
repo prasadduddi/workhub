@@ -9,7 +9,7 @@ const Lock = {
   async init() {
     const r = await fetch('/api/lock').then(x => x.json()).catch(() => null);
     if (!r) return;
-    this.enabled = r.enabled; this.minutes = r.minutes; this.emailHint = r.email_hint || ''; this.email = r.email || '';
+    this.enabled = r.enabled; this.minutes = r.minutes; this.quiet = !!r.quiet; this.emailHint = r.email_hint || ''; this.email = r.email || '';
     if (r.locked) this.show();
   },
 
@@ -27,6 +27,7 @@ const Lock = {
 
   hide() {
     this.shown = false; this.last = Date.now();
+    if (typeof Cal !== 'undefined') Cal.lockedCM = null;
     $('#lockDlg').close();
     $('#lockPin').value = $('#lockCode').value = $('#lockNew').value = '';
     if (typeof poll === 'function') poll();
@@ -93,6 +94,7 @@ const Lock = {
     $('#pinRec').hidden = true; $('#pinFields').hidden = false; $('#pinSave').hidden = false;
     ['#pinCur', '#pinNew', '#pinNew2'].forEach(s => ($(s).value = ''));
     $('#pinMinutes').value = String(on ? this.minutes : 10);
+    $('#pinQuiet').checked = !(on && this.quiet);
     $('#pinEmailHint').innerHTML = this.email
       ? `Forgot PIN: a code can be emailed to <b>${esc(this.email)}</b> (from your 👤 profile), or use the recovery code.`
       : 'Tip: add your email in 👤 <b>Profile</b> so “Forgot PIN” can email you a code. Without it, only the recovery code works.';
@@ -112,8 +114,9 @@ const Lock = {
     if (pin !== $('#pinNew2').value.trim()) return toast('The two PINs are different', true);
     if (!this.enabled && !/^\d{4,8}$/.test(pin)) return toast('The PIN must be 4 to 8 digits', true);
     try {
-      const r = await api('POST', '/api/lock/set', { current: $('#pinCur').value, pin, minutes });
-      this.enabled = true; this.minutes = minutes;
+      const quiet = !$('#pinQuiet').checked;
+      const r = await api('POST', '/api/lock/set', { current: $('#pinCur').value, pin, minutes, quiet, email: this.email });
+      this.enabled = true; this.minutes = minutes; this.quiet = quiet;
       if (r.recovery) this.showRecovery(r.recovery, false);
       else { $('#pinDlg').close(); toast('Lock settings saved'); }
     } catch (err) { toast(err.message, true); }

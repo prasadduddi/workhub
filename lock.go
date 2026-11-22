@@ -32,6 +32,7 @@ type lockConf struct {
 	RecHash string `json:"rec_hash"`
 	Minutes int    `json:"minutes"`         // lock after this many idle minutes; 0 = only on start-up and "Lock now"
 	Email   string `json:"email,omitempty"` // where "Forgot PIN" sends a code (the user's own address)
+	Quiet   bool   `json:"quiet,omitempty"` // no reminders over the lock screen
 }
 
 type lockState struct {
@@ -172,7 +173,7 @@ func (a *App) lockAllowed(path string) bool {
 
 func (a *App) handleLockStatus(w http.ResponseWriter, r *http.Request) {
 	c, ok := a.lockConf()
-	out := map[string]any{"enabled": ok, "locked": a.isLocked(), "minutes": c.Minutes, "email_hint": maskEmail(a.resetEmail())}
+	out := map[string]any{"enabled": ok, "locked": a.isLocked(), "minutes": c.Minutes, "quiet": c.Quiet, "email_hint": maskEmail(a.resetEmail())}
 	if !a.isLocked() {
 		out["email"] = a.resetEmail() // the full address only while unlocked (settings)
 	}
@@ -208,6 +209,7 @@ func (a *App) handleLockSet(w http.ResponseWriter, r *http.Request) {
 		PIN     string `json:"pin"`
 		Minutes int    `json:"minutes"`
 		Email   string `json:"email"`
+		Quiet   bool   `json:"quiet"`
 		Remove  bool   `json:"remove"`
 	}
 	if err := readJSON(r, &in); err != nil {
@@ -233,7 +235,7 @@ func (a *App) handleLockSet(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, map[string]any{"enabled": false})
 			return
 		case in.PIN == "": // only the minutes / email
-			c.Minutes, c.Email = in.Minutes, in.Email
+			c.Minutes, c.Email, c.Quiet = in.Minutes, in.Email, in.Quiet
 			if err := a.saveLockConf(&c); err != nil {
 				writeErr(w, 500, err)
 				return
@@ -246,6 +248,11 @@ func (a *App) handleLockSet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, 400, err)
 		return
+	}
+	if in.Quiet {
+		c, _ := a.lockConf()
+		c.Quiet = true
+		_ = a.saveLockConf(&c)
 	}
 	writeJSON(w, map[string]any{"enabled": true, "minutes": in.Minutes, "recovery": rec})
 }
@@ -322,4 +329,29 @@ func (a *App) handleLockEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"sent_to": maskEmail(to)})
+}
+
+// handleLockReminders gives the lock screen just what reminders need — your
+// events and CM windows (key, title, times) — unless "quiet" is set.
+func (a *App) handleLockReminders(w http.ResponseWriter, r *http.Request) {
+	type cm struct {
+		Key, Summary, Status, Start, End, URL, Parent string
+	}
+	out := map[string]any{"events": []Event{}, "cm": []cm{}}
+	if c, _ := a.lockConf(); c.Quiet || a.store == nil {
+		writeJSON(w, out)
+		return
+	}
+	var cms []cm
+	seen := map[string]bool{}
+	for _, j := range a.store.JiraIssues() {
+		for _, ch := range j.Children {
+			if ch.Start != "" && !seen[ch.Key] {
+				seen[ch.Key] = true
+				cms = append(cms, cm{ch.Key, ch.Summary, ch.Status, ch.Start, ch.End, ch.URL, j.Key})
+			}
+		}
+	}
+	out["events"], out["cm"] = a.store.Events(), cms
+	writeJSON(w, out)
 }
