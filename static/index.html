@@ -342,6 +342,17 @@
 <datalist id="protoList"><option>ssh</option><option>postgres</option><option>https</option><option>http</option><option>rdp</option><option>oracle</option><option>postgres</option><option>mysql</option><option>sqlserver</option><option>ftp</option><option>smb</option><option>ldap</option></datalist>
 <datalist id="envList"><option>PROD</option><option>UAT</option><option>TEST</option><option>STAGE</option><option>DEV</option><option>DR</option></datalist>
 
+<dialog id="refLinkDlg">
+  <form method="dialog">
+    <h3>🔗 Link to a folder or file</h3>
+    <div class="muted tiny">Shows it in Folders (in <b id="refLinkWhere"></b>) straight from where it is — nothing is copied. Removing the link never touches your files.</div>
+    <label>Folder or file path<input id="refLinkPath" placeholder="C:\work\configs   ·   \\server\share\app   ·   %USERPROFILE%\Documents\specs"></label>
+    <div class="row"><button type="button" id="refLinkFolderBtn">Browse folder…</button><button type="button" id="refLinkFileBtn">Browse file…</button></div>
+    <label>Name in the tree (optional)<input id="refLinkName" placeholder="defaults to the folder/file name"></label>
+    <div class="row end"><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">Link</button></div>
+  </form>
+</dialog>
+
 <dialog id="nameRulesDlg">
   <form method="dialog">
     <h3>Naming rules — <span id="nameRulesWs"></span></h3>

@@ -88,3 +88,86 @@ func TestReferenceFolders(t *testing.T) {
 		t.Fatal("Properties copied twice")
 	}
 }
+
+func TestReferenceLinks(t *testing.T) {
+	dir, outside := t.TempDir(), t.TempDir()
+	os.MkdirAll(filepath.Join(outside, "configs", "uat"), 0o700)
+	os.WriteFile(filepath.Join(outside, "configs", "uat", "app.properties"), []byte("a=1\n"), 0o600)
+	os.MkdirAll(filepath.Join(outside, "configs", ".git"), 0o700)
+	os.WriteFile(filepath.Join(outside, "notes.yaml"), []byte("k: v\n"), 0o600)
+	st, _ := OpenStore(dir)
+	a := &App{store: st, dataDir: dir}
+	h := http.NewServeMux()
+	for pat, fn := range map[string]http.HandlerFunc{
+		"GET /api/ref": a.handleRefTree, "POST /api/ref/link": a.handleRefLink, "POST /api/ref/folder": a.handleRefFolder,
+		"GET /api/ref/file": a.handleRefRead, "PUT /api/ref/file": a.handleRefWrite, "POST /api/ref/move": a.handleRefMove,
+		"DELETE /api/ref/file": a.handleRefDelete, "GET /api/ref/search": a.handleRefSearch, "GET /api/ref/history": a.handleRefHistory,
+	} {
+		h.HandleFunc(pat, fn)
+	}
+	do := func(method, url, body string) (int, string) {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, url, strings.NewReader(body)))
+		return rec.Code, rec.Body.String()
+	}
+	js := func(v string) string { b, _ := json.Marshal(v); return string(b) }
+	if code, body := do("POST", "/api/ref/link", `{"dir":"Properties","target":`+js(filepath.Join(outside, "configs"))+`}`); code != 200 {
+		t.Fatal(code, body)
+	}
+	if code, body := do("POST", "/api/ref/link", `{"dir":"","name":"Notes","target":`+js(filepath.Join(outside, "notes.yaml"))+`}`); code != 200 {
+		t.Fatal(code, body)
+	}
+	if code, _ := do("POST", "/api/ref/link", `{"dir":"","target":"relative/path"}`); code != 400 {
+		t.Fatal("relative path accepted")
+	}
+	_, tree := do("GET", "/api/ref", "")
+	for _, want := range []string{`"path":"Properties/configs","dir":true`, `"path":"Properties/configs/uat/app.properties"`, `"path":"Notes","dir":false`} {
+		if !strings.Contains(tree, want) {
+			t.Fatalf("missing %s in %s", want, tree)
+		}
+	}
+	if strings.Contains(tree, ".git") || strings.Contains(tree, ".whlink") {
+		t.Fatalf("tree shows internals: %s", tree)
+	}
+	if _, body := do("GET", "/api/ref/file?path=Properties/configs/uat/app.properties", ""); body != "a=1\n" {
+		t.Fatalf("read linked: %q", body)
+	}
+	// Edit in place (old copy kept), but no new files, moves or deletes inside.
+	if code, _ := do("PUT", "/api/ref/file?path=Properties/configs/uat/app.properties", "a=2\n"); code != 200 {
+		t.Fatal("edit linked file", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(outside, "configs", "uat", "app.properties")); string(b) != "a=2\n" {
+		t.Fatal("real file not edited")
+	}
+	if _, hist := do("GET", "/api/ref/history?path=Properties/configs/uat/app.properties", ""); !strings.Contains(hist, `"name"`) {
+		t.Fatal("no older copy for linked file")
+	}
+	if _, body := do("GET", "/api/ref/search?q=a=2", ""); !strings.Contains(body, "app.properties") {
+		t.Fatalf("search misses linked content: %s", body)
+	}
+	for _, c := range [][3]string{
+		{"PUT", "/api/ref/file?new=1&path=Properties/configs/new.txt", "x"},
+		{"POST", "/api/ref/folder", `{"path":"Properties/configs/sub"}`},
+		{"DELETE", "/api/ref/file?path=Properties/configs/uat/app.properties", ""},
+		{"POST", "/api/ref/move", `{"from":"Properties/configs/uat","to":"YAML/uat"}`},
+	} {
+		if code, _ := do(c[0], c[1], c[2]); code == 200 {
+			t.Fatalf("%v was allowed inside a linked folder", c)
+		}
+	}
+	// Renaming and removing the link touch only the link.
+	if code, body := do("POST", "/api/ref/move", `{"from":"Properties/configs","to":"YAML/UAT configs"}`); code != 200 {
+		t.Fatal(code, body)
+	}
+	if code, _ := do("DELETE", "/api/ref/file?path=YAML/UAT%20configs", ""); code != 200 {
+		t.Fatal("remove link")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "configs", "uat", "app.properties")); err != nil {
+		t.Fatal("removing the link deleted the real files!")
+	}
+	// A link whose target is gone shows as missing instead of failing.
+	os.Remove(filepath.Join(outside, "notes.yaml"))
+	if _, tree := do("GET", "/api/ref", ""); !strings.Contains(tree, `"missing":true`) {
+		t.Fatalf("missing target not flagged: %s", tree)
+	}
+}

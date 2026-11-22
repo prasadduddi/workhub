@@ -90,3 +90,5 @@ v1.6 checks
       JSON Format/Check/Validate; old Properties content is under "From Properties"; files are plain files in <data>\reference
   [ ] Bookmarks → 🏷 Naming rules… (or 🏷 in a server tree): paste "-BAT- Batch, -BAR- Barn, …" → matching servers/links renamed (this workspace only)
   [ ] Jenkins links show the job (Folder › job #build) on Bookmarks, Dashboard and in work items
+  [ ] Folders → 🔗 Link to a path… (Browse folder/file): shows it live, edits saved in place; Remove link leaves the files alone
+  [ ] Desktop: Ctrl+Click a link or bookmark → new Chrome window; plain click → new tab

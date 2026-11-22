@@ -20,6 +20,8 @@ const Ref = {
       .sort((a, b) => (b.dir - a.dir) || a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' }));
   },
   icon(i) {
+    if (i.missing) return '⚠';
+    if (i.link) return i.dir ? '🔗📁' : '🔗📄';
     if (i.dir) return this.open.has(i.path) ? '📂' : '📁';
     const x = i.path.split('.').pop().toLowerCase();
     return /^(json|jsonc|avsc)$/.test(x) ? '🧾' : /^(ya?ml)$/.test(x) ? '📘' : /^(properties|ini|conf|cfg|env|toml)$/.test(x) ? '⚙' : /^(png|jpe?g|gif|bmp|webp|svg)$/.test(x) ? '🖼' : /^(sql|sh|ps1|bat|cmd|py|groovy)$/.test(x) ? '📜' : '📄';
@@ -40,11 +42,11 @@ const Ref = {
     if (this.hits) { show = new Set(); for (const h of this.hits) for (let p = h; p; p = this.parent(p)) show.add(p); }
     const walk = (p, d) => this.kids(p).filter(i => !show || show.has(i.path)).map(i => {
       const open = i.dir && (show ? true : this.open.has(i.path)), n = i.dir ? this.items.filter(x => !x.dir && x.path.startsWith(i.path + '/')).length : 0;
-      return `<div class="tnode rnode ${i.dir ? 'folder' : 'item'} ${i.path === this.sel ? 'sel' : ''} ${this.hits?.includes(i.path) ? 'hit' : ''}" draggable="true" data-rp="${esc(i.path)}" style="padding-left:${8 + d * 14}px" title="${esc(i.path)}">
-        <span class="tw">${i.dir ? (open ? '▾' : '▸') : ''}</span>${this.icon(i)} <span class="nm">${esc(this.base(i.path))}</span>${i.dir ? `<span class="n">${n || ''}</span>` : ''}</div>` + (open ? walk(i.path, d + 1) : '');
+      return `<div class="tnode rnode ${i.dir ? 'folder' : 'item'} ${i.path === this.sel ? 'sel' : ''} ${this.hits?.includes(i.path) ? 'hit' : ''}" draggable="true" data-rp="${esc(i.path)}" style="padding-left:${8 + d * 14}px" title="${esc(i.missing ? 'Not found: ' + i.link : i.link ? 'Linked to ' + i.link : i.path)}">
+        <span class="tw">${i.dir ? (open ? '▾' : '▸') : ''}</span>${this.icon(i)} <span class="nm ${i.linked ? 'linked' : ''} ${i.missing ? 'missing' : ''}">${esc(this.base(i.path))}</span>${i.dir ? `<span class="n">${n || ''}</span>` : ''}</div>` + (open ? walk(i.path, d + 1) : '');
     }).join('');
     $('#refTree').innerHTML = walk('', 0) || `<div class="empty">${this.hits ? 'Nothing matches.' : 'No folders yet. Press <b>+</b>.'}</div>`;
-    $('#refWhere').innerHTML = `Plain files in <a href="#" data-rreveal="">${esc(this.root)}</a> · <a href="#" data-rreveal="history">older copies</a> · <a href="#" data-rreveal="deleted">deleted items</a>`;
+    $('#refWhere').innerHTML = `Copies are kept as plain files in <a href="#" data-rreveal="">${esc(this.root)}</a> · <a href="#" data-rreveal="history">older copies</a> · <a href="#" data-rreveal="deleted">deleted items</a>`;
     this.renderDetail();
   },
 
@@ -53,24 +55,28 @@ const Ref = {
     const el = $('#refDetail'), p = this.sel;
     if (this.isDir(p)) {
       if (this.cm) { this.cm = null; this.loaded = ''; }
-      const kids = this.kids(p);
-      el.innerHTML = `<div class="ghead"><h3>${p ? '📂 ' + esc(this.base(p)) : 'All folders'}</h3><span class="muted tiny">${esc(p)}</span><span class="spacer"></span>
-          <button data-ra="folder">+ Folder</button><button data-ra="newfile">+ New file</button>
+      const kids = this.kids(p), it = this.item(p) || {}, inside = it.linked;
+      el.innerHTML = `<div class="ghead"><h3>${p ? this.icon({ ...it, dir: true }) + ' ' + esc(this.base(p)) : 'All folders'}</h3><span class="muted tiny">${esc(p)}</span><span class="spacer"></span>
+          ${inside || it.link ? '' : `<button data-ra="folder">+ Folder</button><button data-ra="newfile">+ New file</button>
           <label class="btnlike">Upload files…<input type="file" multiple hidden data-rup></label>
+          <button data-ra="link" title="Show a folder or file from anywhere on this PC here, without copying it">🔗 Link to a path…</button>`}
           <button data-ra="reveal" title="Open this folder in Explorer">Open in Explorer</button>
-          ${p ? '<button data-ra="rename">Rename</button><button data-ra="delete" class="danger">Delete</button>' : ''}</div>
+          ${!p || inside ? '' : it.link ? '<button data-ra="rename">Rename link</button><button data-ra="delete" class="danger" title="Removes only the link — your files stay where they are">Remove link</button>' : '<button data-ra="rename">Rename</button><button data-ra="delete" class="danger">Delete</button>'}</div>
+        ${this.linkNote(it)}
         <div class="gsec rdrop">${kids.map(i => `<div class="grow rrow" data-rp="${esc(i.path)}">${this.icon(i)} <span class="link">${esc(this.base(i.path))}</span><span class="spacer"></span>
             <span class="muted tiny">${i.dir ? '' : fmtSize(i.size) + ' · '}${esc(fmtDateTime(i.mod))}</span></div>`).join('')
           || '<div class="muted tiny">Empty folder.</div>'}
-          <div class="muted tiny" style="margin-top:10px">Drop files or whole folders here (or onto a folder on the left). Files with the same name are kept side by side, never overwritten.</div></div>`;
+          ${inside || it.link ? '' : '<div class="muted tiny" style="margin-top:10px">Drop files or whole folders here (or onto a folder on the left) to keep a copy. Files with the same name are kept side by side, never overwritten. To use files where they already are, use <b>🔗 Link to a path…</b> instead.</div>'}</div>`;
       return;
     }
     const it = this.item(p);
+    if (it.missing) { el.innerHTML = `<div class="ghead"><h3>⚠ ${esc(this.base(p))}</h3><span class="spacer"></span><button data-ra="delete" class="danger">Remove link</button></div><div class="dberr">Can't find <b>${esc(it.link)}</b> from this PC (drive not connected, or moved?). The link is kept.</div>`; return; }
     const json = /\.(json|jsonc|avsc)$/i.test(p);
     el.innerHTML = `<div class="ghead"><h3>${this.icon(it)} ${esc(this.base(p))}</h3><span class="muted tiny">${esc(p)} · ${fmtSize(it.size)} · ${esc(fmtDateTime(it.mod))}</span><span class="spacer"></span>
         ${this.isText(p) ? '<button class="primary" data-ra="save" title="Ctrl+S">Save</button>' : ''}
         <a class="btnlike" href="${this.url(p, 1)}">Download</a><button data-ra="history">Older copies</button>
-        <button data-ra="reveal">Open in Explorer</button><button data-ra="rename">Rename</button><button data-ra="delete" class="danger">Delete</button></div>
+        <button data-ra="reveal">Open in Explorer</button>${it.linked ? '' : it.link ? '<button data-ra="rename">Rename link</button><button data-ra="delete" class="danger" title="Removes only the link — the file stays where it is">Remove link</button>' : '<button data-ra="rename">Rename</button><button data-ra="delete" class="danger">Delete</button>'}</div>
+      ${this.linkNote(it)}
       ${json ? `<div class="row" style="margin-bottom:6px"><button data-rjson="format">Format</button><button data-rjson="check">Check JSON</button>
         <select id="refSchema" title="Schema to validate against">${this.schemas(p).map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('') || '<option value="">(no schema found)</option>'}</select>
         <button data-rjson="validate">Validate against schema</button></div><div id="refJsonOut" class="jsonout"></div>` : ''}
@@ -79,6 +85,29 @@ const Ref = {
         : this.isText(p) ? '<div id="refEditor" class="refeditor"></div><div class="muted tiny" id="refStatus">Ctrl+S saves · the previous version is kept under Older copies</div>'
           : '<div class="muted">This kind of file can\'t be shown here — use Download or Open in Explorer.</div>'}`;
     if (this.isText(p)) this.mountEditor(p);
+  },
+
+  // Where a linked item really lives.
+  linkNote(it) {
+    if (!it) return '';
+    let link = it.link, p = it.path;
+    if (!link && it.linked) for (let x = this.parent(p); x; x = this.parent(x)) { const l = this.item(x); if (l?.link) { link = l.link + p.slice(x.length).replace(/\//g, link?.includes('\\') || l.link.includes('\\') ? '\\' : '/'); break; } }
+    return link ? `<div class="reflink">🔗 ${it.link ? 'Linked to' : 'Real file'}: <code>${esc(link)}</code> — not copied; ${it.dir ? 'shown live from there' : 'edits are saved there (older copies kept in WorkHub)'}</div>` : '';
+  },
+
+  async linkPath() {
+    const d = $('#refLinkDlg'), at = this.folderOf(this.sel);
+    if (this.item(at)?.linked || this.item(at)?.link) return toast('Links go in your own folders — pick a folder that is not linked first', true);
+    $('#refLinkWhere').textContent = at || 'the top level';
+    $('#refLinkPath').value = ''; $('#refLinkName').value = ''; d.returnValue = ''; d.showModal();
+    d.onclose = async () => {
+      if (d.returnValue !== 'ok' || !$('#refLinkPath').value.trim()) return;
+      try {
+        const r = await api('POST', '/api/ref/link', { dir: at, name: $('#refLinkName').value.trim(), target: $('#refLinkPath').value.trim() });
+        if (at) this.open.add(at);
+        this.sel = r.path; this.persist(); await this.load(); toast('Linked ' + r.target);
+      } catch (err) { toast(err.message, true); }
+    };
   },
 
   async mountEditor(p) {
@@ -221,7 +250,13 @@ const Ref = {
 
   async remove() {
     const p = this.sel; if (!p) return;
-    const isDir = this.isDir(p);
+    const isDir = this.isDir(p), it = this.item(p);
+    if (it?.link) {
+      if (!confirm(`Remove the link "${this.base(p)}"?\n\nOnly the link is removed — ${it.link} and its files are not touched.`)) return;
+      try { await api('DELETE', '/api/ref/file?path=' + encodeURIComponent(p)); this.dirty = false; this.loaded = ''; this.sel = this.parent(p); this.persist(); await this.load(); toast('Link removed'); }
+      catch (err) { toast(err.message, true); }
+      return;
+    }
     if (!confirm(`Delete ${isDir ? 'the folder' : ''} "${p}"${isDir ? ' and everything in it' : ''}?\n\nIt is moved to "reference-deleted" in your data folder, so it can still be recovered.`)) return;
     try { await api('DELETE', '/api/ref/file?path=' + encodeURIComponent(p)); this.dirty = false; this.loaded = ''; this.sel = this.parent(p); this.persist(); await this.load(); toast('Deleted (kept in reference-deleted)'); }
     catch (err) { toast(err.message, true); }
@@ -249,6 +284,8 @@ const Ref = {
 };
 
 $('#refNewFolder').onclick = () => Ref.newFolder();
+$('#refLinkFolderBtn').onclick = async () => { const r = await api('POST', '/api/local/pick', { start: $('#refLinkPath').value }).catch(err => (toast(err.message, true), {})); if (r.ok) $('#refLinkPath').value = r.path; };
+$('#refLinkFileBtn').onclick = async () => { const r = await api('POST', '/api/local/pickfile', {}).catch(err => (toast(err.message, true), {})); if (r.ok) $('#refLinkPath').value = r.path; };
 let refSearchTimer;
 $('#refSearch').addEventListener('input', e => { clearTimeout(refSearchTimer); refSearchTimer = setTimeout(() => Ref.search(e.target.value.trim()), 250); });
 $('#refTree').addEventListener('click', e => {
@@ -261,8 +298,11 @@ $('#refTree').addEventListener('click', e => {
 $('#refTree').addEventListener('contextmenu', e => {
   const n = e.target.closest('[data-rp]'); e.preventDefault();
   if (n) Ref.select(n.dataset.rp);
-  const items = [['+ New folder here', () => Ref.newFolder()], ['+ New file here', () => Ref.newFile()], ['Open in Explorer', () => api('POST', '/api/ref/reveal', { path: Ref.sel })]];
-  if (n) items.push('-', ['Rename', () => Ref.rename()], ['Delete', () => Ref.remove()]);
+  const it = n && Ref.item(n.dataset.rp);
+  const items = it?.linked ? [['Open in Explorer', () => api('POST', '/api/ref/reveal', { path: Ref.sel })]]
+    : [['+ New folder here', () => Ref.newFolder()], ['+ New file here', () => Ref.newFile()], ['🔗 Link to a path here…', () => Ref.linkPath()], ['Open in Explorer', () => api('POST', '/api/ref/reveal', { path: Ref.sel })]];
+  if (it?.link) items.push('-', ['Rename link', () => Ref.rename()], ['Remove link (files stay)', () => Ref.remove()]);
+  else if (n && !it?.linked) items.push('-', ['Rename', () => Ref.rename()], ['Delete', () => Ref.remove()]);
   Tree.showMenu(e, items);
 });
 $('#refDetail').addEventListener('click', e => {
@@ -270,7 +310,7 @@ $('#refDetail').addEventListener('click', e => {
   const j = e.target.closest('[data-rjson]'); if (j) return Ref.jsonTool(j.dataset.rjson);
   const rs = e.target.closest('[data-rrestore]'); if (rs) return Ref.restore(rs.dataset.rrestore);
   const a = e.target.closest('[data-ra]')?.dataset.ra; if (!a) return;
-  ({ folder: () => Ref.newFolder(), newfile: () => Ref.newFile(), save: () => Ref.save(), rename: () => Ref.rename(), delete: () => Ref.remove(),
+  ({ link: () => Ref.linkPath(), folder: () => Ref.newFolder(), newfile: () => Ref.newFile(), save: () => Ref.save(), rename: () => Ref.rename(), delete: () => Ref.remove(),
     history: () => Ref.history(), reveal: () => api('POST', '/api/ref/reveal', { path: Ref.sel }) })[a]?.();
 });
 $('#refDetail').addEventListener('change', e => {
@@ -294,6 +334,7 @@ for (const zone of [$('#refTree'), $('#refDetail')]) {
     const target = e.target.closest('.rnode.folder')?.dataset.rp ?? (zone.id === 'refDetail' ? Ref.folderOf(Ref.sel) : '');
     const moving = e.dataTransfer.getData('text/x-ref');
     if (moving) { if (Ref.parent(moving) !== target) await Ref.moveTo(moving, Ref.join(target, Ref.base(moving))); return; }
+    if (Ref.item(target)?.linked || Ref.item(target)?.link) return toast('That is a linked folder — add files to it in Explorer', true);
     if (e.dataTransfer.files.length) Ref.dropped(e.dataTransfer, target);
   });
 }

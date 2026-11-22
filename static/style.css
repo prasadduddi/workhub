@@ -345,6 +345,9 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .refeditor .CodeMirror { height: 100%; }
 .refimg { max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius); }
 .rrow { cursor: pointer; } .rrow:hover { background: var(--panel2); }
+.reflink { font-size: 12px; background: var(--panel2); border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.tnode .nm.linked { font-style: italic; } .tnode .nm.missing { color: var(--danger); text-decoration: line-through; }
+#refLinkDlg { width: min(560px, 94vw); } #refLinkDlg label { margin-top: 8px; }
 .tnode.rnode.drop { outline: 2px dashed var(--accent); outline-offset: -2px; }
 
 #nameRulesDlg { width: min(560px, 94vw); }
