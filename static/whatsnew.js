@@ -1,10 +1,11 @@
 'use strict';
-// "What's new & tips": shown at start-up once per release (until the user
-// ticks "Don't show again"), and from the menu any time. Add a release at the
+// "What's new & tips": opens by itself once when a new version is first
+// started, and from ✨ (top of the sidebar) or the ☰ menu any time. Add a release at the
 // top of RELEASES for every new version.
 
 const RELEASES = [
   { v: '1.8', title: 'Organise and find faster, Jira browser sign-in, macros', items: [
+    ['🧹', 'Tidier sidebar', 'Updates, programs, backups, data location and Quit are in ☰ at the top; ✨ opens this window any time (it now opens by itself only once per new version). Capture options fold under “Saving to …”.', ''],
     ['▤', 'Applications × environments grid', 'Dashboard → ▤ Grid: one row per application, one column per environment (DEV, UAT, PROD…). Click a server for details; empty cells show where no server is known.', 'dashboard'],
     ['★', 'Saved searches', 'Type a search (e.g. env:prod app:batch), press ☆ Save search: it stays in the sidebar with a live count. Right-click to rename, change or delete.', 'dashboard'],
     ['📥', 'New captures to sort', 'Newly captured servers are marked 📥 with a suggested folder (where their neighbours live). One click moves them, or keep them where they are. The 📥 tile lists them all.', 'dashboard'],
@@ -85,7 +86,6 @@ const WhatsNew = {
     const d = $('#whatsNewDlg');
     $('#whatsNewBody').innerHTML = this.html();
     this.tab(tab);
-    $('#whatsNewHide').checked = false;
     if (!d.open) d.showModal();
   },
 
@@ -94,22 +94,19 @@ const WhatsNew = {
     $$('#whatsNewBody [data-wnpane]').forEach(p => (p.hidden = p.dataset.wnpane !== t));
   },
 
-  async close() {
-    if ($('#whatsNewHide').checked) await api('POST', '/api/tips', { hidden: this.latest }).catch(() => {});
-    $('#whatsNewDlg').close();
-  },
+  close() { $('#whatsNewDlg').close(); },
 
-  // At start-up: once per session, unless hidden for this release.
+  // At start-up: only the first time this version runs (remembered on this PC).
   async startup() {
-    try { if (sessionStorage.getItem('wnShown') === this.latest) return; } catch { /* ignore */ }
     const r = await api('GET', '/api/tips').catch(() => null);
     if (!r || r.hidden === this.latest) return;
-    try { sessionStorage.setItem('wnShown', this.latest); } catch { /* ignore */ }
+    await api('POST', '/api/tips', { hidden: this.latest }).catch(() => {}); // seen
     this.open();
   },
 };
 
 $('#whatsNewBtn').onclick = () => WhatsNew.open();
+$('#whatsNewTop').onclick = () => WhatsNew.open();
 $('#whatsNewClose').onclick = () => WhatsNew.close();
 $('#whatsNewDlg').addEventListener('cancel', e => { e.preventDefault(); WhatsNew.close(); }); // Esc
 $('#whatsNewBody').addEventListener('click', e => {

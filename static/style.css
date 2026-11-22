@@ -35,7 +35,7 @@ input:focus, textarea:focus, select:focus { outline: 2px solid color-mix(in srgb
 .brand-text { flex: 1; }
 .side > * { flex-shrink: 0; }
 #sideToggle { font-size: 14px; color: var(--muted); }
-#mainMenuBtn { font-size: 15px; color: var(--muted); }
+#mainMenuBtn, #whatsNewTop { font-size: 15px; color: var(--muted); }
 .upd-pill { margin: 8px 6px 0; padding: 6px 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, #16a34a 45%, transparent); background: color-mix(in srgb, #16a34a 14%, transparent); color: #15803d; font-weight: 600; font-size: 12.5px; text-align: left; cursor: pointer; }
 .upd-pill:hover { background: color-mix(in srgb, #16a34a 22%, transparent); }
 body.side-collapsed .upd-pill #updPillText { display: none; }
@@ -717,3 +717,10 @@ tr.picked > td { background: color-mix(in srgb, var(--accent) 8%, transparent); 
 .saved-list .sv { width: 20px; text-align: center; color: #e0a800; }
 .saved-list .count { margin-left: auto; font-size: 11px; color: var(--muted); }
 body.side-collapsed .saved-head { display: none; }
+.capture-box { gap: 4px; }
+.capture-opts summary { cursor: pointer; list-style: none; padding-left: 2px; }
+.capture-opts summary::-webkit-details-marker { display: none; }
+.capture-opts summary::after { content: ' ✎'; }
+.capture-opts[open] { display: flex; flex-direction: column; gap: 6px; }
+.foot-row { display: flex; gap: 6px; }
+.foot-row #profileBtn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }

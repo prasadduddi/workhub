@@ -11,7 +11,7 @@
 </head>
 <body>
 <aside class="side">
-  <div class="brand"><span class="logo">W</span><span class="brand-text">WorkHub</span><button id="mainMenuBtn" class="ghost icon" title="Menu: check for updates and install, profile, lock, programs, backups…">☰</button><button id="sideToggle" class="ghost icon" title="Hide/show sidebar (Ctrl+B)">«</button></div>
+  <div class="brand"><span class="logo">W</span><span class="brand-text">WorkHub</span><button id="whatsNewTop" class="ghost icon" title="What's new &amp; tips">✨</button><button id="mainMenuBtn" class="ghost icon" title="Menu: check for updates and install, profile, lock, programs, backups…">☰</button><button id="sideToggle" class="ghost icon" title="Hide/show sidebar (Ctrl+B)">«</button></div>
   <button id="updPill" class="upd-pill" hidden title="Click to see what's new and install it">⬆ <span id="updPillText">A new version is available</span></button>
   <button id="wsName" class="ws" title="Workspace — click to rename"></button>
   <nav id="nav">
@@ -31,22 +31,17 @@
   <div id="savedSearches" class="saved-list"></div>
   <div class="capture-box">
     <label class="switch"><input type="checkbox" id="watchToggle"><span></span> Watch clipboard</label>
-    <label class="lbl">Save captures to project</label>
-    <input id="captureProject" list="projectList" placeholder="General">
-    <label class="switch small"><input type="checkbox" id="captureAll"><span></span> Keep clips with no info</label>
+    <details class="capture-opts"><summary class="muted tiny">Saving to <b id="captureWhere">General</b></summary>
+      <label class="lbl">Save captures to project</label>
+      <input id="captureProject" list="projectList" placeholder="General">
+      <label class="switch small"><input type="checkbox" id="captureAll"><span></span> Keep clips with no info</label>
+    </details>
   </div>
   <div class="side-foot">
-    <button id="whatsNewBtn" class="ghost" title="New features in this version, and tips">✨ What's new &amp; tips</button>
-    <div id="appVersion" class="muted tiny"></div>
-    <div id="dataDir" class="muted tiny"></div>
-    <button id="profileBtn" class="ghost" title="Your profile">👤 <span id="profileName">Your profile</span></button>
-    <button id="lockBtn" class="ghost" title="Lock WorkHub with your PIN (Ctrl+L)">🔒 Lock</button>
-    <button id="updBtn" class="ghost" title="Check GitHub for a newer WorkHub and install it">⟳ Check for updates &amp; install</button>
-    <button id="extBtn" class="ghost" title="Where PuTTY, FileZilla, DBeaver and SQL Developer are, for “Open in…”">↗ Programs…</button>
-    <button id="backupBtn" class="ghost" title="Automatic backups (at start-up and every morning, when something changed)">🛟 Backups…</button>
-    <button id="importBtn" class="ghost" title="Bring in data from an older WorkHub folder">Import data…</button>
-    <button id="dataLocBtn" class="ghost" title="Choose where this workspace keeps its data">Data location…</button>
-    <button id="quitBtn" class="ghost">Quit WorkHub</button>
+    <div class="foot-row"><button id="profileBtn" class="ghost" title="Your profile">👤 <span id="profileName">Your profile</span></button><button id="lockBtn" class="ghost icon" title="Lock WorkHub with your PIN (Ctrl+L)">🔒</button></div>
+    <div id="appVersion" class="muted tiny" title=""></div>
+    <!-- Reached from ☰ at the top (kept here for the menu to use) -->
+    <div hidden><div id="dataDir"></div><button id="whatsNewBtn"></button><button id="updBtn"></button><button id="extBtn"></button><button id="backupBtn"></button><button id="importBtn"></button><button id="dataLocBtn"></button><button id="quitBtn"></button></div>
   </div>
 </aside>
 
@@ -472,7 +467,7 @@
 <dialog id="whatsNewDlg">
   <h3>WorkHub — what's new</h3>
   <div id="whatsNewBody"></div>
-  <div class="row wn-foot"><label class="check"><input type="checkbox" id="whatsNewHide"> Don't show this again (until the next version)</label><span class="spacer"></span><button id="whatsNewClose" class="primary">Close</button></div>
+  <div class="row wn-foot"><span class="muted tiny">Opens by itself once per new version · any time from ✨ at the top of the sidebar</span><span class="spacer"></span><button id="whatsNewClose" class="primary">Close</button></div>
 </dialog>
 
 <dialog id="refLinkDlg">

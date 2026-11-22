@@ -1,8 +1,8 @@
 package main
 
-// "What's new" popup: remembers which release notes the user chose to hide
+// "What's new" popup: remembers the last release whose notes were shown
 // (shared by all workspaces, next to the default data folder) so each new
-// version shows its notes once at start-up.
+// version shows its notes once, the first time it starts.
 
 import (
 	"net/http"

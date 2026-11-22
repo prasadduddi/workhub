@@ -379,6 +379,7 @@ async function poll() {
     const { v, data_dir, app_version } = await api('GET', '/api/version');
     $('#dataDir').textContent = 'Data: ' + data_dir;
     $('#appVersion').textContent = 'Version ' + app_version;
+    $('#appVersion').title = 'Data: ' + data_dir + ' — change it from ☰ › Data location…';
     if (v !== S.version) { S.version = v; await refreshAll(); }
   } catch (e) { if (e.message !== 'unauthorized') console.error('WorkHub refresh failed:', e); }
 }
@@ -393,6 +394,7 @@ function renderSettings() {
   $('#captureAll').checked = !!S.settings.capture_all;
   $('#bmSync').checked = !S.settings.no_browser_sync;
   if (document.activeElement !== $('#captureProject')) $('#captureProject').value = S.settings.project || 'General';
+  $('#captureWhere').textContent = S.settings.project || 'General';
 }
 async function saveSettings(patch) {
   S.settings = await api('PUT', '/api/settings', { ...S.settings, ...patch });
