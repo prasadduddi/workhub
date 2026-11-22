@@ -1,0 +1,84 @@
+'use strict';
+// "What's new & tips": shown at start-up once per release (until the user
+// ticks "Don't show again"), and from the menu any time. Add a release at the
+// top of RELEASES for every new version.
+
+const RELEASES = [
+  { v: '1.7', title: 'Folders, naming rules, grouping and more', items: [
+    ['📁', 'Folders (replaces Properties)', 'Your own folder tree of JSON, YAML, properties… files. + adds folders; drop files or whole folders in. Files are plain files that every version keeps; older copies and deleted items are kept too.', 'ref'],
+    ['🔗', 'Link to a path', 'In Folders, “Link to a path…” shows a folder or file from anywhere (even a network share) without copying it.', 'ref'],
+    ['🏷', 'Naming rules', 'Bookmarks → Naming rules…: e.g. “-BAT- = Batch” names every server and link whose host contains -BAT-. Per workspace.', 'bookmarks'],
+    ['🗂', 'Group servers', 'PuTTY, FileZilla and SQL trees: the Group by box (Env, App, Domain, Type, My groups, User). Or tell the chat “group putty by app”.', 'terminal'],
+    ['🔀', 'Tunnels without PuTTY', 'Copy an “ssh -N -L1522:dbhost:1521 user@jump” command and WorkHub sets up the tunnel; databases at localhost start it automatically. Untick “Use tunnels” to switch it off.', 'sql'],
+    ['🧩', 'Jenkins job names', 'Jenkins links show their job (Folder › job #build), so identical “Dashboard [Jenkins]” bookmarks are easy to tell apart.', 'bookmarks'],
+    ['🖱', 'Ctrl+Click → new Chrome window', 'Desktop version: a click opens a new tab in your Chrome; Ctrl+Click opens a new Chrome window.', ''],
+  ] },
+  { v: '1.6', title: 'Jira and SSH tunnels', items: [
+    ['◆', 'Jira page', 'Add an issue (PAY-123 or a link): its pull requests and CM- items appear under it.', 'jira'],
+    ['⟳', 'SQL Reconnect / Disconnect', 'In the SQL toolbar and on right-click of a connection.', 'sql'],
+    ['➜', 'FileZilla arrows', 'Upload/Download are now arrow buttons between the panes.', 'files'],
+  ] },
+  { v: '1.5', title: 'Desktop icon', items: [
+    ['W', 'Taskbar icon', 'WorkHub has its own icon, so it is easy to find on the taskbar.', ''],
+  ] },
+];
+
+const TIPS = [
+  ['Ctrl+K', 'Search everything — servers, links, notes, files.'],
+  ['Ctrl+J', 'Open the chat and ask in plain English: “show prod servers”, “group putty by env”, “add jira PAY-123”.'],
+  ['Ctrl+B', 'Hide or show the left menu to get more room.'],
+  ['Copy anything', 'With “Watch clipboard” on, copied hosts, logins, JDBC strings and ssh commands are captured and organised automatically.'],
+  ['Double-click', 'A server in the PuTTY/FileZilla/SQL tree connects straight away; right-click shows everything else.'],
+  ['Drag', 'Drag servers onto folders in the trees, and files onto folders in Folders.'],
+  ['Workspaces', 'Each customer can have its own workspace — data, groups, naming rules and hidden links never mix.'],
+  ['Older copies', 'Every save in Folders keeps the previous version — “Older copies” brings it back.'],
+];
+
+const WhatsNew = {
+  latest: RELEASES[0].v,
+
+  html() {
+    const rel = (r, open) => `<details class="wn-rel" ${open ? 'open' : ''}><summary><b>Version ${esc(r.v)}</b> — ${esc(r.title)}</summary>
+      ${r.items.map(([icon, t, d, view]) => `<div class="wn-item"><span class="wn-ic">${icon}</span><div><b>${esc(t)}</b><div class="muted">${esc(d)}</div></div>
+        ${view ? `<button class="icon" data-wngo="${view}">Show me</button>` : ''}</div>`).join('')}</details>`;
+    return `<div class="wn-tabs"><button data-wntab="new" class="active">✨ What's new</button><button data-wntab="tips">💡 Tips</button></div>
+      <div data-wnpane="new">${RELEASES.map((r, i) => rel(r, i === 0)).join('')}</div>
+      <div data-wnpane="tips" hidden>${TIPS.map(([k, t]) => `<div class="wn-item"><kbd>${esc(k)}</kbd><div>${esc(t)}</div></div>`).join('')}</div>`;
+  },
+
+  open(tab = 'new') {
+    const d = $('#whatsNewDlg');
+    $('#whatsNewBody').innerHTML = this.html();
+    this.tab(tab);
+    $('#whatsNewHide').checked = false;
+    if (!d.open) d.showModal();
+  },
+
+  tab(t) {
+    $$('#whatsNewBody [data-wntab]').forEach(b => b.classList.toggle('active', b.dataset.wntab === t));
+    $$('#whatsNewBody [data-wnpane]').forEach(p => (p.hidden = p.dataset.wnpane !== t));
+  },
+
+  async close() {
+    if ($('#whatsNewHide').checked) await api('POST', '/api/tips', { hidden: this.latest }).catch(() => {});
+    $('#whatsNewDlg').close();
+  },
+
+  // At start-up: once per session, unless hidden for this release.
+  async startup() {
+    try { if (sessionStorage.getItem('wnShown') === this.latest) return; } catch { /* ignore */ }
+    const r = await api('GET', '/api/tips').catch(() => null);
+    if (!r || r.hidden === this.latest) return;
+    try { sessionStorage.setItem('wnShown', this.latest); } catch { /* ignore */ }
+    this.open();
+  },
+};
+
+$('#whatsNewBtn').onclick = () => WhatsNew.open();
+$('#whatsNewClose').onclick = () => WhatsNew.close();
+$('#whatsNewDlg').addEventListener('cancel', e => { e.preventDefault(); WhatsNew.close(); }); // Esc
+$('#whatsNewBody').addEventListener('click', e => {
+  const t = e.target.closest('[data-wntab]'); if (t) return WhatsNew.tab(t.dataset.wntab);
+  const go = e.target.closest('[data-wngo]'); if (go) { WhatsNew.close(); show(go.dataset.wngo); }
+});
+setTimeout(() => WhatsNew.startup(), 900);

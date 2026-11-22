@@ -104,6 +104,8 @@ const CMD = (() => {
     if ((m = s.match(/\b(open|launch|show)\s+(the\s+)?(links?|urls?|bookmarks?)\s+(in|with|using)\s+(google chrome|chrome|edge|microsoft edge|(?:the\s+)?default( browser)?|my default browser)\b/)))
       return [{ type: 'linkBrowser', v: /chrome/.test(m[5]) ? 'chrome' : /edge/.test(m[5]) ? 'edge' : 'default' }];
 
+    if (/^\s*(what'?s new|whats new|new features|release notes|changes|tips|show tips|help me|tip)\s*\??\s*$/.test(s)) return [{ type: 'whatsNew', tab: /tip/.test(s) ? 'tips' : 'new' }];
+
     // ---- naming rules: "name hosts containing -BAT- as Batch", "naming rules"
     if ((m = raw.match(/^\s*(?:name|label|call)\s+(?:all\s+)?(?:the\s+)?(?:hosts?|servers?|links?|connections?|anything|everything)?\s*(?:with|containing|that contain|which contain|matching|having)\s+(\S+)\s+(?:in (?:the )?(?:host ?name|name)\s+)?(?:as|to)\s+["']?(.+?)["']?\s*$/i))) return [{ type: 'nameRule', match: m[1], label: m[2] }];
     if (/^\s*(show |edit |open )?(the )?(naming|name) rules\s*$/.test(s)) return [{ type: 'nameRules' }];
@@ -533,6 +535,7 @@ async function runCommand(text) {
         said.push(`Servers and links whose host name contains <b>${esc(a.match)}</b> are now named <b>${esc(a.label)}</b> (this workspace only).`);
         break;
       }
+      case 'whatsNew': WhatsNew.open(a.tab); said.push("Here's what's new."); break;
       case 'nameRules': openNameRules(); said.push('Opened the naming rules.'); break;
       case 'jiraAdd': show('jira'); await Jira.add(a.ref); said.push(`Added ${esc(a.ref.toUpperCase())} to the Jira page — its pull requests and ${esc(Jira.cfg?.child_prefix || 'CM-')} items appear under it.`); break;
       case 'jiraRefresh': show('jira'); $('#jiraRefreshAll').click(); said.push('Refreshing all Jira issues.'); break;

@@ -516,6 +516,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/work/{id}/word", a.handleWorkWord)
 	mux.HandleFunc("PUT /api/work/{id}/blocks/{bid}", a.handleWorkBlock)
 	mux.HandleFunc("DELETE /api/work/{id}/blocks/{bid}", a.handleWorkBlockDelete)
+	mux.HandleFunc("GET /api/tips", a.handleTipsGet)
+	mux.HandleFunc("POST /api/tips", a.handleTipsHide)
 	mux.HandleFunc("GET /api/ref", a.handleRefTree)
 	mux.HandleFunc("POST /api/ref/folder", a.handleRefFolder)
 	mux.HandleFunc("POST /api/ref/link", a.handleRefLink)

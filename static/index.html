@@ -33,6 +33,7 @@
     <label class="switch small"><input type="checkbox" id="captureAll"><span></span> Keep clips with no info</label>
   </div>
   <div class="side-foot">
+    <button id="whatsNewBtn" class="ghost" title="New features in this version, and tips">✨ What's new &amp; tips</button>
     <div id="appVersion" class="muted tiny"></div>
     <div id="dataDir" class="muted tiny"></div>
     <button id="importBtn" class="ghost" title="Bring in data from an older WorkHub folder">Import data…</button>
@@ -342,6 +343,12 @@
 <datalist id="protoList"><option>ssh</option><option>postgres</option><option>https</option><option>http</option><option>rdp</option><option>oracle</option><option>postgres</option><option>mysql</option><option>sqlserver</option><option>ftp</option><option>smb</option><option>ldap</option></datalist>
 <datalist id="envList"><option>PROD</option><option>UAT</option><option>TEST</option><option>STAGE</option><option>DEV</option><option>DR</option></datalist>
 
+<dialog id="whatsNewDlg">
+  <h3>WorkHub — what's new</h3>
+  <div id="whatsNewBody"></div>
+  <div class="row wn-foot"><label class="check"><input type="checkbox" id="whatsNewHide"> Don't show this again (until the next version)</label><span class="spacer"></span><button id="whatsNewClose" class="primary">Close</button></div>
+</dialog>
+
 <dialog id="refLinkDlg">
   <form method="dialog">
     <h3>🔗 Link to a folder or file</h3>
@@ -411,6 +418,7 @@
 <script src="work.js"></script>
 <script src="jira.js"></script>
 <script src="reffiles.js"></script>
+<script src="whatsnew.js"></script>
 <script src="commands.js"></script>
 </body>
 </html>
