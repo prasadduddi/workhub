@@ -91,6 +91,10 @@ func Parse(text string) []Finding {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	var out []Finding
 	for _, block := range splitBlocks(text) {
+		if fs, ok := parseLoginList(block); ok { // several logins for one server
+			out = append(out, fs...)
+			continue
+		}
 		lines := nonEmptyLines(block)
 		if perLine(lines) {
 			for _, l := range lines {

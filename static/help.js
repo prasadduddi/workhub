@@ -46,6 +46,12 @@ const HELP_TOPICS = [
     'Copy any text with hosts, users, passwords or links (an email, Teams message, wiki page) — WorkHub files what it recognises.',
     'Click “Saving to …” under the switch to choose the project new captures go to.',
     'Everything captured is listed on the Captured page; copying the same text twice is ignored.'] },
+  { t: 'Several users on one server', k: 'several multiple users logins accounts same server host paste list table each user password', v: 'terminal', s: [
+    'Copy or paste the server with its logins in any of these shapes:',
+    'one per line: ssh deploy@srv-07 pass Dep#1 (pass with or without “:”);',
+    'a server line, then lines like user: deploy password: Dep#1, or deploy / Dep#1;',
+    'or a table with Host / User / Password columns (the Host column can be left out under a server line).',
+    'Each user becomes its own connection named host-user (e.g. srv-07-deploy) in the SSH and FTP trees; double-click connects as that user with that password.'] },
   { t: 'Sort new captures (📥)', k: 'unsorted inbox new captures sort suggested folder move', v: 'dashboard', s: [
     'New captures show 📥 with a suggested folder (where similar servers live).',
     'Press ✓ Move there, or Keep where it is, or Edit…',

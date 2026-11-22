@@ -4,6 +4,10 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.9.3', title: 'Several users on one server', items: [
+    ['👥', 'Paste a server with several logins', 'Copy or paste a server with a list of users and passwords — one “ssh user@host pass …” per line, a server line then “user: … password: …” or “user / password” lines, or a Host / User / Password table. Each user becomes its own connection in SSH and FTP; double-click connects as that user.', 'terminal'],
+    ['🏷', 'Connections named host-user', 'Logins are named like srv-07.uat.acme.local-deploy (databases host-user / service), so several users on one server stay apart. Names you typed yourself are kept.', 'terminal'],
+  ] },
   { v: '1.9.1', title: 'Jira issues fix, Help', items: [
     ['👤', 'All your Jira issues', 'Jira → 👤 Add my issues (and the automatic check every 15 minutes) now adds everything assigned to you — open issues under 📂 In progress, done ones under ✅ Completed. Fixed: with “Sign in with browser” on Jira Cloud no issues were found.', 'jira'],
     ['↔', 'Click again to toggle the sidebar', 'On SSH, FTP, SQL, Tasks and the other tree pages, clicking the page’s icon again switches the sidebar between icons only and full size.', ''],
