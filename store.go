@@ -216,7 +216,8 @@ func OpenStore(dir string) (*Store, error) {
 			return nil, fmt.Errorf("corrupt data file %s: %w", s.path, err)
 		}
 		s.applyNameRules() // automatic names follow the current rules and labels
-		s.migrateThreads() // work item documents become thread posts
+		s.migrateThreads()
+		s.tidyClips() // work item documents become thread posts
 	}
 	go s.saver()
 	return s, nil
@@ -753,6 +754,76 @@ func entryKey(host string, port int, user, url string) string {
 
 // Ingest parses text, stores the clip and merges findings into entries.
 // Clipboard captures without findings are dropped unless CaptureAll is on.
+// tidyClips (at start): removes WorkHub's own sign-in links that older
+// versions captured (and the token in any text), and merges captures of the
+// same text into the first one.
+func (s *Store) tidyClips() {
+	keep := s.st.Entries[:0]
+	for _, e := range s.st.Entries {
+		if !selfAddr.MatchString(e.URL) {
+			keep = append(keep, e)
+		}
+	}
+	for i := len(keep); i < len(s.st.Entries); i++ {
+		s.st.Entries[i] = nil
+	}
+	s.st.Entries = keep
+	norm := func(t string) string { return strings.Join(strings.Fields(t), " ") }
+	first := map[string]*Clip{}
+	moved := map[string]string{} // removed clip id → kept clip id
+	clips := s.st.Clips[:0]
+	for _, c := range s.st.Clips {
+		if selfLink.MatchString(c.Text) {
+			c.Text = selfLink.ReplaceAllString(c.Text, "${1}•••")
+			if strings.TrimSpace(strings.ReplaceAll(c.Text, "•••", "")) == "" || selfLinkOnly(c.Text) {
+				moved[c.ID] = ""
+				continue
+			}
+		}
+		k := norm(c.Text)
+		if f := first[k]; f != nil {
+			for _, id := range c.EntryIDs {
+				f.EntryIDs = appendUnique(f.EntryIDs, id)
+			}
+			moved[c.ID] = f.ID
+			continue
+		}
+		first[k] = c
+		clips = append(clips, c)
+	}
+	for i := len(clips); i < len(s.st.Clips); i++ {
+		s.st.Clips[i] = nil
+	}
+	s.st.Clips = clips
+	if len(moved) == 0 {
+		return
+	}
+	for _, e := range s.st.Entries {
+		var ids []string
+		for _, id := range e.ClipIDs {
+			if to, ok := moved[id]; !ok {
+				ids = append(ids, id)
+			} else if to != "" {
+				ids = appendUnique(ids, to)
+			}
+		}
+		e.ClipIDs = ids
+	}
+	for _, w := range s.st.WorkItems {
+		for _, p := range w.Posts {
+			if to, ok := moved[p.Ref]; ok && p.Kind == "capture" {
+				p.Ref = to
+			}
+		}
+	}
+	s.changed()
+}
+
+// selfLinkOnly: the text is just WorkHub's own (token-less) sign-in link.
+func selfLinkOnly(t string) bool {
+	return regexp.MustCompile(`(?i)^\s*https?://(?:127\.0\.0\.1|localhost):\d+/?\S*t=•••\S*\s*$`).MatchString(t)
+}
+
 // seenClip: the same text (ignoring spacing) is among the recent captures.
 func (s *Store) seenClip(text string) bool {
 	norm := func(t string) string { return strings.Join(strings.Fields(t), " ") }
@@ -765,12 +836,28 @@ func (s *Store) seenClip(text string) bool {
 	return false
 }
 
+// selfLink is WorkHub's own sign-in link (http://127.0.0.1:PORT/?t=TOKEN):
+// never captured, and its token never stored.
+var selfLink = regexp.MustCompile(`(?i)(https?://(?:127\.0\.0\.1|localhost):\d+/?[^\s"'<>]*?[?&]t=)[0-9a-f]{16,}`)
+
+// selfAddr: any link to a local WorkHub sign-in address (token or not).
+var selfAddr = regexp.MustCompile(`(?i)^https?://(?:127\.0\.0\.1|localhost):\d+/?[^\s]*[?&]t=`)
+
 func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
+	if selfLink.MatchString(text) {
+		if strings.TrimSpace(selfLink.ReplaceAllString(text, "")) == "" || strings.TrimSpace(selfLink.ReplaceAllString(text, "")) == "#tasks" {
+			return nil, nil // just WorkHub's own link
+		}
+		text = selfLink.ReplaceAllString(text, "${1}•••")
+	}
 	all := Parse(text)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var findings []Finding
 	for _, f := range all {
+		if selfAddr.MatchString(f.URL) {
+			continue // WorkHub's own address
+		}
 		if f.URL == "" || !blockedURL(f.URL, s.st.Settings.BlockedSites) {
 			findings = append(findings, f)
 		}

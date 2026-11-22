@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestUnsortedInbox(t *testing.T) {
 	s, _ := OpenStore(t.TempDir())
@@ -30,5 +33,42 @@ func TestDuplicateClipboardSkipped(t *testing.T) {
 	}
 	if c, _ := s.Ingest("ssh ops@db-01.test.example.com", "paste", ""); c == nil {
 		t.Fatal("an explicit paste should still be kept")
+	}
+}
+
+func TestOwnLinkNeverCaptured(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	if c, _ := s.Ingest("http://127.0.0.1:47950/?t=0123456789abcdef0123456789abcdef", "clipboard", ""); c != nil {
+		t.Fatal("WorkHub's own sign-in link was captured")
+	}
+	c, es := s.Ingest("see http://127.0.0.1:47950/?t=0123456789abcdef0123456789abcdef and ssh ops@app-03.test.example.com", "paste", "")
+	if c == nil || strings.Contains(c.Text, "0123456789abcdef") {
+		t.Fatalf("token kept in the capture: %+v", c)
+	}
+	for _, e := range es {
+		if strings.Contains(e.URL, "127.0.0.1") {
+			t.Fatalf("own address saved as an entry: %s", e.URL)
+		}
+	}
+}
+
+func TestTidyClipsMergesDuplicatesAndTokens(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := OpenStore(dir)
+	s.mu.Lock()
+	tok := "http://127.0.0.1:47950/?t=0123456789abcdef0123456789abcdef"
+	e := &Entry{ID: "e1", Host: "app-09.test.example.com", ClipIDs: []string{"c1", "c2"}}
+	s.st.Entries = append(s.st.Entries, e, &Entry{ID: "e2", URL: tok})
+	s.st.Clips = append(s.st.Clips,
+		&Clip{ID: "c1", Text: "ssh ops@app-09.test.example.com", EntryIDs: []string{"e1"}},
+		&Clip{ID: "c2", Text: "ssh  ops@app-09.test.example.com\n", EntryIDs: []string{"e1"}},
+		&Clip{ID: "c3", Text: tok})
+	s.tidyClips()
+	s.mu.Unlock()
+	if len(s.st.Clips) != 1 || s.st.Clips[0].ID != "c1" {
+		t.Fatalf("clips after tidy: %d", len(s.st.Clips))
+	}
+	if len(s.st.Entries) != 1 || strings.Join(s.st.Entries[0].ClipIDs, ",") != "c1" {
+		t.Fatalf("entries after tidy: %+v", s.st.Entries)
 	}
 }

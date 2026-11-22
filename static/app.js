@@ -354,7 +354,20 @@ CodeMirror.commands.duplicateLine = cm => {
 };
 
 // ---------- navigation ----------
+// Opening a connection shrinks the sidebar to icons, so the server tree and
+// the session get the room; it comes back on leaving SSH / FTP / SQL (or with »).
+const WORK_VIEWS = ['terminal', 'files', 'sql'];
+function roomForWork() {
+  if (document.body.classList.contains('side-collapsed')) return;
+  document.body.classList.add('side-collapsed'); S.autoSide = true;
+  $('#sideToggle').textContent = '»';
+  setTimeout(() => { fitActiveTerm(); window.dispatchEvent(new Event('resize')); }, 50);
+}
 function show(view) {
+  if (S.autoSide && !WORK_VIEWS.includes(view)) { // put the sidebar back as it was
+    S.autoSide = false;
+    applySide();
+  }
   $$('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   history.replaceState(null, '', '#' + view);
@@ -1460,7 +1473,7 @@ const Term = {
   },
 
   create(e, creds, local) {
-    show('terminal');
+    show('terminal'); roomForWork();
     const el = document.createElement('div');
     el.className = 'termhost';
     $('#termWrap').append(el);
@@ -1662,7 +1675,7 @@ $('#localPane').addEventListener('click', async e => {
 });
 
 Remote.connect = async e => {
-  show('files');
+  show('files'); roomForWork();
   let creds = {};
   if (needsCreds(e) && !(isFTP(e) && !e.username)) { creds = await askCreds(e); if (!creds) return; }
   if (Remote.sid) api('POST', '/api/sftp/close', { sid: Remote.sid }).catch(() => {});
@@ -2556,7 +2569,7 @@ const SQL = {
   },
 
   async open(e, opts = {}) {
-    show('sql');
+    show('sql'); roomForWork();
     this.expanded.add(e.id); // the object tree opens under the connection
     const open = this.tabs.find(t => t.entry.id === e.id);
     if (open) { Tree.render(); return this.activate(open); }
@@ -3439,6 +3452,7 @@ dragBar($('#sideSplit'), {
 });
 function toggleSide() {
   const c = document.body.classList.toggle('side-collapsed');
+  S.autoSide = false; // the user decides now
   if (!narrowWin.matches) store.set('sideCollapsed', c); // on a narrow window: just for now
   $('#sideToggle').textContent = c ? '»' : '«';
   fitActiveTerm();
