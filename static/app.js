@@ -451,10 +451,85 @@ function renderFilters() {
   fill($('#fEnv'), [...new Set(S.entries.map(e => e.env).filter(Boolean))].sort(), 'All envs');
 }
 
+// ---------- search ----------
+// Every word must appear somewhere (name, host, URL, user, notes, naming-rule
+// label, type…); "-word" leaves out. key:value narrows further, e.g.
+// env:prod type:db user:ops app:batch port:1521 has:password no:env is:fail
+// needs:attention. Typing acmebat01 also finds acme-bat-01.
+const SEARCH_KEYS = /^(env|type|user|app|port|host|project|in|tag|has|no|is|needs):(.+)$/;
+let lastQuery = ['', null];
+function parseQuery(q) {
+  if (lastQuery[0] === q) return lastQuery[1];
+  const out = { words: [], filters: [] };
+  for (const t of q.toLowerCase().match(/-?[\w.]*:?"[^"]*"|\S+/g) || []) {
+    const neg = t.length > 1 && t.startsWith('-'), b = neg ? t.slice(1) : t, m = b.match(SEARCH_KEYS);
+    if (m) out.filters.push({ k: m[1], v: m[2].replace(/"/g, ''), neg });
+    else if (b.replace(/"/g, '')) out.words.push({ v: b.replace(/"/g, ''), neg });
+  }
+  lastQuery = [q, out];
+  return out;
+}
+const squash = s => s.replace(/[-_.:/\s]+/g, '');
+function searchText(e) {
+  return [e.name, e.host, e.url, linkLabel(e.url), e.username, e.project, e.env, e.protocol, e.port, e.notes, ruleLabel(e.host) || ruleLabel(e.url),
+    serverType(e), dbKindOf(e), ...(e.tags || []), ...Object.entries(e.extra || {}).flat()].filter(Boolean).join(' ').toLowerCase();
+}
+const isConn = e => canSSH(e) || canDB(e) || canFiles(e);
+// What's missing or wrong with an entry: [key, text].
+function problems(e) {
+  const out = [];
+  if (!isConn(e)) return out; // web links: an unreachable page isn't missing information
+  if (e.status === 'fail') out.push(['failing', 'Last connection failed' + (e.status_msg ? ': ' + e.status_msg : '')]);
+  if (!e.username) out.push(['user', 'No username']);
+  else if (!e.has_password && !e.password && !e.key_file) out.push(['password', 'No password or key']);
+  if (!e.env) out.push(['env', 'No environment']);
+  if (canDB(e) && !dbService(e)?.name) out.push(['service', 'No service name / database']);
+  return out;
+}
+const HAS = {
+  password: e => !!(e.has_password || e.password), user: e => !!e.username, url: e => !!e.url, env: e => !!e.env, key: e => !!e.key_file,
+  notes: e => !!e.notes, tunnels: e => !!e.extra?.tunnels, commands: e => !!e.extra?.commands, jdbc: e => !!jdbcURL(e), tags: e => !!e.tags?.length,
+};
+function filterOK(e, { k, v }) {
+  const has = s => (s || '').toLowerCase().includes(v);
+  switch (k) {
+    case 'env': return v === 'none' ? !e.env : (e.env || '').toLowerCase().startsWith(v);
+    case 'type': return TYPE_TEST[v] ? TYPE_TEST[v](e) : has(e.protocol) || has(serverType(e)) || has(dbKindOf(e));
+    case 'user': return has(e.username);
+    case 'app': return has(ruleLabel(e.host) || ruleLabel(e.url) || serverApp(e));
+    case 'port': return String(e.port || '') === v;
+    case 'host': return has(e.host) || has(e.url);
+    case 'project': case 'in': return has(e.project);
+    case 'tag': return (e.tags || []).some(has);
+    case 'has': return HAS[v] ? HAS[v](e) : has(searchText(e));
+    case 'no': return HAS[v] ? !HAS[v](e) : !has(searchText(e));
+    case 'is': return { ok: e.status === 'ok', working: e.status === 'ok', fail: e.status === 'fail', failed: e.status === 'fail', untested: !e.status,
+      pinned: !!e.favorite, fav: !!e.favorite, used: !!e.last_used }[v] ?? (e.env || '').toLowerCase() === v;
+    case 'needs': return v === 'attention' || v === 'fix' ? problems(e).length > 0 : problems(e).some(([p]) => p.startsWith(v));
+  }
+  return true;
+}
 function matches(e, q) {
   if (!q) return true;
-  const hay = [e.name, e.host, e.url, linkLabel(e.url), e.username, e.project, e.env, e.protocol, e.port, e.notes, ...(e.tags || []), ...Object.entries(e.extra || {}).flat()].join(' ').toLowerCase();
-  return q.split(/\s+/).every(w => hay.includes(w));
+  const { words, filters } = parseQuery(q);
+  if (!filters.every(f => filterOK(e, f) !== f.neg)) return false;
+  if (!words.length) return true;
+  const hay = searchText(e), flat = squash(hay);
+  return words.every(({ v, neg }) => (hay.includes(v) || (squash(v).length > 2 && flat.includes(squash(v)))) !== neg);
+}
+// How well an entry fits the words typed: exact host / IP / name first, then
+// a host that starts with them, then name or host containing them, then
+// anything else; ties go to the most used.
+function searchScore(e, q) {
+  const words = parseQuery(q).words.filter(w => !w.neg).map(w => w.v);
+  if (!words.length) return 0;
+  const host = (e.host || '').toLowerCase(), name = (e.name || '').toLowerCase(), all = words.join(' ');
+  let s = 0;
+  if (host === all || name === all || (e.url || '').toLowerCase() === all) s += 100;
+  else if (host.startsWith(words[0]) || squash(host).startsWith(squash(words[0]))) s += 50;
+  if (words.every(w => host.includes(w) || name.includes(w) || squash(host).includes(squash(w)))) s += 30;
+  if (words.some(w => (ruleLabel(e.host) || '').toLowerCase().startsWith(w))) s += 10;
+  return s + Math.min(usageScore(e), 20) + (e.favorite ? 5 : 0);
 }
 
 // View options the chat can set on top of the toolbar filters.
@@ -511,7 +586,11 @@ function sortEntries(list) {
 
 function filtered() {
   const q = $('#search').value.trim().toLowerCase(), p = $('#fProject').value, env = $('#fEnv').value;
-  return sortEntries(S.entries.filter(e => (!p || e.project === p) && (!env || e.env === env) && matches(e, q) && viewMatch(e)));
+  const list = S.entries.filter(e => (!p || e.project === p) && (!env || e.env === env) && matches(e, q) && viewMatch(e));
+  S.ranked = !S.view.sort && parseQuery(q).words.some(w => !w.neg); // searching: best match first
+  if (!S.ranked) return sortEntries(list);
+  const score = new Map(list.map(e => [e, searchScore(e, q)]));
+  return list.sort((a, b) => score.get(b) - score.get(a) || byUsage(a, b));
 }
 
 // Chips showing what the chat changed, each removable.
@@ -581,7 +660,9 @@ function renderStats(list) {
     ['PROD', list.filter(e => e.env === 'PROD').length],
     ['Captured today', capturedToday],
   ];
-  $('#stats').innerHTML = stats.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+  const fix = S.entries.filter(e => problems(e).length).length;
+  $('#stats').innerHTML = stats.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('')
+    + (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing (user, password, environment, service name) or a failed login — click to list them"><b>⚠ ${fix}</b><span>Need attention</span></button>` : '');
   $('#inboxCount').textContent = capturedToday || '';
 }
 
@@ -602,19 +683,29 @@ function renderBoard() {
   }[S.groupBy] || (e => e.project || 'General');
   const groups = {};
   list.forEach(e => (groups[keyOf(e)] ||= []).push(e));
-  board.innerHTML = Object.keys(groups).sort().map(g => {
+  S.kbList = list; S.kbSel = Math.min(S.kbSel || 0, list.length - 1);
+  // Searching: the group holding the best match comes first (Object keys keep list order).
+  board.innerHTML = (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
     const items = groups[g];
     const body = S.layout === 'table' ? tableHTML(items) : cardsHTML(items);
     return `<div class="group"><div class="group-head"><h3>${esc(g)}</h3><span class="n">${items.length}</span>
       ${S.groupBy === 'project' ? `<button class="icon ghost" data-act="rename-project" data-project="${esc(g)}" title="Rename project">✎</button>` : ''}</div>${body}</div>`;
   }).join('') + jiraResultsHTML(jira);
+  markKbSel();
+}
+// The result Enter acts on (↑/↓ in the search box move it).
+function markKbSel() {
+  $$('#board .kbsel').forEach(x => x.classList.remove('kbsel'));
+  const e = $('#search').value.trim() && S.kbList?.[S.kbSel];
+  const el = e && $(`#board [data-detail="${e.id}"]`);
+  if (el) { el.classList.add('kbsel'); return el; }
 }
 
 // Jira issues matching the main search (every word must appear somewhere:
 // key, summary, status, assignee, pull requests or CM- items).
 function jiraMatches(q) {
-  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length || typeof Jira === 'undefined') return [];
+  const { words: ws, filters } = parseQuery(q.trim().toLowerCase()), words = ws.filter(w => !w.neg).map(w => w.v);
+  if (!words.length || filters.length || typeof Jira === 'undefined') return []; // key:value filters are about connections
   return Jira.issues.filter(j => {
     const text = [j.key, j.summary, j.status, j.assignee, j.type, j.done ? 'completed done' : 'open',
       ...j.prs.map(p => `${p.name} ${p.repo} ${p.status}`), ...j.children.map(c => `${c.key} ${c.summary} ${c.status}`)].join(' ').toLowerCase();
@@ -643,7 +734,7 @@ function cardsHTML(items) {
     (hosts[k] ||= []).push(e);
   });
   const best = es => Math.max(...es.map(usageScore));
-  const cards = S.view.sort ? Object.values(hosts) // already in the chosen order
+  const cards = S.view.sort || S.ranked ? Object.values(hosts) // already in the chosen (or best-match) order
     : Object.values(hosts).sort((a, b) => (b.some(e => e.favorite) - a.some(e => e.favorite)) || best(b) - best(a) || (a[0].host || a[0].name).localeCompare(b[0].host || b[0].name));
   return '<div class="cards">' + cards.map(es => {
     const h = es[0], env = es.find(e => e.env)?.env || '', fav = es.some(e => e.favorite);
@@ -660,9 +751,14 @@ function cardsHTML(items) {
   }).join('') + '</div>';
 }
 
+function warnChip(e) {
+  const p = problems(e);
+  return p.length ? `<button class="warnchip" data-act="edit" data-id="${e.id}" title="${esc(p.map(x => '• ' + x[1]).join('\n'))}\nClick to fill in">⚠ ${p.length === 1 ? esc(p[0][1]) : p.length + ' to fix'}</button>` : '';
+}
+
 function svcHTML(e) {
   const rows = [];
-  const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, e.name !== e.host ? ruleName(e) : ''].filter(Boolean).join(' ');
+  const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, e.name !== e.host ? ruleName(e) : '', warnChip(e)].filter(Boolean).join(' ');
   if (label) rows.push(['', label]);
   if (e.url) rows.push(['URL', `${linkLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span>` : ''}<a href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}">${esc(e.url)}</a> <button class="icon" data-copy="${esc(e.url)}">copy</button>`]);
   const jdbc = !/^jdbc:/i.test(e.url || '') && jdbcURL(e);
@@ -692,7 +788,7 @@ function svcHTML(e) {
 const TABLE_COLS = [['Env', 95], ['Name', 170], ['Host', 190], ['Port', 64], ['Type', 80], ['URL', 280], ['User', 130], ['Password', 130], ['Captured', 170], ['', 110]];
 function tableHTML(items) {
   const cell = [
-    e => `${dot(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`,
+    e => `${dot(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''} ${problems(e).length ? `<span class="warnchip" title="${esc(problems(e).map(x => x[1]).join('\n'))}">⚠</span>` : ''}`,
     e => ruleName(e),
     e => `<span class="copy" data-copy="${esc(e.host)}">${esc(e.host)}</span>`,
     e => e.port || '',
@@ -849,7 +945,37 @@ $('#detailDlg').addEventListener('click', ev => {
 $('#detailCopyAll').onclick = () => copyText(showDetails.text);
 $('#detailClose').onclick = () => $('#detailDlg').close();
 
-['#search', '#fProject', '#fEnv'].forEach(s => $(s).addEventListener('input', renderBoard));
+['#search', '#fProject', '#fEnv'].forEach(s => $(s).addEventListener('input', () => { S.kbSel = 0; renderBoard(); }));
+$('#stats').addEventListener('click', ev => { const b = ev.target.closest('[data-find]'); if (b) { $('#search').value = b.dataset.find; S.kbSel = 0; renderBoard(); } });
+// Keyboard: ↑/↓ choose a result, Enter connects or opens it, Shift+Enter shows
+// its details, Alt+P / U / H / J copy password, user, host, JDBC or URL.
+$('#search').addEventListener('keydown', ev => {
+  const list = S.kbList || [];
+  if (!$('#search').value.trim() || !list.length) return;
+  const e = list[S.kbSel] || list[0];
+  const key = ev.key.toLowerCase();
+  if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    S.kbSel = Math.max(0, Math.min(list.length - 1, (S.kbSel || 0) + (ev.key === 'ArrowDown' ? 1 : -1)));
+    markKbSel()?.scrollIntoView({ block: 'nearest' });
+  } else if (ev.key === 'Enter') {
+    ev.preventDefault();
+    if (ev.shiftKey) return showDetails(e);
+    if (canSSH(e)) return Term.open(e);
+    if (canDB(e)) return SQL.open(e);
+    if (canFiles(e)) return Remote.connect(e);
+    if (e.url) return openURL(e);
+    showDetails(e);
+  } else if (ev.altKey && !ev.ctrlKey && 'puhj'.includes(key) && key) {
+    ev.preventDefault();
+    const v = { p: e.password, u: e.username, h: e.host || e.url, j: jdbcURL(e) || e.url }[key];
+    const what = { p: 'Password', u: 'Username', h: 'Host', j: jdbcURL(e) ? 'JDBC URL' : 'URL' }[key];
+    if (!v) return toast(`${ruleName(e).replace(/<[^>]+>/g, '')}: no ${what.toLowerCase()} saved`, true);
+    copyText(v, `${what} copied — ${e.name || e.host}`);
+  }
+});
+$('#search').addEventListener('focus', () => $('#searchHint').hidden = false);
+$('#search').addEventListener('blur', () => setTimeout(() => ($('#searchHint').hidden = !$('#search').value.trim()), 150));
 for (const [id, key] of [['#groupBy', 'groupBy'], ['#layout', 'layout']]) {
   const seg = $(id), attr = key === 'groupBy' ? 'g' : 'l';
   $$('button', seg).forEach(b => b.classList.toggle('active', b.dataset[attr] === S[key]));

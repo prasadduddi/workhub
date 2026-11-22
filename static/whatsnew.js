@@ -4,7 +4,10 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
-  { v: '1.8', title: 'Jira browser sign-in, macros, Open in', items: [
+  { v: '1.8', title: 'Smarter search, Jira browser sign-in, macros', items: [
+    ['🔎', 'Smarter search', 'Best match first (exact host or IP on top). Naming-rule labels are searched too (“batch uat”), and acmebat01 finds acme-bat-01. Filters: env:prod type:db user:ops app:batch port:1521 has:password no:env is:fail -word.', 'dashboard'],
+    ['⌨', 'Search from the keyboard', 'In the search box: ↑/↓ choose a result, Enter connects or opens it, Shift+Enter shows details, Alt+P / Alt+U / Alt+H / Alt+J copy password, user, host, JDBC or URL.', 'dashboard'],
+    ['⚠', 'Needs attention', 'Connections missing a user, password, environment or service name, or whose last login failed, show a ⚠ — click it to fill in. The ⚠ tile on the dashboard lists them all (needs:attention).', 'dashboard'],
     ['🔑', 'Jira: Sign in with browser (Desktop version)', 'Jira settings → Sign-in type “Sign in with browser”: log in to Jira in a small window with your normal login (SSO too) — no token needed. WorkHub keeps the session alive and signs in again by itself when it can.', 'jira'],
     ['▶', 'Run macros', 'Edit an SSH connection → “Commands to run after connecting” (one per line) and tick Run macros: they are typed in one by one each time the session connects.', 'terminal'],
     ['↗', 'Open in the real programs from more places', 'Right-click a search result or a connection in the tree: Open in PuTTY / FileZilla for servers, SQL Developer (Oracle) or DBeaver for databases. The Edit dialog has the same buttons.', 'dashboard'],
