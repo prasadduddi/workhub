@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -193,5 +195,132 @@ func TestTunnelForUsesExistingPort(t *testing.T) {
 	a := &App{store: st, dataDir: t.TempDir(), tunnels: &tunnelManager{}}
 	if via, err := a.tunnelFor(port); err != nil || via != "" {
 		t.Fatalf("should use the running tunnel, got %q %v", via, err)
+	}
+}
+
+// testSSHServer: password-only SSH server forwarding direct-tcpip; counts
+// login attempts and can drop every connection.
+func testSSHServer(t *testing.T, pass string) (port int, attempts *int32, dropAll func()) {
+	_, hostKey, _ := ed25519.GenerateKey(rand.Reader)
+	signer, _ := ssh.NewSignerFromKey(hostKey)
+	var n int32
+	var mu sync.Mutex
+	var conns []net.Conn
+	cfg := &ssh.ServerConfig{PasswordCallback: func(c ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) {
+		atomic.AddInt32(&n, 1)
+		if string(p) == pass {
+			return nil, nil
+		}
+		return nil, errors.New("denied")
+	}}
+	cfg.AddHostKey(signer)
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			nc, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			conns = append(conns, nc)
+			mu.Unlock()
+			go func() {
+				_, chans, reqs, err := ssh.NewServerConn(nc, cfg)
+				if err != nil {
+					return
+				}
+				go ssh.DiscardRequests(reqs)
+				for nch := range chans {
+					var req struct {
+						Host  string
+						Port  uint32
+						Orig  string
+						OPort uint32
+					}
+					ssh.Unmarshal(nch.ExtraData(), &req)
+					target, err := net.Dial("tcp", net.JoinHostPort(req.Host, strconv.Itoa(int(req.Port))))
+					if err != nil {
+						nch.Reject(ssh.ConnectionFailed, err.Error())
+						continue
+					}
+					ch, creqs, _ := nch.Accept()
+					go ssh.DiscardRequests(creqs)
+					go func() { io.Copy(ch, target); ch.Close() }()
+					go func() { io.Copy(target, ch); target.Close() }()
+				}
+			}()
+		}
+	}()
+	return ln.Addr().(*net.TCPAddr).Port, &n, func() {
+		mu.Lock()
+		for _, c := range conns {
+			c.Close()
+		}
+		conns = nil
+		mu.Unlock()
+	}
+}
+
+func freePort() int {
+	l, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+func waitFor(t *testing.T, what string, cond func() bool) {
+	for i := 0; i < 100; i++ {
+		if cond() {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("timed out: " + what)
+}
+
+func TestTunnelKeeper(t *testing.T) {
+	keeperTick = 50 * time.Millisecond
+	db, _ := net.Listen("tcp", "127.0.0.1:0") // the "database"
+	defer db.Close()
+	go func() {
+		for {
+			c, err := db.Accept()
+			if err != nil {
+				return
+			}
+			c.Write([]byte("ORACLE"))
+			c.Close()
+		}
+	}()
+	sshPort, attempts, dropAll := testSSHServer(t, "pw")
+	st, _ := OpenStore(t.TempDir())
+	a := &App{store: st, dataDir: t.TempDir(), tunnels: &tunnelManager{}}
+	good, bad := freePort(), freePort()
+	st.SaveEntry(EntryInput{Name: "jump", Host: "127.0.0.1", Port: sshPort, Protocol: "ssh", Username: "u", Password: ptr("pw"),
+		Extra: map[string]string{"tunnels": fmt.Sprintf("%d:127.0.0.1:%d", good, db.Addr().(*net.TCPAddr).Port), "tunnels_auto": "1"}})
+	st.SaveEntry(EntryInput{Name: "jump-wrong-pw", Host: "127.0.0.1", Port: sshPort, Protocol: "ssh", Username: "u", Password: ptr("WRONG"),
+		Extra: map[string]string{"tunnels": fmt.Sprintf("%d:127.0.0.1:1", bad), "tunnels_auto": "1"}})
+	go a.tunnelKeeper()
+	read := func() string {
+		c, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", good))
+		if err != nil {
+			return ""
+		}
+		defer c.Close()
+		c.SetReadDeadline(time.Now().Add(2 * time.Second))
+		b := make([]byte, 6)
+		n, _ := io.ReadFull(c, b)
+		return string(b[:n])
+	}
+	waitFor(t, "tunnel started by itself", func() bool { return read() == "ORACLE" })
+	dropAll() // network blip
+	waitFor(t, "tunnel back after the connection dropped", func() bool { return a.tunnels.servesPort(good) && read() == "ORACLE" })
+	before := atomic.LoadInt32(attempts)
+	time.Sleep(600 * time.Millisecond)
+	if extra := atomic.LoadInt32(attempts) - before; extra > 0 {
+		t.Fatalf("kept trying the wrong password (%d more logins)", extra)
+	}
+	if a.tunnels.servesPort(bad) {
+		t.Fatal("wrong password but tunnel running?")
 	}
 }

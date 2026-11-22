@@ -195,7 +195,7 @@ def seed_api(sim, port):
     a.call("POST", "/api/entries", {"name": "LAB acme-app-01 (live demo)", "project": "Lab", "host": "127.0.0.1", "port": 2222, "protocol": "ssh", "env": "UAT",
                                     "username": "deploy", "password": "Demo#2026", "notes": "A real server on this Mac (tools/demolab). Try PuTTY and FileZilla."})
     a.call("POST", "/api/entries", {"name": "LAB acme-bat-01 (live demo)", "project": "Lab", "host": "127.0.0.1", "port": 2223, "protocol": "sftp", "env": "UAT",
-                                    "username": "batch", "password": "Batch#2026", "extra": {"tunnels": "15222:127.0.0.1:2222"}})
+                                    "username": "batch", "password": "Batch#2026", "extra": {"tunnels": "15222:127.0.0.1:2222", "tunnels_auto": "1"}})
     # Reference folders: copies, plus a link to a folder that stays where it is.
     for rel, body in FILES.items():
         a.call("PUT", "/api/ref/file?path=" + urllib.parse.quote(rel), raw=body.encode())

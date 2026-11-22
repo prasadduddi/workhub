@@ -668,7 +668,8 @@ async function openEntryDialog(e) {
   f.dbname.value = ex.service || ex.service_name || ex.database || ex.db_name || ex.dbname || ex.sid || '';
   f.tunnels.value = ex.tunnels || '';
   f.tunnels_on.checked = ex.tunnels_off !== '1';
-  delete ex.tunnels; delete ex.tunnels_off;
+  f.tunnels_auto.checked = ex.tunnels_auto === '1';
+  delete ex.tunnels; delete ex.tunnels_off; delete ex.tunnels_auto;
   f.is_sid.checked = !!ex.sid && !(ex.service || ex.service_name || ex.database);
   for (const k of DB_KEYS) delete ex[k];
   f.extra.value = Object.entries(ex).map(([k, x]) => `${k}=${x}`).join('\n');
@@ -697,6 +698,7 @@ function entryFormBody() {
   f.extra.value.split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) extra[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
   if (f.tunnels.value.trim()) extra.tunnels = f.tunnels.value.trim();
   if (!f.tunnels_on.checked) extra.tunnels_off = '1';
+  if (f.tunnels_auto.checked && f.tunnels.value.trim()) extra.tunnels_auto = '1';
   const db = f.dbname.value.trim();
   if (db && $('#dbNameRow').style.display !== 'none') {
     const p = f.protocol.value.trim().toLowerCase();
@@ -1058,6 +1060,24 @@ const Jobs = {
 // ---------- connection tree (Terminal + Files) ----------
 // Folders come from the project name ("Payments/Batch" nests), then the
 // environment. Drag a server onto a folder to move it.
+// Running tunnels, shown on their SSH server in the trees.
+const Tunnels = {
+  running: {},
+  async load() {
+    const list = await api('GET', '/api/tunnels').catch(() => []);
+    const next = Object.fromEntries(list.map(t => [t.entry_id, t.forwards]));
+    if (JSON.stringify(next) !== JSON.stringify(this.running)) { this.running = next; Tree.render(); }
+  },
+  chip(e) {
+    if (!e.extra?.tunnels) return '';
+    const run = this.running[e.id];
+    if (run) return `<span class="tchip on" title="Tunnels running:\n${esc(run.join('\n'))}">⇄ ${esc(run.map(f => f.split(' ')[0].replace('localhost:', '')).join(', '))}</span>`;
+    return `<span class="tchip" title="${e.extra.tunnels_off === '1' ? 'Tunnels switched off' : 'Tunnels set up (not running): ' + esc(e.extra.tunnels)}">⇄${e.extra.tunnels_off === '1' ? ' off' : ''}</span>`;
+  },
+};
+setInterval(() => Tunnels.load(), 10000);
+setTimeout(() => Tunnels.load(), 1500);
+
 // Connection trees (PuTTY, FileZilla, SQL) can be grouped like bookmarks:
 // by your folders, environment, application (from the server name),
 // domain / IP subnet, type, your Groups, or login user. One choice per tree.
@@ -1151,7 +1171,7 @@ const Tree = {
       const isDb = canDB(e), dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
       const dbOpen = isDb && SQL.expanded.has(e.id);
       out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc(target)}">
-        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel">${esc(rl)}</span>` : '')(ruleLabel(e.host))}${e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${esc(e.name)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel">${esc(rl)}</span>` : '')(ruleLabel(e.host))}${e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
       if (dbOpen) {
         const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
         if (dbt) out += SQL.treeHTML(dbt, depth + 1);
@@ -1270,15 +1290,19 @@ const Tree = {
       }
       if (canSSH(e)) items.push(['Open in PuTTY', () => Term.open(e)]);
       if (canSSH(e) && e.extra?.tunnels) {
-        const off = e.extra.tunnels_off === '1';
-        items.push([off ? '☐ Tunnels switched off — switch on' : '☑ Tunnels on — switch off', async () => {
+        const off = e.extra.tunnels_off === '1', auto = e.extra.tunnels_auto === '1';
+        items.push('-', [off ? '☐ Tunnels switched off — switch on' : '☑ Tunnels on — switch off', async () => {
           await api('POST', `/api/tunnels/${e.id}/enabled`, { on: off });
           toast(off ? 'Tunnels switched on (' + e.extra.tunnels + ')' : 'Tunnels switched off — settings kept'); poll();
+        }]);
+        if (!off) items.push([auto ? '☑ Start when WorkHub starts — turn off' : '☐ Start when WorkHub starts', async () => {
+          await api('POST', `/api/tunnels/${e.id}/enabled`, { on: true, auto: !auto });
+          toast(auto ? 'Tunnels start only when needed now' : 'Tunnels will start with WorkHub (and reconnect if dropped) — starting now…'); poll();
         }]);
         if (!off) items.push(['Start tunnels (' + e.extra.tunnels + ')', async () => {
           try { const r = await api('POST', `/api/tunnels/${e.id}/start`); toast('Tunnels running: ' + r.forwards.join(', ') + (r.warning ? ' — ' + r.warning : '')); }
           catch (err) { toast(err.message, true); }
-        }], ['Stop tunnels', async () => { await api('POST', `/api/tunnels/${e.id}/stop`); toast('Tunnels stopped'); }]);
+        }], ['Stop tunnels', async () => { await api('POST', `/api/tunnels/${e.id}/stop`); toast('Tunnels stopped' + (e.extra.tunnels_auto === '1' ? ' (they restart within a minute while "Start when WorkHub starts" is on)' : '')); Tunnels.load(); }], '-');
       }
       if (canFiles(e)) items.push([`Open in FileZilla (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
       items.push('-',

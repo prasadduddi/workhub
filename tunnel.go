@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -238,6 +239,73 @@ func mergeTunnelSpecs(old, add string) string {
 	return strings.Join(out, ", ")
 }
 
+// tunnelsAuto: started when WorkHub starts and kept running.
+func tunnelsAuto(e Entry) bool {
+	return e.Extra["tunnels_auto"] == "1" && !tunnelsOff(e) && e.Extra["tunnels"] != ""
+}
+
+// loginRefused: an error that retrying won't fix (wrong password/key), so
+// the keeper stops instead of locking the account.
+func loginRefused(err error) bool {
+	m := strings.ToLower(err.Error())
+	for _, s := range []string{"unable to authenticate", "permission denied", "no supported methods", "no username", "key file", "auth"} {
+		if strings.Contains(m, s) {
+			return true
+		}
+	}
+	return false
+}
+
+var keeperTick = 15 * time.Second
+
+// tunnelKeeper starts "start when WorkHub starts" tunnels and restarts them
+// when the SSH connection drops: network errors are retried with a growing
+// pause (30 s … 10 min); a refused login waits until the connection is edited.
+func (a *App) tunnelKeeper() {
+	type state struct {
+		next    time.Time
+		wait    time.Duration
+		stopped time.Time // entry's Updated when the login was refused
+	}
+	st := map[string]*state{}
+	for {
+		for _, v := range a.store.Entries() {
+			e, ok := a.store.Entry(v.ID)
+			if !ok || !tunnelsAuto(e) || a.tunnels.byEntry(e.ID) != nil {
+				continue
+			}
+			s := st[e.ID]
+			if s == nil {
+				s = &state{wait: 30 * time.Second}
+				st[e.ID] = s
+			}
+			if !s.stopped.IsZero() && s.stopped.Equal(e.Updated) || time.Now().Before(s.next) {
+				continue
+			}
+			s.stopped = time.Time{}
+			fws, _ := parseForwards(e.Extra["tunnels"])
+			allBusy := len(fws) > 0
+			for _, f := range fws {
+				allBusy = allBusy && portOpen(f.Local)
+			}
+			if allBusy { // your own ssh -L / PuTTY already provides them
+				continue
+			}
+			if _, err := a.startTunnels(e); err != nil && a.tunnels.byEntry(e.ID) == nil {
+				log.Printf("tunnels %s: %v", e.Name, err)
+				if loginRefused(err) {
+					s.stopped = e.Updated
+				} else {
+					s.next, s.wait = time.Now().Add(s.wait), min(s.wait*2, 10*time.Minute)
+				}
+				continue
+			}
+			s.wait = 30 * time.Second
+		}
+		time.Sleep(keeperTick)
+	}
+}
+
 // tunnelsOff: the forwards stay saved but are not started ("Use tunnels"
 // unticked), e.g. when PuTTY itself provides them.
 func tunnelsOff(e Entry) bool { return e.Extra["tunnels_off"] == "1" }
@@ -320,13 +388,21 @@ func (a *App) handleTunnelsStart(w http.ResponseWriter, r *http.Request) {
 // forwards themselves stay saved. Switching off stops running ones.
 func (a *App) handleTunnelsEnabled(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		On bool `json:"on"`
+		On   bool  `json:"on"`
+		Auto *bool `json:"auto"` // optional: start when WorkHub starts
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, 400, err)
 		return
 	}
 	id := r.PathValue("id")
+	if in.Auto != nil {
+		v := ""
+		if *in.Auto {
+			v = "1"
+		}
+		a.store.SetExtra(id, "tunnels_auto", v)
+	}
 	if _, ok := a.store.Entry(id); !ok {
 		writeErr(w, 404, errors.New("connection not found"))
 		return

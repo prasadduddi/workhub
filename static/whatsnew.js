@@ -9,7 +9,7 @@ const RELEASES = [
     ['🔗', 'Link to a path', 'In Folders, “Link to a path…” shows a folder or file from anywhere (even a network share) without copying it.', 'ref'],
     ['🏷', 'Naming rules', 'Bookmarks → Naming rules…: e.g. “-BAT- = Batch” names every server and link whose host contains -BAT-. Per workspace.', 'bookmarks'],
     ['🗂', 'Group servers', 'PuTTY, FileZilla and SQL trees: the Group by box (Env, App, Domain, Type, My groups, User). Or tell the chat “group putty by app”.', 'terminal'],
-    ['🔀', 'Tunnels without PuTTY', 'Copy an “ssh -N -L1522:dbhost:1521 user@jump” command and WorkHub sets up the tunnel; databases at localhost start it automatically. Untick “Use tunnels” to switch it off.', 'sql'],
+    ['🔀', 'Tunnels without PuTTY', 'Copy an “ssh -N -L1522:dbhost:1521 user@jump” command and WorkHub sets up the tunnel on the jump server. Set it up or switch it off in PuTTY → right-click the jump server → Edit (Tunnels, Use tunnels, Start when WorkHub starts). Running tunnels show ⇄ in green; SQL Developer, DBeaver etc. can use localhost:PORT too.', 'terminal'],
     ['🧩', 'Jenkins job names', 'Jenkins links show their job (Folder › job #build), so identical “Dashboard [Jenkins]” bookmarks are easy to tell apart.', 'bookmarks'],
     ['🖱', 'Ctrl+Click → new Chrome window', 'Desktop version: a click opens a new tab in your Chrome; Ctrl+Click opens a new Chrome window.', ''],
   ] },

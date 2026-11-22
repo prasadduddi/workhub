@@ -134,6 +134,7 @@ func main() {
 	go app.syncBrowserBookmarks()
 	go app.mailWatcher()
 	go app.jiraWatcher()
+	go app.tunnelKeeper()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
