@@ -51,7 +51,7 @@ const HELP_TOPICS = [
     'one per line: ssh deploy@srv-07 pass Dep#1 (pass with or without “:”);',
     'a server line, then lines like user: deploy password: Dep#1, or deploy / Dep#1;',
     'or a table with Host / User / Password columns (the Host column can be left out under a server line).',
-    'Each user becomes its own connection named host-user (e.g. srv-07-deploy) in the SSH and FTP trees; double-click connects as that user with that password.'] },
+    'Each user becomes its own connection named host-user (e.g. srv-07-deploy). In the SSH and FTP trees they sit under one server row (👤 and the number of users): double-click a user to connect as them, right-click the server to add another login.'] },
   { t: 'Sort new captures (📥)', k: 'unsorted inbox new captures sort suggested folder move', v: 'dashboard', s: [
     'New captures show 📥 with a suggested folder (where similar servers live).',
     'Press ✓ Move there, or Keep where it is, or Edit…',

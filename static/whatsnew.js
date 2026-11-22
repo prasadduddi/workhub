@@ -4,6 +4,9 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.9.4', title: 'Logins grouped by server', items: [
+    ['🗂', 'One server, its users underneath', 'In the SSH and FTP trees, a server with several logins shows once (with 👤 and the number of users); its users are listed under it. Double-click a user to connect as them; right-click the server to add another login.', 'terminal'],
+  ] },
   { v: '1.9.3', title: 'Several users on one server', items: [
     ['👥', 'Paste a server with several logins', 'Copy or paste a server with a list of users and passwords — one “ssh user@host pass …” per line, a server line then “user: … password: …” or “user / password” lines, or a Host / User / Password table. Each user becomes its own connection in SSH and FTP; double-click connects as that user.', 'terminal'],
     ['🏷', 'Connections named host-user', 'Logins are named like srv-07.uat.acme.local-deploy (databases host-user / service), so several users on one server stay apart. Names you typed yourself are kept.', 'terminal'],

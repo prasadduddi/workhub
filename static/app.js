@@ -1893,22 +1893,42 @@ const Tree = {
         <span class="tw">${open ? '▾' : '▸'}</span>${k.env ? `<span class="badge ${esc(k.env)}">${esc(k.env)}</span>` : (gc ? `<span class="gdot" style="background:${Groups.color(gc)}"></span>` : (icon[k.gmode] || '📁')) + ' <span class="nm">' + esc(k.name) + '</span>'}<span class="n">${this.count(k)}</span></div>`;
       if (open) out += this.html(k, depth + 1, q);
     }
-    for (const e of node.items.sort(byUsage)) {
-      const live = Term.tabs.some(t => t.entry.id === e.id && !t.closed) || Remote.entry?.id === e.id && Remote.sid || SQL.tabs.some(t => t.entry.id === e.id);
-      const port = isFTP(e) ? (e.port || 21) : sshPort(e), def = isFTP(e) ? 21 : 22;
-      let target = `${isFTP(e) ? e.protocol || 'ftp' : ''}${isFTP(e) ? '://' : ''}${e.username ? e.username + '@' : ''}${e.host}${port !== def ? ':' + port : ''}`;
-      if (canDB(e)) target = `${e.username ? e.username + '@' : ''}${e.host}:${e.port || (dbKindOf(e) === 'oracle' ? 1521 : 5432)}${dbService(e) ? (dbService(e).sid ? ':' : '/') + dbService(e).name : ''}`;
-      // Database connections expand like SQL Developer: ▸ connects, ▾ shows the objects.
-      const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
-      const dbOpen = isDb && SQL.expanded.has(e.id);
-      out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
-        <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${ruleName(e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
-      if (dbOpen) {
-        const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
-        if (dbt) out += SQL.treeHTML(dbt, depth + 1);
-        else if (SQL.connecting.has(e.id)) out += `<div class="tnode muted" ${pad}>connecting…</div>`;
-        else if (SQL.connErr[e.id]) out += `<div class="tnode dberr" ${pad} title="${esc(SQL.connErr[e.id])}">⚠ ${esc(SQL.connErr[e.id])}</div><div class="tnode link" ${pad} data-dbexp="${e.id}" data-retry="1">↻ Try again</div>`;
-      }
+    // Several logins on one server: one server row with the users under it.
+    const items = node.items.sort(byUsage), byHost = {};
+    if (!node.flat) for (const e of items) if (e.host && !canDB(e)) (byHost[`${e.host.toLowerCase()}:${e.port || ''}`] ||= []).push(e);
+    const done = new Set();
+    for (const e of items) {
+      if (done.has(e.id)) continue;
+      const grp = e.host && !canDB(e) && !node.flat ? byHost[`${e.host.toLowerCase()}:${e.port || ''}`] : null;
+      if (!grp || grp.length < 2) { out += this.itemHTML(e, depth, node); continue; }
+      grp.forEach(x => done.add(x.id));
+      const key = `srv:${node.key || node.project || ''}:${e.host.toLowerCase()}:${e.port || ''}`, open = q || !this.collapsed.has(key);
+      const live = grp.some(x => Term.tabs.some(t => t.entry.id === x.id && !t.closed) || Remote.entry?.id === x.id && Remote.sid);
+      const st = grp.some(x => x.status === 'ok') ? { status: 'ok' } : grp.every(x => x.status === 'fail') ? { status: 'fail' } : {};
+      out += `<div class="tnode folder srvnode" style="padding-left:${8 + depth * 14}px" data-key="${esc(key)}" data-gmode="server" data-srvhost="${esc(e.host)}" data-srvport="${e.port || ''}" title="${esc(e.host)} — ${grp.length} logins: ${esc(grp.map(x => x.username || '?').join(', '))}">
+        <span class="tw">${open ? '▾' : '▸'}</span>${dot(st)} 🖥 <span class="nm">${ruleName({ ...e, name: (ruleLabel(e.host) ? ruleLabel(e.host) + ' – ' : '') + e.host })}</span><span class="n" title="logins">👤 ${grp.length}</span>${live ? '<span class="live">●</span>' : ''}</div>`;
+      if (open) for (const x of grp) out += this.itemHTML(x, depth + 1, node, `👤 ${esc(x.username || '(no user)')}`);
+    }
+    return out;
+  },
+
+  // One connection row (and, for a database, its objects when expanded).
+  itemHTML(e, depth, node, label) {
+    let out = '';
+    const live = Term.tabs.some(t => t.entry.id === e.id && !t.closed) || Remote.entry?.id === e.id && Remote.sid || SQL.tabs.some(t => t.entry.id === e.id);
+    const port = isFTP(e) ? (e.port || 21) : sshPort(e), def = isFTP(e) ? 21 : 22;
+    let target = `${isFTP(e) ? e.protocol || 'ftp' : ''}${isFTP(e) ? '://' : ''}${e.username ? e.username + '@' : ''}${e.host}${port !== def ? ':' + port : ''}`;
+    if (canDB(e)) target = `${e.username ? e.username + '@' : ''}${e.host}:${e.port || (dbKindOf(e) === 'oracle' ? 1521 : 5432)}${dbService(e) ? (dbService(e).sid ? ':' : '/') + dbService(e).name : ''}`;
+    // Database connections expand like SQL Developer: ▸ connects, ▾ shows the objects.
+    const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
+    const dbOpen = isDb && SQL.expanded.has(e.id);
+    out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
+      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${label || ruleName(e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+    if (dbOpen) {
+      const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
+      if (dbt) out += SQL.treeHTML(dbt, depth + 1);
+      else if (SQL.connecting.has(e.id)) out += `<div class="tnode muted" ${pad}>connecting…</div>`;
+      else if (SQL.connErr[e.id]) out += `<div class="tnode dberr" ${pad} title="${esc(SQL.connErr[e.id])}">⚠ ${esc(SQL.connErr[e.id])}</div><div class="tnode link" ${pad} data-dbexp="${e.id}" data-retry="1">↻ Try again</div>`;
     }
     return out;
   },
@@ -2051,6 +2071,10 @@ const Tree = {
         ['Duplicate', async () => { await api('POST', '/api/entries', { ...entryInput(e), id: '', name: e.name + ' (copy)', password: e.password }); poll(); }],
         ['Move to folder…', () => { const p = prompt('Folder (use / for subfolders)', e.project); if (p) this.move(e, p.trim(), e.env); }],
         ['Delete', () => deleteEntries([e])]);
+    } else if (node?.dataset.srvhost) { // a server with several logins
+      const h = node.dataset.srvhost, port = +node.dataset.srvport || 0, sib = S.entries.find(x => x.host === h && (x.port || 0) === port);
+      items.push(['+ Add another login on this server…', () => openEntryDialog({ host: h, port, protocol: sib?.protocol || 'ssh', project: sib?.project, env: sib?.env })],
+        ['Copy host', () => copyText(h)]);
     } else if (node?.dataset.project) {
       const proj = node.dataset.project;
       items.push(['New connection here…', () => openEntryDialog({ project: proj, env: node.dataset.env })],
