@@ -92,11 +92,14 @@ func dbKindByPort(port int) string {
 }
 
 // dbKindByWords picks oracle or postgres from words in the text when it
-// mentions a database (or gave a database/service name). Oracle is the
-// default when the kind isn't named; the Type can be changed afterwards.
-func dbKindByWords(s string, hasDBName bool) string {
-	isDB := hasDBName
-	kind := ""
+// mentions a database (or gave a database/service name). Oracle when it says
+// so or gives a service name / SID; otherwise PostgreSQL (a "database:" name).
+// The Type can be changed afterwards.
+func dbKindByWords(s string, extra map[string]string) string {
+	isDB, kind := len(extra) > 0, ""
+	if extra["service"] != "" || extra["service_name"] != "" || extra["sid"] != "" {
+		kind = "oracle"
+	}
 	for _, w := range reDBWord.FindAllString(s, -1) {
 		switch strings.ToLower(w) {
 		case "postgres", "postgresql", "psql", "pg":
@@ -109,7 +112,7 @@ func dbKindByWords(s string, hasDBName bool) string {
 	if !isDB {
 		return ""
 	}
-	return orDefault(kind, "oracle")
+	return orDefault(kind, "postgres")
 }
 
 func Parse(text string) []Finding {
@@ -379,7 +382,7 @@ func parseChunk(s string) []Finding {
 	}
 	// "app DB: host, database: x" — no port or URL, but clearly a database.
 	if len(targets) > 0 && targets[0].Protocol == "" && targets[0].Port == 0 && targets[0].Host != "" {
-		if kind := dbKindByWords(s, len(extra) > 0); kind != "" {
+		if kind := dbKindByWords(s, extra); kind != "" {
 			targets[0].Protocol = kind
 		}
 	}

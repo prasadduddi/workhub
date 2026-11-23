@@ -2,11 +2,9 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,51 +28,6 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 
 func readJSON(r *http.Request, v any) error {
 	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, 20<<20)).Decode(v)
-}
-
-// ---- clipboard watcher ----
-
-func (a *App) watchClipboard() {
-	last, _ := readClipboard() // don't capture whatever was on the clipboard before launch
-	var lastSeq uint32
-	var lastShot [32]byte
-	if png, ok := readClipboardImage(); ok {
-		lastShot = sha256.Sum256(png)
-	}
-	for range time.Tick(1200 * time.Millisecond) {
-		if !a.store.Settings().Watch {
-			continue
-		}
-		if seq := clipboardSeq(); seq != 0 {
-			if seq == lastSeq {
-				continue
-			}
-			lastSeq = seq
-		}
-		from := foregroundSource() // the window it was copied from
-		txt, err := readClipboard()
-		if err == nil && txt == "" && !a.store.Settings().NoShots {
-			// a screenshot (Win+Shift+S, PrtScn): post the picture to the capture thread
-			if png, ok := readClipboardImage(); ok && len(png) < maxAttachment {
-				if sum := sha256.Sum256(png); sum != lastShot {
-					lastShot = sum
-					if _, err := a.store.CaptureImage(png, from); err != nil {
-						log.Println("screenshot:", err)
-					}
-				}
-			}
-			continue
-		}
-		if err != nil || txt == last {
-			continue
-		}
-		last = txt
-		t := strings.TrimSpace(txt)
-		if t == "" || len(t) > 50000 || a.store.IsKnownValue(t) {
-			continue
-		}
-		a.store.IngestFrom(txt, "clipboard", from, "")
-	}
 }
 
 // ---- misc ----

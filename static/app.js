@@ -562,8 +562,16 @@ function renderFilters() {
 // Every word must appear somewhere (name, host, URL, user, notes, naming-rule
 // label, type…); "-word" leaves out. key:value narrows further, e.g.
 // env:prod type:db user:ops app:batch port:1521 has:password no:env is:fail
-// needs:attention. Typing acmebat01 also finds acme-bat-01.
-const SEARCH_KEYS = /^(env|type|user|app|port|host|project|in|tag|has|no|is|needs):(.+)$/;
+// needs:attention db:ordsvc added:today used:7d used:never. Typing acmebat01 also finds acme-bat-01.
+const SEARCH_KEYS = /^(env|type|user|app|port|host|project|in|tag|has|no|is|needs|db|added|used):(.+)$/;
+// added:today / used:7d / added:2w / used:month … → the start of that window (ms), or null.
+function sinceMs(v) {
+  const day = 864e5, midnight = new Date().setHours(0, 0, 0, 0);
+  const named = { today: midnight, yesterday: midnight - day, week: Date.now() - 7 * day, month: Date.now() - 30 * day, year: Date.now() - 365 * day }[v];
+  if (named) return named;
+  const m = v.match(/^(\d+)\s*([dwmy]?)$/);
+  return m ? Date.now() - +m[1] * { d: 1, w: 7, m: 30, y: 365, '': 1 }[m[2]] * day : null;
+}
 let lastQuery = [null, null];
 function parseQuery(q) {
   if (lastQuery[0] === q) return lastQuery[1];
@@ -612,6 +620,12 @@ function filterOK(e, { k, v }) {
     case 'no': return HAS[v] ? !HAS[v](e) : !has(searchText(e));
     case 'is': return { ok: e.status === 'ok', working: e.status === 'ok', fail: e.status === 'fail', failed: e.status === 'fail', untested: !e.status,
       pinned: !!e.favorite, fav: !!e.favorite, used: !!e.last_used, stale: !!staleDays(e), old: !!staleDays(e), unsorted: !!e.unsorted, new: !!e.unsorted }[v] ?? (e.env || '').toLowerCase() === v;
+    case 'db': return has(dbService(e)?.name);
+    case 'added': case 'used': {
+      if (k === 'used' && v === 'never') return !e.last_used;
+      const t = k === 'added' ? e.created : e.last_used, from = sinceMs(v);
+      return from != null && !!t && new Date(t) >= from;
+    }
     case 'needs': return v === 'attention' || v === 'fix' ? problems(e).length > 0 : problems(e).some(([p]) => p.startsWith(v));
   }
   return true;
@@ -785,6 +799,21 @@ const canDB = e => !!e.host && !!dbKindOf(e);
 function dbService(e) {
   const x = e.extra || {}, svc = x.service || x.service_name || x.database || x.db_name || x.dbname;
   return svc ? { name: svc, sid: false } : x.sid ? { name: x.sid, sid: true } : null;
+}
+// DBeaver-style tree rows: a type icon and a short "UAT01 - app_user" name.
+const dbIcon = e => dbKindOf(e) === 'oracle' ? '<span class="dbic ora" title="Oracle">O</span>' : '<span class="dbic pg" title="PostgreSQL">🐘</span>';
+// The environment written in the host name (pps-uat01-euw1-… → UAT01), else the entry's env.
+const ENV_TOKEN = /^(dev|sit|uat|qa|test|reltest|nft|pox|perf|stg|stage|staging|preprod|pre|prd|prod|dr|local)\d*[a-z]?$/i;
+function hostEnv(e) {
+  if (/^(localhost|127\.0\.0\.1|::1)$/i.test(e.host || '')) return 'LOCAL';
+  const t = (e.host || '').split(/[.\-_]/).find(x => ENV_TOKEN.test(x));
+  return t ? t.toUpperCase() : e.env || '';
+}
+function dbLabel(e) {
+  const host = (e.host || '').toLowerCase(), name = e.name || '';
+  if (name && !name.toLowerCase().includes(host)) return ruleName(e); // a name you gave it
+  const who = e.username || dbService(e)?.name || e.host;
+  return esc([hostEnv(e) || 'DB', who].join(' - '));
 }
 // JDBC string for a database connection, built from host, port and service/SID/database.
 function jdbcURL(e) {
@@ -1054,9 +1083,31 @@ function cardsHTML(items) {
         ${env ? `<span class="badge ${esc(env)}">${esc(env)}</span>` : ''}
         <span class="spacer"></span>${S.groupBy !== 'project' ? `<span class="tag">${esc(h.project)}</span>` : ''}
       </div>
-      ${es.map(svcHTML).join('')}
+      ${whyMatched(es)}${es.map(svcHTML).join('')}
     </div>`;
   }).join('') + '</div>';
+}
+
+// Why a card matched when the words aren't in its host or name: "🔎 user: ops · database: ordsvc1".
+function whyMatched(es) {
+  const words = parseQuery($('#search').value.trim().toLowerCase()).words.filter(w => !w.neg && w.v.length > 1).map(w => w.v);
+  if (!words.length) return '';
+  const out = new Map();
+  for (const w of words) {
+    if (es.some(e => `${e.host || ''} ${e.name || ''} ${e.url || ''}`.toLowerCase().includes(w))) continue;
+    for (const e of es) {
+      const fields = [['user', e.username], ['project', e.project], ['env', e.env], ['app', ruleLabel(e.host) || ruleLabel(e.url)], ['tag', (e.tags || []).join(', ')],
+        ...Object.entries(e.extra || {}).filter(([k]) => !/pass|secret|token/i.test(k)), ['notes', e.notes]];
+      const f = fields.find(([, v]) => v && String(v).toLowerCase().includes(w));
+      if (f) {
+        let v = String(f[1]).replace(/\s+/g, ' ');
+        if (v.length > 60) { const i = Math.max(0, v.toLowerCase().indexOf(w) - 20); v = (i ? '…' : '') + v.slice(i, i + 60) + '…'; }
+        out.set(f[0] + ': ' + v, 1);
+        break;
+      }
+    }
+  }
+  return out.size ? `<div class="muted tiny why" title="Why this matched your search">🔎 ${[...out.keys()].slice(0, 3).map(x => maskedText(x)).join(' · ')}</div>` : '';
 }
 
 function warnChip(e) {
@@ -2237,7 +2288,7 @@ const Tree = {
     const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
     const dbOpen = isDb && SQL.expanded.has(e.id);
     out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
-      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢 ' : ''}<span class="nm">${label || (canDB(e) ? ruleName(e) : cardName(e) || esc(e.host || e.name))}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) || cardName(e) ? `<small>${esc(target)}</small>` : e.username || port !== def ? `<small>${esc(e.username || '')}${port !== def ? ':' + port : ''}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? dbIcon(e) : ''}<span class="nm">${label || (canDB(e) ? dbLabel(e) : cardName(e) || esc(e.host || e.name))}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) ? `<small class="dbaddr">${esc(dbKindOf(e) === 'oracle' ? jdbcURL(e) : e.host)}</small>` : cardName(e) ? `<small>${esc(target)}</small>` : e.username || port !== def ? `<small>${esc(e.username || '')}${port !== def ? ':' + port : ''}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
     if (dbOpen) {
       const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
       if (dbt) out += SQL.treeHTML(dbt, depth + 1);

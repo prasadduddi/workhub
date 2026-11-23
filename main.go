@@ -51,6 +51,8 @@ type App struct {
 	khMu     sync.Mutex
 	backupMu sync.Mutex
 	backedUp map[string]bool
+
+	shots shotLog // screenshots posted (clipboard and Screenshots folder)
 }
 
 func main() {
@@ -127,6 +129,7 @@ func main() {
 				app.setLocked(true) // a PIN is set: start locked (the master password already asked)
 			}
 			go app.watchClipboard()
+			go app.watchScreenshots()
 			go app.syncBrowserBookmarks()
 			go app.mailWatcher()
 			go app.jiraWatcher()

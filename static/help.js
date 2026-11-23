@@ -10,10 +10,11 @@ const HELP_TOPICS = [
     'Type part of a host, IP, name, user, URL, note or Jira key — typos are fine (“uta” finds UAT).',
     'Results show on the Dashboard, best match first; task threads and Jira issues appear too.',
     'Press ↑/↓ to choose, Enter to connect or open, Shift+Enter for details; Alt+P / Alt+U / Alt+H / Alt+J copy password / user / host / JDBC.'] },
-  { t: 'Filter the search (env:prod, type:db…)', k: 'filter filters env type user app port has no is needs stale unsorted narrow prod uat database only', v: 'dashboard', s: [
+  { t: 'Filter the search (env:prod, type:db…)', k: 'filter filters env type user app port has no is needs db added used date today week stale unsorted narrow prod uat database only', v: 'dashboard', s: [
     'Type filters in the search box, with or without words: env:prod, type:db, type:ssh, user:ops, app:batch, port:1521.',
     'has:password / no:env / has:tunnels / has:commands look for what an entry has or lacks.',
     'is:fail, is:stale (unused 90 days), is:unsorted (new captures), needs:attention (missing details).',
+    'db:NAME finds a service name / SID / database; added:today, added:7d, used:week, used:2w, used:never look by date.',
     'Put a minus in front to leave out: -prod, -env:uat.',
     'Click into the search box to see this list and your recent searches.'] },
   { t: 'Save a search in the sidebar', k: 'saved searches save search sidebar star favourite query keep', v: 'dashboard', s: [

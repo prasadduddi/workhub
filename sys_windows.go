@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
 	"unicode/utf16"
 	"unsafe"
 
@@ -69,15 +68,9 @@ func readClipboard() (string, error) {
 			return "", nil
 		}
 	}
-	opened := false
-	for i := 0; i < 10 && !opened; i++ {
-		if r, _, _ := pOpenClipboard.Call(0); r != 0 {
-			opened = true
-		} else {
-			time.Sleep(30 * time.Millisecond)
-		}
-	}
-	if !opened {
+	// One try: if another program has the clipboard open, the watcher comes
+	// back on its next tick rather than waiting in its way.
+	if r, _, _ := pOpenClipboard.Call(0); r == 0 {
 		return "", errors.New("clipboard busy")
 	}
 	defer pCloseClipboard.Call()

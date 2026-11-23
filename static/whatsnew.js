@@ -4,6 +4,14 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.10.0', title: 'Find by date and database, see why it matched', items: [
+    ['📅', 'Search by date', 'added:today, added:yesterday, added:7d, added:2w, used:week, used:month, used:never — e.g. “added:today type:db” for what you pasted this morning.', 'dashboard'],
+    ['🗄', 'db: filter', 'db:ordsvc finds connections by service name, SID or database.', 'dashboard'],
+    ['✂', 'Snipping Tool screenshots reach your thread', 'Snips from Snipping Tool / Win+Shift+S are posted to the active thread even when the tool also puts text on the clipboard; snips saved to Pictures\\Screenshots are picked up too (once, not twice). WorkHub now waits for the copy to finish and holds the clipboard only for a moment, so copy and paste in other programs is never blocked.', 'tasks'],
+    ['🐘', 'SQL tree like DBeaver', 'Database connections show an Oracle (O) or PostgreSQL (🐘) icon, a short name like “UAT01 - app_user” (environment from the host name, then the user) and the address in grey italics. Names you set yourself are kept.', 'sql'],
+    ['🗄', 'Pasted databases default to PostgreSQL', '“database: x” is saved as PostgreSQL; Oracle when the text says oracle or gives a service name / SID. Change Type on the connection if needed.', 'sql'],
+    ['🔎', 'Why it matched', 'When your words aren’t in a card’s host or name, a line under it shows where they were found (user, project, database, tag, notes…).', 'dashboard'],
+  ] },
   { v: '1.9.9', title: 'Search everything, recent captures, copy-ready strings', items: [
     ['🔎', 'One search for everything', 'The search at the top right now also finds 📝 Notes, 📁 Folders files (names and text, with a snippet) and 📋 Captured text, under connections, threads and Jira. Click a result to open it.', 'dashboard'],
     ['🕘', 'Recently captured', 'The dashboard shows your last few captures (7 days) and what each became. A host saved without a type asks “Is it Oracle / Postgres / SSH?” — one click files it, e.g. into SQL.', 'dashboard'],
