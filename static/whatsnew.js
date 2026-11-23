@@ -4,6 +4,18 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.10.1', title: 'Live connection status, duplicate folders, FileZilla-style lists', items: [
+    ['●', 'Status that is true right now', 'In the SSH / FTP / SQL trees the dot is the state now: ● connected, dashed ◌ “disconnected” when a session dropped (its tab is still open), ○ not connected. It changes the moment a session ends; a dead network is noticed within about a minute.', 'terminal'],
+    ['⏏', 'Disconnect all on a host', 'Right-click a server (or any connection on it) → ⏏ Disconnect all on this host: closes its SSH terminals, FTP session, SQL connections and running tunnels in one go. Other hosts stay connected. Folders, environments and groups have ⏏ Disconnect all in … too (next to Duplicate), for just the connections inside.', 'terminal'],
+    ['📋', 'Copy and Copy all', 'Right-click a connection → Copy puts host, port, username and password (and service / database) on the clipboard in one go; Copy all copies every detail.', 'terminal'],
+    ['⏏', 'Disconnect always in the menu', '⏏ Disconnect and ⏏ Disconnect all are always in the right-click menu — greyed out when nothing is connected.', 'terminal'],
+    ['⊞', 'Fold / Unfold', '⊟ Fold collapses the tree; it then reads ⊞ Unfold and puts the folders back exactly as they were.', 'terminal'],
+    ['✓', 'When it last worked', 'After the name: ✓ 3h = last connected fine 3 hours ago; ✕ = the last try failed (hover for the reason and when it last worked).', 'terminal'],
+    ['🗂', 'FTP lists like FileZilla', 'Segoe UI 9pt, compact rows, ruled column headers, Windows-blue selection. The hint text between the panes is gone — the ➜ arrows light up when there is something to copy.', 'files'],
+    ['⧉', 'Duplicate folders and groups', 'Right-click a folder, environment or group in the SSH / FTP / SQL tree → Duplicate N connections… Pick the folder for the copies (sub-folders and environments are kept) and, if you like, change host names on the way: uat01→sit02.', 'terminal'],
+    ['🖥', 'Duplicate a server', 'Right-click a server with several logins → Duplicate server… copies every login.', 'terminal'],
+    ['✎', 'Duplicate one connection', 'Right-click → Duplicate names it “… (copy)” (then “(copy 2)”…), shows that in the trees, and opens the copy so you can change the host or user straight away.', 'terminal'],
+  ] },
   { v: '1.10.0', title: 'Find by date and database, see why it matched', items: [
     ['📅', 'Search by date', 'added:today, added:yesterday, added:7d, added:2w, used:week, used:month, used:never — e.g. “added:today type:db” for what you pasted this morning.', 'dashboard'],
     ['🗄', 'db: filter', 'db:ordsvc finds connections by service name, SID or database.', 'dashboard'],

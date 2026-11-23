@@ -800,6 +800,16 @@ function dbService(e) {
   const x = e.extra || {}, svc = x.service || x.service_name || x.database || x.db_name || x.dbname;
   return svc ? { name: svc, sid: false } : x.sid ? { name: x.sid, sid: true } : null;
 }
+// " (copy)" / " (copy 2)" at the end of a duplicate's name, shown even where
+// the name itself is replaced by the host or a short label.
+const COPY_RE = / \(copy(?: \d+)?\)$/i;
+const copyTag = e => (e.name || '').match(COPY_RE)?.[0] || '';
+const withCopyTag = (html, e) => { const t = copyTag(e); return t && !html.includes(t.trim()) ? html + `<span class="copytag">${esc(t)}</span>` : html; };
+// The name for a copy: "x (copy)", then "x (copy 2)", "x (copy 3)"…
+function copyName(name, taken) {
+  const base = (name || '').replace(COPY_RE, '');
+  for (let i = 1; ; i++) { const n = base + (i === 1 ? ' (copy)' : ` (copy ${i})`); if (!taken.has(n)) return n; }
+}
 // DBeaver-style tree rows: a type icon and a short "UAT01 - app_user" name.
 const dbIcon = e => dbKindOf(e) === 'oracle' ? '<span class="dbic ora" title="Oracle">O</span>' : '<span class="dbic pg" title="PostgreSQL">🐘</span>';
 // The environment written in the host name (pps-uat01-euw1-… → UAT01), else the entry's env.
@@ -811,9 +821,9 @@ function hostEnv(e) {
 }
 function dbLabel(e) {
   const host = (e.host || '').toLowerCase(), name = e.name || '';
-  if (name && !name.toLowerCase().includes(host)) return ruleName(e); // a name you gave it
+  if (name && !name.replace(COPY_RE, '').toLowerCase().includes(host)) return ruleName(e); // a name you gave it
   const who = e.username || dbService(e)?.name || e.host;
-  return esc([hostEnv(e) || 'DB', who].join(' - '));
+  return withCopyTag(esc([hostEnv(e) || 'DB', who].join(' - ')), e);
 }
 // JDBC string for a database connection, built from host, port and service/SID/database.
 function jdbcURL(e) {
@@ -821,6 +831,32 @@ function jdbcURL(e) {
   const kind = dbKindOf(e), svc = dbService(e), port = e.port || (kind === 'oracle' ? 1521 : 5432);
   if (kind === 'postgres') return `jdbc:postgresql://${e.host}:${port}/${svc?.name || ''}`;
   return svc?.sid ? `jdbc:oracle:thin:@${e.host}:${port}:${svc.name}` : `jdbc:oracle:thin:@//${e.host}:${port}${svc ? '/' + svc.name : ''}`;
+}
+// Tree status, two separate things:
+//  • the dot is the state right now: ● connected, ◌ dashed = the session dropped
+//    (its tab is still open), ○ = not connected;
+//  • after the name, the last result: ✓ 3h = last connected fine 3 hours ago,
+//    ✕ = the last try failed (hover for why and when it last worked).
+function connState(e) {
+  const ssh = Term.tabs.filter(t => t.entry?.id === e.id && !t.local);
+  if (ssh.some(t => !t.closed) || (Remote.sid && Remote.entry?.id === e.id) || SQL.tabs.some(t => t.entry.id === e.id)) return 'live';
+  return ssh.length ? 'dropped' : '';
+}
+const STATE_DOT = {
+  live: '<span class="dot live" title="Connected now"></span>',
+  dropped: '<span class="dot dropped" title="Disconnected — the session dropped. Press Enter in its terminal tab (or double-click here) to reconnect."></span>',
+  '': '<span class="dot none" title="Not connected"></span>',
+};
+const lastOKAt = e => e.last_ok || (e.status === 'ok' ? e.status_at : '');
+function ago(t) {
+  const m = Math.round((Date.now() - new Date(t)) / 6e4);
+  return m < 1 ? 'now' : m < 60 ? m + 'm' : m < 1440 ? Math.round(m / 60) + 'h' : m < 60 * 24 * 60 ? Math.round(m / 1440) + 'd' : new Date(t).toLocaleDateString();
+}
+function lastSeen(e) {
+  const ok = lastOKAt(e), when = t => new Date(t).toLocaleString();
+  const okTag = ok ? `<span class="lastok" title="Last connected successfully: ${esc(when(ok))}">✓ ${ago(ok)}</span>` : '';
+  if (e.status === 'fail') return `<span class="lastfail" title="${esc(`Last try failed${e.status_at ? ' ' + when(e.status_at) : ''}: ${e.status_msg || ''}${ok ? '\nLast worked: ' + when(ok) : '\nNever connected successfully yet'}`)}">✕</span>${okTag}`;
+  return okTag;
 }
 // Status dot: green = last connection/link check worked, red = failed, grey = not tried.
 function dot(e) {
@@ -1126,7 +1162,7 @@ function cardName(e) {
 
 function svcHTML(e) {
   const rows = [];
-  const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, cardName(e), warnChip(e),
+  const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, withCopyTag(cardName(e), e), warnChip(e),
     staleDays(e) && `<span class="stalechip" title="Not used, tested or captured for ${staleDays(e)} days — still right? Test it or delete it">💤 ${staleDays(e)} days</span>`].filter(Boolean).join(' ');
   if (label) rows.push(['', label]);
   if (e.unsorted) rows.push(['', unsortedRow(e)]);
@@ -1802,12 +1838,14 @@ const Term = {
       t.creds = { ...t.creds, save: false };
       this.renderTabs();
       this.startMacros(t);
+      if (!t.local) { Tree.render(); setTimeout(poll, 2000); } // ✓ once the login went through
     };
     ws.onmessage = m => { t.term.write(new Uint8Array(m.data)); t.macroKick?.(); };
     ws.onclose = () => {
       t.closed = true;
       t.term.write('\r\n\x1b[90m[disconnected - press Enter to reconnect]\x1b[0m\r\n');
       this.renderTabs();
+      if (!t.local) { Tree.render(); poll(); } // the tree shows it dropped; a failed login shows ✕
     };
   },
 
@@ -1957,13 +1995,15 @@ Remote.join = name => (Remote.path === '/' ? '' : Remote.path) + '/' + name;
 Local.onOpenFile = () => transfer('put');
 // This PC opens where you were last time
 // Under the ➜ / ← buttons: what they will copy, or how to start.
+// The ➜ arrows light up when there is something to upload / download.
 function xferHint() {
-  const el = $('#xferHint'); if (!el) return;
   let up = 0, down = 0, conn = false;
   try { up = Local.sel.size; down = Remote.sel.size; conn = !!Remote.sid; } catch { return; } // panes not made yet
-  $('#putBtn').classList.toggle('idle', !(up && conn));
-  $('#getBtn').classList.toggle('idle', !down);
-  el.textContent = !conn ? 'Connect to a server, then select files' : up ? `➜ uploads ${up}` : down ? `downloads ${down}` : 'Select files, or drag them across';
+  $('#putBtn')?.classList.toggle('idle', !(up && conn));
+  $('#getBtn')?.classList.toggle('idle', !down);
+  const n = (k, c) => c ? ` (${c} selected)` : '';
+  if ($('#putBtn')) $('#putBtn').title = 'Upload: copy the selected files from This PC to the server' + n('up', conn && up);
+  if ($('#getBtn')) $('#getBtn').title = 'Download: copy the selected files from the server to This PC' + n('down', down);
 }
 function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch { return ''; } }
 { const load = Local.load; Local.load = async (p, quiet) => { await load(p, quiet); if (Local.loaded && !Local.roots) try { localStorage.setItem('ftp.local', Local.path); } catch { /* private mode */ } }; }
@@ -2194,6 +2234,8 @@ const LAST_GROUPS = new Set(['Other', 'No environment', 'Not in a group', 'No us
 
 const Tree = {
   collapsed: new Set(JSON.parse(localStorage.getItem('treeCollapsed') || '[]')),
+  // Per tree: the folders ⊟ Fold closed, so ⊞ Unfold can open exactly those again.
+  folded: (() => { try { return JSON.parse(localStorage.getItem('treeFolded') || '{}'); } catch { return {}; } })(),
   selected: null,
   groupMode(mode) { try { return localStorage.getItem('treeGroup_' + mode) || 'folder'; } catch { return 'folder'; } },
   setGroupMode(mode, g) { try { localStorage.setItem('treeGroup_' + mode, g); } catch { /* ignore */ } this.render(); },
@@ -2268,11 +2310,11 @@ const Tree = {
       if (!grp || grp.length < 2) { out += this.itemHTML(e, depth, node); continue; }
       grp.forEach(x => done.add(x.id));
       const key = `srv:${node.key || node.project || ''}:${e.host.toLowerCase()}:${e.port || ''}`, open = q || !this.collapsed.has(key);
-      const live = grp.some(x => Term.tabs.some(t => t.entry.id === x.id && !t.closed) || Remote.entry?.id === x.id && Remote.sid);
-      const st = grp.some(x => x.status === 'ok') ? { status: 'ok' } : grp.every(x => x.status === 'fail') ? { status: 'fail' } : {};
+      const states = grp.map(connState), now = states.includes('live') ? 'live' : states.includes('dropped') ? 'dropped' : '';
+      const okAt = grp.map(lastOKAt).filter(Boolean).sort().at(-1);
       out += `<div class="tnode folder srvnode" style="padding-left:${8 + depth * 14}px" data-key="${esc(key)}" data-gmode="server" data-srvhost="${esc(e.host)}" data-srvport="${e.port || ''}" title="${esc(e.host)} — ${grp.length} logins: ${esc(grp.map(x => x.username || '?').join(', '))}">
-        <span class="tw">${open ? '▾' : '▸'}</span>${dot(st)} 🖥 <span class="nm">${ruleName({ ...e, name: (ruleLabel(e.host) ? ruleLabel(e.host) + ' – ' : '') + e.host })}</span><span class="n" title="logins">👤 ${grp.length}</span>${live ? '<span class="live">●</span>' : ''}</div>`;
-      if (open) for (const x of grp) out += this.itemHTML(x, depth + 1, node, `👤 ${esc(x.username || '(no user)')}`);
+        <span class="tw">${open ? '▾' : '▸'}</span>${STATE_DOT[now]} 🖥 <span class="nm">${ruleName({ ...e, name: (ruleLabel(e.host) ? ruleLabel(e.host) + ' – ' : '') + e.host })}</span><span class="n" title="logins">👤 ${grp.length}</span>${now === 'dropped' ? '<span class="droptag">disconnected</span>' : ''}${okAt ? lastSeen({ last_ok: okAt }) : ''}</div>`;
+      if (open) for (const x of grp) out += this.itemHTML(x, depth + 1, node, withCopyTag(`👤 ${esc(x.username || '(no user)')}`, x));
     }
     return out;
   },
@@ -2280,7 +2322,6 @@ const Tree = {
   // One connection row (and, for a database, its objects when expanded).
   itemHTML(e, depth, node, label) {
     let out = '';
-    const live = Term.tabs.some(t => t.entry.id === e.id && !t.closed) || Remote.entry?.id === e.id && Remote.sid || SQL.tabs.some(t => t.entry.id === e.id);
     const port = isFTP(e) ? (e.port || 21) : sshPort(e), def = isFTP(e) ? 21 : 22;
     let target = `${isFTP(e) ? e.protocol || 'ftp' : ''}${isFTP(e) ? '://' : ''}${e.username ? e.username + '@' : ''}${e.host}${port !== def ? ':' + port : ''}`;
     if (canDB(e)) target = `${e.username ? e.username + '@' : ''}${e.host}:${e.port || (dbKindOf(e) === 'oracle' ? 1521 : 5432)}${dbService(e) ? (dbService(e).sid ? ':' : '/') + dbService(e).name : ''}`;
@@ -2288,7 +2329,7 @@ const Tree = {
     const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
     const dbOpen = isDb && SQL.expanded.has(e.id);
     out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
-      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? dbIcon(e) : ''}<span class="nm">${label || (canDB(e) ? dbLabel(e) : cardName(e) || esc(e.host || e.name))}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) ? `<small class="dbaddr">${esc(dbKindOf(e) === 'oracle' ? jdbcURL(e) : e.host)}</small>` : cardName(e) ? `<small>${esc(target)}</small>` : e.username || port !== def ? `<small>${esc(e.username || '')}${port !== def ? ':' + port : ''}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${STATE_DOT[connState(e)]} ${canDB(e) ? dbIcon(e) : ''}<span class="nm">${label || (canDB(e) ? dbLabel(e) : withCopyTag(cardName(e) || esc(e.host || e.name), e))}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) ? `<small class="dbaddr">${esc(dbKindOf(e) === 'oracle' ? jdbcURL(e) : e.host)}</small>` : cardName(e) ? `<small>${esc(target)}</small>` : e.username || port !== def ? `<small>${esc(e.username || '')}${port !== def ? ':' + port : ''}</small>` : ''}${connState(e) === 'dropped' ? '<span class="droptag">disconnected</span>' : ''}${lastSeen(e)}</div>`;
     if (dbOpen) {
       const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
       if (dbt) out += SQL.treeHTML(dbt, depth + 1);
@@ -2307,6 +2348,8 @@ const Tree = {
       $('select[data-tool=groupby]', host).value = this.groupMode(host.dataset.mode);
       const q = $('input', host).value.trim().toLowerCase();
       $('.tree', host).innerHTML = this.html(this.build(q, host.dataset.mode), 0, q) || '<div class="empty">No servers yet.<br>Copy or paste some details, or press + New.</div>';
+      const fb = $('button[data-tool=collapse]', host), isFolded = !!this.folded[host.dataset.mode];
+      if (fb) { fb.textContent = isFolded ? '⊞ Unfold' : '⊟ Fold'; fb.title = isFolded ? 'Open the folders again, as they were before folding' : 'Collapse all folders (press again to restore)'; }
       if (this.kbKey) $$('.tree > .tnode.folder', host).find(n => n.dataset.key === this.kbKey)?.classList.add('kbfocus');
     }
   },
@@ -2355,8 +2398,16 @@ const Tree = {
       const tool = ev.target.closest('button[data-tool]')?.dataset.tool;
       if (tool === 'new') return openEntryDialog(null);
       if (tool === 'rules') return openNameRules();
-      if (tool === 'collapse') {
-        $$('.tnode.folder', host).forEach(f => this.collapsed.add(f.dataset.key));
+      if (tool === 'collapse') { // ⊟ Fold / ⊞ Unfold: a toggle back to how it was
+        const folded = this.folded[mode];
+        if (folded) folded.forEach(k => this.collapsed.delete(k));
+        else {
+          const added = $$('.tnode.folder', host).map(f => f.dataset.key).filter(k => k && !this.collapsed.has(k));
+          added.forEach(k => this.collapsed.add(k));
+          this.folded[mode] = added;
+        }
+        if (folded) delete this.folded[mode];
+        try { localStorage.setItem('treeFolded', JSON.stringify(this.folded)); } catch { /* ignore */ }
         return this.saveCollapsed();
       }
       const exp = ev.target.closest('[data-dbexp]');
@@ -2424,13 +2475,99 @@ const Tree = {
     this.render();
   },
 
+  // Right-click menu. An item [label, fn|null, [sub items]] has a submenu that
+  // opens on hover (Copy ▸); clicking it runs fn, or opens the submenu if none;
+  // [label, null] is shown greyed out (e.g. Disconnect with nothing open).
   showMenu(ev, items) {
     const m = $('#ctxMenu');
-    m.innerHTML = items.map((it, i) => it === '-' ? '<hr>' : `<button data-i="${i}">${esc(it[0])}</button>`).join('');
+    const row = (it, i) => it === '-' ? '<hr>' : it[2]
+      ? `<div class="ctxsub"><button class="ctxsub-btn" ${it[1] ? `data-i="${i}"` : `data-sub="${i}"`}>${esc(it[0])}<span class="ctxarrow">▸</span></button><div class="ctxsub-menu">${it[2].map((x, j) => row(x, `${i}.${j}`)).join('')}</div></div>`
+      : it[1] ? `<button data-i="${i}">${esc(it[0])}</button>` : `<button disabled title="Nothing connected right now">${esc(it[0])}</button>`;
+    m.innerHTML = items.map((it, i) => row(it, i)).join('');
     m.hidden = false;
     m.style.left = Math.min(ev.clientX, innerWidth - 210) + 'px';
     m.style.top = Math.min(ev.clientY, innerHeight - m.offsetHeight - 8) + 'px';
-    m.onclick = c => { const b = c.target.closest('[data-i]'); if (b) { m.hidden = true; items[b.dataset.i][1](); } };
+    m.classList.toggle('subleft', ev.clientX + 420 > innerWidth); // no room on the right: open submenus to the left
+    m.onclick = c => {
+      const sb = c.target.closest('[data-sub]');
+      if (sb) { sb.parentElement.classList.toggle('open'); return; } // click (or touch) opens it too
+      const b = c.target.closest('[data-i]'); if (!b) return;
+      const it = b.dataset.i.split('.').reduce((list, k, n, all) => n < all.length - 1 ? list[+k][2] : list[+k], items);
+      m.hidden = true; it[1]();
+    };
+  },
+
+  // Everything open to some connections (by entry) or to one host: SSH
+  // terminals (also dropped ones), the FTP session, SQL connections and
+  // running tunnels — for "Disconnect all".
+  sessionsFor(match) {
+    return {
+      ssh: Term.tabs.filter(t => !t.local && t.entry && match(t.entry)),
+      ftp: Remote.sid && Remote.entry && match(Remote.entry) ? 1 : 0,
+      sql: SQL.tabs.filter(t => match(t.entry)),
+      tun: S.entries.filter(e => match(e) && Tunnels.running[e.id]),
+    };
+  },
+  hostSessions(host) { const h = (host || '').toLowerCase(); return this.sessionsFor(x => (x?.host || '').toLowerCase() === h); },
+  entrySessions(list) { const ids = new Set(list.map(e => e.id)); return this.sessionsFor(x => ids.has(x?.id)); },
+  sessionCount(o) { return o.ssh.length + o.ftp + o.sql.length + o.tun.length; },
+  hostSessionCount(host) { return this.sessionCount(this.hostSessions(host)); },
+  disconnectHost(host) { return this.disconnectSessions(this.hostSessions(host), host); },
+  async disconnectSessions(o, where) {
+    const parts = [];
+    o.ssh.forEach(t => Term.close(t));
+    if (o.ssh.length) parts.push(`${o.ssh.length} SSH`);
+    if (o.ftp) { Remote.disconnect(); parts.push('FTP'); }
+    o.sql.forEach(t => SQL.close(t));
+    if (o.sql.length) parts.push(`${o.sql.length} SQL`);
+    for (const e of o.tun) await api('POST', `/api/tunnels/${e.id}/stop`).catch(() => {});
+    if (o.tun.length) { parts.push(`tunnels of ${o.tun.length} connection${o.tun.length > 1 ? 's' : ''}`); Tunnels.load(); }
+    Tree.render();
+    toast(parts.length ? `Disconnected ${parts.join(', ')} in ${where}` : `Nothing open in ${where}`);
+  },
+  // "⏏ Disconnect all" menu item for a folder / group, when something in it is open.
+  disconnectItem(list, label) {
+    const n = this.sessionCount(this.entrySessions(list));
+    if (!list.length) return [];
+    return [[`⏏ Disconnect all in ${label}${n ? ` (${n})` : ''}`, n ? () => this.disconnectSessions(this.entrySessions(list), label) : null]];
+  },
+
+  // Every connection under a tree node (folder, environment or group), as shown in this tree.
+  nodeEntries(key, mode) {
+    const id = k => k.key || k.project + (k.env ? '#' + k.env : '');
+    const find = n => { for (const k of Object.values(n.kids)) { if (id(k) === key) return k; const f = find(k); if (f) return f; } return null; };
+    const all = n => [...n.items, ...Object.values(n.kids).flatMap(all)];
+    const n = key && find(this.build('', mode));
+    return n ? [...new Set(all(n))] : [];
+  },
+
+  // Copy several connections (with their passwords) into another folder,
+  // optionally changing the host names on the way (uat01 → sit02).
+  async duplicate(list, fromFolder, label) {
+    if (!list.length) return;
+    const def = fromFolder ? fromFolder + ' (copy)' : list[0].project || 'General';
+    const to = prompt(`Copy ${list.length} connection${list.length > 1 ? 's' : ''}${label ? ` (${label})` : ''} into folder (use / for subfolders):`, def);
+    if (to == null || !to.trim()) return;
+    const rep = prompt('Change host names in the copies? Type old→new, e.g. uat01→sit02 (or old=>new). Leave empty to keep them.', '');
+    if (rep == null) return;
+    const m = rep.trim().match(/^(.+?)\s*(?:→|=>|->)\s*(.*)$/);
+    if (rep.trim() && !m) return toast('Use old→new, e.g. uat01→sit02', true);
+    const swap = v => m && v ? v.replace(new RegExp(m[1].trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m[2].trim()) : v;
+    const dest = to.trim().replace(/\/+$/, '');
+    const taken = new Set(S.entries.map(x => x.name));
+    let n = 0;
+    try {
+      for (const e of list) {
+        // Keep sub-folders under a copied folder: Lab/Web → Lab (copy)/Web.
+        const project = fromFolder && (e.project === fromFolder || e.project.startsWith(fromFolder + '/')) ? dest + e.project.slice(fromFolder.length) : dest;
+        const name = m ? swap(e.name) : copyName(e.name, taken); // new hosts tell them apart; otherwise "(copy)"
+        taken.add(name);
+        await api('POST', '/api/entries', { ...entryInput(e), id: '', project, name, host: swap(e.host), url: swap(e.url), password: e.password, favorite: false });
+        n++;
+      }
+    } catch (err) { toast(err.message, true); }
+    await poll();
+    toast(`Duplicated ${n} connection${n === 1 ? '' : 's'} into ${dest}${m ? ` (${m[1].trim()} → ${m[2].trim()})` : ''}`);
   },
 
   menu(ev, node, mode) {
@@ -2446,9 +2583,10 @@ const Tree = {
       }
       if (canSSH(e)) items.push(['Open SSH terminal', () => Term.open(e)]);
       const tabs = Term.tabs.filter(t => t.entry?.id === e.id && !t.local && !t.closed);
-      if (tabs.length) items.push([`⏏ Disconnect SSH${tabs.length > 1 ? ` (${tabs.length} terminals)` : ''}`, () => tabs.forEach(t => Term.close(t))]);
+      if (canSSH(e) || tabs.length) items.push([`⏏ Disconnect SSH${tabs.length > 1 ? ` (${tabs.length} terminals)` : ''}`, tabs.length ? () => tabs.forEach(t => Term.close(t)) : null]);
       if (canFiles(e)) items.push([`Open in FTP (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
       if (Remote.sid && Remote.entry?.id === e.id) items.push(['⏏ Disconnect FTP', () => Remote.disconnect()]);
+      if (e.host && isConn(e)) { const n = this.hostSessionCount(e.host); items.push([`⏏ Disconnect all on ${e.host}${n ? ` (${n})` : ''}`, n ? () => this.disconnectHost(e.host) : null]); }
       if (External.items(e).length) items.push('-', ...External.items(e));
       if (canSSH(e) && e.extra?.tunnels) {
         const off = e.extra.tunnels_off === '1', auto = e.extra.tunnels_auto === '1';
@@ -2467,41 +2605,49 @@ const Tree = {
       }
       if (problems(e).some(p => p[0] === 'password')) items.push(['🔑 Logs in with a key / SSO (no password)', async () => { await api('POST', '/api/entries', { ...entryInput(e), password: e.password, extra: { ...(e.extra || {}), auth: 'key' } }); poll(); toast(`${e.name}: marked as key login`); }]);
       items.push(['🧵 Add to task thread…', () => Work.addEntry(e, ev)]);
-      items.push('-',
-        ['Copy host', () => copyText(e.host)]);
-      if (e.username) items.push(['Copy username', () => copyText(e.username)]);
-      if (e.password) items.push(['Copy password', () => copyText(e.password, 'Password copied')]);
+      const port = canDB(e) ? e.port || (dbKindOf(e) === 'oracle' ? 1521 : 5432) : canSSH(e) ? sshPort(e) : e.port;
+      // Two copy options: Copy = the basics (host, port, user, password…), Copy all = everything.
+      const svc = canDB(e) && dbService(e);
+      const basics = [['Host', e.host], ['Port', port], svc && [svc.sid ? 'SID' : dbKindOf(e) === 'postgres' ? 'Database' : 'Service name', svc.name],
+        ['Username', e.username], ['Password', e.password], !e.host && ['URL', e.url]].filter(x => x && x[1]).map(([k, v]) => `${k}: ${v}`).join('\n');
+      items.push('-', ['Copy', () => copyText(basics, 'Host, port, user and password copied')],
+        ['Copy all', () => copyText(detailsText(e), 'All details copied')]);
       if (e.username && isConn(e)) items.push([`🔑 Change ${e.username}'s password everywhere…`, () => PwAll.open(e.username)]);
-      items.push(['Copy all details', () => copyText(detailsText(e), 'All details copied')]);
-      if (canSSH(e)) items.push(['Copy ssh command', () => copyText(`ssh ${e.username ? e.username + '@' : ''}${e.host}${sshPort(e) !== 22 ? ' -p ' + sshPort(e) : ''}`)]);
-      if (canDB(e) && jdbcURL(e)) items.push(['Copy JDBC URL', () => copyText(jdbcURL(e))]);
       items.push('-',
         ['Edit…', () => openEntryDialog(e)],
-        ['Duplicate', async () => { await api('POST', '/api/entries', { ...entryInput(e), id: '', name: e.name + ' (copy)', password: e.password }); poll(); }],
+        ['Duplicate', async () => {
+          try { const c = await api('POST', '/api/entries', { ...entryInput(e), id: '', name: copyName(e.name, new Set(S.entries.map(x => x.name))), password: e.password }); await poll(); toast('Copy made — change what differs and Save'); openEntryDialog(byId(c.id) || c); }
+          catch (err) { toast(err.message, true); }
+        }],
         ['Move to folder…', () => { const p = prompt('Folder (use / for subfolders)', e.project); if (p) this.move(e, p.trim(), e.env); }],
         ['Delete', () => deleteEntries([e])]);
     } else if (node?.dataset.srvhost) { // a server with several logins
       const h = node.dataset.srvhost, port = +node.dataset.srvport || 0, sib = S.entries.find(x => x.host === h && (x.port || 0) === port);
+      const logins = S.entries.filter(x => x.host === h && (x.port || 0) === port && !canDB(x));
       items.push(['+ Add another login on this server…', () => openEntryDialog({ host: h, port, protocol: sib?.protocol || 'ssh', project: sib?.project, env: sib?.env })],
+        [`Duplicate server (${logins.length} logins)…`, () => this.duplicate(logins, null, h)],
+        (n => [`⏏ Disconnect all on this host${n ? ` (${n})` : ''}`, n ? () => this.disconnectHost(h) : null])(this.hostSessionCount(h)),
         ['Copy host', () => copyText(h)]);
     } else if (node?.dataset.project) {
       const proj = node.dataset.project;
       items.push(['New connection here…', () => openEntryDialog({ project: proj, env: node.dataset.env })],
         ['New subfolder…', () => { const n = prompt('Subfolder name'); if (n) openEntryDialog({ project: proj + '/' + n.trim(), env: node.dataset.env }); }]);
+      const inside = this.nodeEntries(node.dataset.key, mode);
+      if (inside.length) items.push([`Duplicate ${inside.length} connection${inside.length > 1 ? 's' : ''}…`, () => this.duplicate(inside, proj, node.querySelector('.nm')?.textContent || node.dataset.env || proj)]);
+      items.push(...this.disconnectItem(inside, node.dataset.env && !node.querySelector('.nm') ? `${proj} / ${node.dataset.env}` : proj));
       if (!node.dataset.env) items.push(['Rename folder…', async () => {
         const to = prompt('Rename folder', proj);
         if (to && to !== proj) { await api('POST', '/api/projects/rename', { from: proj, to: to.trim() }); poll(); }
       }]);
+    } else if (node?.dataset.key && node.dataset.gmode && node.dataset.gmode !== 'top') { // env / app / type / user… groups
+      const inside = this.nodeEntries(node.dataset.key, mode);
+      if (inside.length) items.push([`Duplicate ${inside.length} connection${inside.length > 1 ? 's' : ''}…`, () => this.duplicate(inside, null, node.querySelector('.nm')?.textContent || node.textContent.trim())]);
+      items.push(...this.disconnectItem(inside, node.querySelector('.nm')?.textContent || node.dataset.env || 'this group'));
     } else {
       items.push(['New connection…', () => openEntryDialog(null)],
         ['New folder…', () => { const n = prompt('Folder name (use / for subfolders)'); if (n) openEntryDialog({ project: n.trim() }); }]);
     }
-    const m = $('#ctxMenu');
-    m.innerHTML = items.map((it, i) => it === '-' ? '<hr>' : `<button data-i="${i}">${esc(it[0])}</button>`).join('');
-    m.hidden = false;
-    m.style.left = Math.min(ev.clientX, innerWidth - 210) + 'px';
-    m.style.top = Math.min(ev.clientY, innerHeight - m.offsetHeight - 8) + 'px';
-    m.onclick = c => { const b = c.target.closest('[data-i]'); if (b) { m.hidden = true; items[b.dataset.i][1](); } };
+    this.showMenu(ev, items);
   },
 };
 const sshPort = e => (['', 'ssh', 'sftp', 'scp'].includes(e.protocol || '') && e.port) || 22;

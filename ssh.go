@@ -88,14 +88,32 @@ func (a *App) dialSSH(e Entry, user, pass string) (*ssh.Client, error) {
 	return client, nil
 }
 
-// keepAlive stops idle sessions from being cut by corporate firewalls.
+// keepAlive stops idle sessions from being cut by corporate firewalls, and
+// notices a dead connection (network gone, server rebooted): when the server
+// stops answering, the connection is closed so the terminal shows
+// "disconnected" straight away instead of hanging.
 func keepAlive(c *ssh.Client) {
-	for range time.Tick(30 * time.Second) {
-		if _, _, err := c.SendRequest("keepalive@openssh.com", true, nil); err != nil {
-			return
+	misses := 0
+	for range time.Tick(keepAliveEvery) {
+		reply := make(chan error, 1)
+		go func() { _, _, err := c.SendRequest("keepalive@openssh.com", true, nil); reply <- err }()
+		select {
+		case err := <-reply:
+			if err != nil { // connection already closed
+				c.Close()
+				return
+			}
+			misses = 0
+		case <-time.After(keepAliveWait):
+			if misses++; misses >= 2 {
+				c.Close()
+				return
+			}
 		}
 	}
 }
+
+var keepAliveEvery, keepAliveWait = 30 * time.Second, 15 * time.Second
 
 // hostKeyCallback trusts a server on first connect (like PuTTY's "store key
 // in cache") and refuses if its key changes later.

@@ -473,7 +473,8 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .tnode .badge { font-size: 9px; padding: 0 4px; }
 .ctx { position: fixed; z-index: 20; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.25); padding: 4px; min-width: 190px; }
 .ctx button { display: block; width: 100%; text-align: left; background: none; border: none; padding: 6px 10px; border-radius: 5px; }
-.ctx button:hover { background: var(--panel2); }
+.ctx button:hover:not(:disabled) { background: var(--panel2); }
+.ctx button:disabled { color: var(--muted); opacity: .6; cursor: default; }
 .ctx hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
 /* files */
@@ -1079,3 +1080,31 @@ body.side-collapsed:not(.side-top) .side { width: 84px; padding-right: 4px; }
 .dbic { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-right: 4px; font-size: 11px; line-height: 1; flex: none; }
 .dbic.ora { border: 2px solid var(--muted); border-radius: 50%; width: 9px; height: 9px; font-size: 0; }
 .tnode small.dbaddr { font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.copytag { color: var(--muted); font-style: italic; margin-left: 2px; }
+.dot.live { background: #22a35a; box-shadow: 0 0 0 2px color-mix(in srgb, #22a35a 30%, transparent); }
+.dot.dropped { background: transparent; border: 1.5px dashed #6b7280; width: 8px; height: 8px; }
+.droptag { margin-left: 6px; font-size: 11px; color: var(--muted); font-style: italic; }
+.lastok { margin-left: 6px; font-size: 11px; color: #22a35a; white-space: nowrap; }
+.lastfail { margin-left: 6px; font-size: 11px; font-weight: 800; color: #6b7280; }
+
+/* FTP lists look like FileZilla: Segoe UI 9pt, compact rows, ruled headers, Windows selection */
+#view-files .listing { font: 12px/18px "Segoe UI", Tahoma, system-ui, sans-serif; background: var(--panel); }
+#view-files .frow, #view-files .fhead { gap: 0; padding: 0 4px; font-size: 12px; line-height: 18px; }
+#view-files .fhead { padding: 0 4px; background: var(--panel2); color: var(--text); border-bottom: 1px solid var(--border); }
+#view-files .fhead span { padding: 2px 6px; border-right: 1px solid var(--border); font-weight: 400; }
+#view-files .fhead span:last-child { border-right: none; }
+#view-files .frow > span { padding: 0 6px; }
+#view-files .frow .ty, #view-files .frow .sz, #view-files .frow .mt { color: var(--text); font-size: 12px; }
+#view-files .frow .nm::before { font-size: 11px; }
+#view-files .frow:hover { background: color-mix(in srgb, #0078d7 8%, transparent); }
+#view-files .frow.sel { background: color-mix(in srgb, #0078d7 22%, transparent); outline: 1px solid color-mix(in srgb, #0078d7 45%, transparent); outline-offset: -1px; }
+#view-files .pathbar .path { font: 12px "Segoe UI", Tahoma, system-ui, sans-serif; }
+
+/* Right-click submenus (Copy ▸) */
+.ctxsub { position: relative; }
+.ctxsub-btn { display: flex !important; width: 100%; align-items: center; }
+.ctxarrow { margin-left: auto; padding-left: 16px; color: var(--muted); }
+.ctxsub-menu { display: none; position: absolute; left: 100%; top: -5px; min-width: 190px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.18); z-index: 1; }
+#ctxMenu.subleft .ctxsub-menu { left: auto; right: 100%; }
+.ctxsub:hover > .ctxsub-menu, .ctxsub.open > .ctxsub-menu { display: block; }
+.ctxsub-menu button { display: block; width: 100%; text-align: left; }

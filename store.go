@@ -48,6 +48,7 @@ type Entry struct {
 	Unsorted      bool              `json:"unsorted,omitempty"`     // captured, not yet looked at (the Unsorted inbox)
 	Status        string            `json:"status,omitempty"`       // last connection/link check: "ok" or "fail"
 	StatusAt      time.Time         `json:"status_at,omitzero"`
+	LastOK        time.Time         `json:"last_ok,omitzero"` // when it last connected / checked fine (kept when a later try fails)
 	StatusMsg     string            `json:"status_msg,omitempty"`
 	Captures      []Capture         `json:"captures,omitempty"` // when and where the details came from, oldest first
 }
@@ -548,7 +549,9 @@ func (s *Store) SetStatus(id string, err error) {
 	for _, e := range s.st.Entries {
 		if e.ID == id {
 			e.Status, e.StatusMsg, e.StatusAt = "ok", "", time.Now()
-			if err != nil {
+			if err == nil {
+				e.LastOK = e.StatusAt
+			} else {
 				e.Status, e.StatusMsg = "fail", err.Error()
 			}
 			s.changed()
