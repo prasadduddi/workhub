@@ -567,6 +567,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/work/import", a.handleWorkImport)
 	mux.HandleFunc("GET /api/work/{id}", a.handleWorkGet)
 	mux.HandleFunc("DELETE /api/work/{id}", a.handleWorkDelete)
+	mux.HandleFunc("POST /api/work/{id}/archive", a.handleWorkArchive)
 	mux.HandleFunc("POST /api/work/{id}/blocks", a.handleWorkAdd)
 	mux.HandleFunc("PUT /api/work/{id}/doc", a.handleWorkDoc)
 	mux.HandleFunc("POST /api/work/{id}/doc", a.handleWorkDoc) // sendBeacon on tab close

@@ -954,3 +954,15 @@ body.side-collapsed:not(.side-top) .navhead:not(:first-child)::after { content: 
 .bm-tbl .bm-tname { font-weight: 600; }
 .bm-ttools { white-space: nowrap; }
 @media (hover: hover) { .bm-tbl tr:not(:hover) .bm-ttools button { visibility: hidden; } }
+
+/* thread box formatting bar */
+.tcol { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tfmt { display: flex; gap: 2px; flex-wrap: wrap; }
+.tfmt button { min-height: 24px; padding: 1px 8px; font-size: 12.5px; }
+.tfmt button.on { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); }
+
+/* archived threads */
+.tarch { font-size: 11px; color: var(--muted); margin-left: 6px; }
+.tli:has(.tarch) { opacity: .7; }
+.tarch-toggle { display: block; padding: 8px; }
+.tarch-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--panel2); border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted); }

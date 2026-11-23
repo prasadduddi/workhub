@@ -18,17 +18,20 @@ import (
 )
 
 type WorkItem struct {
-	ID      string       `json:"id"`
-	Title   string       `json:"title"`
-	Status  string       `json:"status"` // todo, doing, blocked, done
-	Tags    []string     `json:"tags,omitempty"`
-	Jira    string       `json:"jira,omitempty"`  // linked Jira issue key, e.g. PAY-123 or CM-456
-	Blocks  []*Block     `json:"blocks"`          // older format, converted into Doc by the page
-	Doc     string       `json:"doc"`             // the free-form document (sanitised HTML)
-	Files   []Attachment `json:"files,omitempty"` // images/files placed in Doc or posts
-	Posts   []*Post      `json:"posts,omitempty"` // the thread (see threads.go); Doc/Blocks are its older forms
-	Created time.Time    `json:"created"`
-	Updated time.Time    `json:"updated"`
+	ID     string       `json:"id"`
+	Title  string       `json:"title"`
+	Status string       `json:"status"` // todo, doing, blocked, done
+	Tags   []string     `json:"tags,omitempty"`
+	Jira   string       `json:"jira,omitempty"`  // linked Jira issue key, e.g. PAY-123 or CM-456
+	Blocks []*Block     `json:"blocks"`          // older format, converted into Doc by the page
+	Doc    string       `json:"doc"`             // the free-form document (sanitised HTML)
+	Files  []Attachment `json:"files,omitempty"` // images/files placed in Doc or posts
+	Posts  []*Post      `json:"posts,omitempty"` // the thread (see threads.go); Doc/Blocks are its older forms
+	// Archived threads are kept but left out of the thread list (unless
+	// "Show archived" is on).
+	Archived bool      `json:"archived,omitempty"`
+	Created  time.Time `json:"created"`
+	Updated  time.Time `json:"updated"`
 }
 
 type Block struct {
@@ -95,6 +98,36 @@ func (s *Store) SaveWorkItem(in WorkItem) WorkItem {
 	s.st.WorkItems = append(s.st.WorkItems, w)
 	s.changed()
 	return *w
+}
+
+// ArchiveWork archives or restores a thread. An archived thread stops
+// receiving clipboard captures.
+func (s *Store) ArchiveWork(id string, archived bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w := s.workItem(id)
+	if w == nil {
+		return errors.New("work item not found")
+	}
+	w.Archived = archived
+	if archived && s.st.Settings.ActiveThread == id {
+		s.st.Settings.ActiveThread = ""
+	}
+	s.changed()
+	return nil
+}
+
+func (a *App) handleWorkArchive(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Archived bool }
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	if err := a.store.ArchiveWork(r.PathValue("id"), in.Archived); err != nil {
+		writeErr(w, 404, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func (s *Store) DeleteWorkItem(id string) {
@@ -255,7 +288,7 @@ func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 				sb.WriteString(" " + strings.ToLower(b.File.Name))
 			}
 		}
-		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated,
+		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated, "archived": wi.Archived,
 			"notes": n["text"], "links": n["link"], "images": n["image"], "files": n["file"], "posts": n["post"], "search": sb.String()})
 	}
 	writeJSON(w, out)

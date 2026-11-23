@@ -41,8 +41,15 @@ function sanitizeHTML(html) {
   return doc.body.innerHTML;
 }
 
+// Formatting for the thread box, replies and edited posts: works on whichever
+// of them was used last (Ctrl+B / Ctrl+I / Ctrl+U also work while typing).
+const FMT = [['bold', '<b>B</b>', 'Bold (Ctrl+B)'], ['italic', '<i>I</i>', 'Italic (Ctrl+I)'], ['underline', '<u>U</u>', 'Underline (Ctrl+U)'],
+  ['strikeThrough', '<s>S</s>', 'Strikethrough'], ['insertUnorderedList', '• List', 'Bulleted list'], ['insertOrderedList', '1. List', 'Numbered list'], ['removeFormat', 'T̸', 'Clear formatting']];
+const FMT_BAR = `<div class="tfmt">${FMT.map(([c, l, t]) => `<button type="button" class="icon" data-fmt="${c}" title="${t}">${l}</button>`).join('')}</div>`;
+let lastEditable = null;
+
 const Work = {
-  list: [], current: null, replyTo: '', openReplies: new Set(),
+  list: [], current: null, replyTo: '', openReplies: new Set(), showArchived: false,
 
   async loadList() {
     this.list = (await api('GET', '/api/work').catch(() => [])) || [];
@@ -54,11 +61,21 @@ const Work = {
 
   renderList() {
     const q = ($('#workSearch')?.value || '').trim().toLowerCase();
-    const items = this.list.filter(w => !q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t)));
-    $('#workList').innerHTML = items.map(w => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''}" data-work="${w.id}">
-      <div class="tli-top"><span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>${w.id === this.active() ? '<span class="tcap" title="Captures are being added here">● capturing</span>' : ''}</div>
+    const archived = this.list.filter(w => w.archived).length;
+    const items = this.list.filter(w => (this.showArchived || !w.archived || w.id === this.current?.id) && (!q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t))));
+    $('#workList').innerHTML = (items.map(w => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''}" data-work="${w.id}">
+      <div class="tli-top"><span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.id === this.active() ? '<span class="tcap" title="Captures are being added here">● capturing</span>' : ''}</div>
       <b>${esc(w.title)}</b><small>${w.jira && !w.title.toUpperCase().includes(w.jira) ? `◆ ${esc(w.jira)} · ` : ''}${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} post${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`).join('')
-      || `<div class="muted tiny" style="padding:8px">${q ? 'No matches' : 'No task threads yet — press + New thread.'}</div>`;
+      || `<div class="muted tiny" style="padding:8px">${q ? 'No matches' : 'No task threads yet — press + New thread.'}</div>`)
+      + (archived ? `<a href="#" class="tmore tarch-toggle" data-toggle-archived>${this.showArchived ? 'Hide archived' : `Show archived (${archived})`}</a>` : '');
+  },
+
+  async archive(w, on) {
+    try { await api('POST', `/api/work/${w.id}/archive`, { archived: on }); } catch (err) { return toast(err.message, true); }
+    w.archived = on;
+    if (on && S.settings.active_thread === w.id) S.settings.active_thread = '';
+    await this.loadList(); this.render();
+    toast(on ? `Archived “${w.title}” — it is hidden from the list` : `“${w.title}” is back in the list`, false, on ? () => this.archive(w, false) : undefined);
   },
 
   // Sidebar line under Watch clipboard: where captures go.
@@ -154,10 +171,13 @@ const Work = {
         <button data-tact="word" title="Open the Word copy (kept in the work-items folder)">Open in Word</button>
         <button data-tact="more" class="icon more" title="More">⋯</button>
       </div>
+      ${w.archived ? `<div class="tarch-bar">🗄 This thread is archived (hidden from the list). <button class="icon" data-tact="unarchive">Unarchive</button></div>` : ''}
       ${this.pinsHTML(w)}
       <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
       <div class="tcompose">
-        <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Write a note… paste a screenshot (Win+Shift+S, then Ctrl+V) or drop files. Enter posts · Shift+Enter new line"></div>
+        <div class="tcol">${FMT_BAR}
+          <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Write a note… paste a screenshot (Win+Shift+S, then Ctrl+V) or drop files. Enter posts · Shift+Enter new line"></div>
+        </div>
         <button id="tsend" class="primary" title="Post (Enter)">Post</button>
       </div>`;
     if (scroll) this.scrollEnd();
@@ -331,13 +351,32 @@ side.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('File
 side.addEventListener('dragleave', e => { if (e.target === side) side.classList.remove('dragover'); });
 side.addEventListener('drop', e => { if (!e.dataTransfer.files.length) return; e.preventDefault(); side.classList.remove('dragover'); Work.importWord(e.dataTransfer.files); });
 $('#workSearch').addEventListener('input', () => Work.renderList());
-$('#workList').addEventListener('click', e => { const li = e.target.closest('[data-work]'); if (li) Work.open(li.dataset.work); });
+$('#workList').addEventListener('click', e => {
+  if (e.target.closest('[data-toggle-archived]')) { e.preventDefault(); Work.showArchived = !Work.showArchived; return Work.renderList(); }
+  const li = e.target.closest('[data-work]'); if (li) Work.open(li.dataset.work);
+});
 $('#captureThread')?.addEventListener('click', e => {
   const go = e.target.closest('[data-gothread]'); if (go) { e.preventDefault(); return Work.open(go.dataset.gothread); }
   if (e.target.closest('[data-stopthread]')) { e.preventDefault(); saveSettings({ active_thread: '' }).then(() => { Work.renderCapture(); Work.renderList(); if (Work.current) Work.render(); }); }
 });
 
 const page = $('#taskMain');
+page.addEventListener('focusin', e => { if (e.target.isContentEditable) lastEditable = e.target.closest('[contenteditable="true"]'); });
+page.addEventListener('mousedown', e => { if (e.target.closest('[data-fmt]')) e.preventDefault(); }); // keep the text selected
+page.addEventListener('click', e => {
+  const b = e.target.closest('[data-fmt]'); if (!b) return;
+  const box = lastEditable?.isConnected ? lastEditable : $('#tbox');
+  if (document.activeElement !== box) box.focus();
+  document.execCommand(b.dataset.fmt);
+  fmtState();
+}, true);
+// B / I / U / S light up when the cursor is in such text
+function fmtState() {
+  const bar = $('#taskMain .tfmt'); if (!bar) return;
+  const inBox = document.activeElement?.isContentEditable && page.contains(document.activeElement);
+  for (const b of $$('[data-fmt]', bar)) b.classList.toggle('on', !!inBox && ['bold', 'italic', 'underline', 'strikeThrough'].includes(b.dataset.fmt) && document.queryCommandState(b.dataset.fmt));
+}
+document.addEventListener('selectionchange', fmtState);
 page.addEventListener('input', e => { if (e.target.id === 'workTitle') Work.saveHeader(); });
 page.addEventListener('change', e => { if (e.target.id === 'workStatus') Work.saveHeader(); });
 page.addEventListener('keydown', e => {
@@ -354,6 +393,7 @@ page.addEventListener('click', async e => {
   if (!w) return;
   if (e.target.closest('#tsend')) return Work.send();
   if (act === 'capture') return Work.setCapture(w.id !== Work.active());
+  if (act === 'unarchive') return Work.archive(w, false);
   if (act === 'jiralink') return Work.linkJira();
   if (act === 'jiraopen') return Work.openJira();
   if (act === 'word' || act === 'folder') {
@@ -372,6 +412,8 @@ page.addEventListener('click', async e => {
         try { const r = await api('POST', `/api/work/${w.id}/markdown?what=copy`); await copyText(r.markdown, 'Thread copied as Markdown — paste it into Jira, Confluence or Teams'); }
         catch (err) { toast(err.message, true); }
       }],
+      '-',
+      [w.archived ? '↩ Unarchive thread' : '🗄 Archive thread (hide from the list)', () => Work.archive(w, !w.archived)],
       '-',
       ['Open the work-items folder', () => api('POST', `/api/work/${w.id}/word?what=folder`).catch(err => toast(err.message, true))],
       ['Delete this thread…', async () => {

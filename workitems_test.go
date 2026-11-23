@@ -118,3 +118,28 @@ func TestWorkDocx(t *testing.T) {
 		t.Fatal("docx left after delete")
 	}
 }
+
+func TestArchiveThread(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	w := s.SaveWorkItem(WorkItem{Title: "Old release"})
+	st := s.Settings()
+	st.ActiveThread = w.ID
+	s.SetSettings(st)
+	if err := s.ArchiveWork(w.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetWorkItem(w.ID); !got.Archived || s.Settings().ActiveThread != "" {
+		t.Fatalf("archived=%v active=%q", got.Archived, s.Settings().ActiveThread)
+	}
+	// editing the title doesn't bring it back
+	s.SaveWorkItem(WorkItem{ID: w.ID, Title: "Old release (done)"})
+	if got, _ := s.GetWorkItem(w.ID); !got.Archived {
+		t.Fatal("saving the header unarchived it")
+	}
+	if err := s.ArchiveWork(w.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetWorkItem(w.ID); got.Archived {
+		t.Fatal("still archived")
+	}
+}
