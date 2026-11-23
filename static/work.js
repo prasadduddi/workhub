@@ -253,6 +253,7 @@ const Work = {
  ${this.jiraChip(w)}
         <button data-tact="capture" class="${capturing ? 'rec' : ''}" title="${capturing ? 'Recording: everything Watch clipboard captures is posted here — click to stop' : 'While on, everything Watch clipboard captures is also posted here'}">${capturing ? '<span class="recdot"></span>Capturing here' : '📥 Capture here'}</button>
         <span class="spacer"></span>
+        ${typeof Popout !== 'undefined' && !Popout.me ? '<button data-tact="popout" title="Open this thread in its own window (⇲ Dock back puts it back)">⧉ New window</button>' : ''}
         <button data-tact="word" title="Open the Word copy (kept in the work-items folder)">Open in Word</button>
         <button data-tact="more" class="icon more" title="More">⋯</button>
       </div>
@@ -614,6 +615,7 @@ page.addEventListener('click', async e => {
   if (!w) return;
   if (e.target.closest('#tsend')) return Work.send();
   if (act === 'capture') return Work.setCapture(w.id !== Work.active());
+  if (act === 'popout') return Popout.popThread(w);
   if (act === 'star') return Work.star(w, !w.starred);
   if (act === 'unarchive') return Work.archive(w, false);
   if (act === 'jiralink') return Work.linkJira();

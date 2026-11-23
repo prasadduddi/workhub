@@ -4,6 +4,10 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.12.3', title: 'Tabs in their own window', items: [
+    ['⧉', 'Pop out a tab', '⧉ on an SSH or SQL tab, ⧉ New window on a thread, or View → Open this page in a new window: it opens in its own window without the sidebar and menus. SQL tabs keep their session (nothing is lost, even uncommitted changes); SSH terminals reconnect with the same login. ⇲ Dock back to WorkHub — or just closing that window — puts it back; the ⧉ chips at the top of WorkHub dock them back too.', 'terminal'],
+    ['📌', 'Install from the Tools menu', 'Tools → Install for easy access… opens Settings at This PC with the Install button ready (Windows).', ''],
+  ] },
   { v: '1.12.2', title: 'Menu bar, grouped pages, recording dot', items: [
     ['☰', 'Menu bar', 'File · Edit · View · Connect · Tools · Help across the top (Alt+F, Alt+E…): new items, import, backups, lock; search, passwords, settings; pages, sidebar, theme; quick connect, recent, reopen, disconnect all; compare, tail a log, SSH keys; help, shortcuts, updates.', ''],
     ['📋', 'Pages in groups', 'The sidebar holds only pages, in three coloured groups — 📋 My work, 🔌 Connect, 📚 Saved — that fold. Hide pages you don’t use: View → Pages in the sidebar (they stay in View → Go to).', ''],

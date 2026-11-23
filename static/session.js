@@ -21,7 +21,7 @@ const Session = {
   // Saved every few seconds while something changed (only after the start-up
   // decision, so an empty start never overwrites what was open).
   save() {
-    if (!this.ready || Lock.shown) return;
+    if (!this.ready || Lock.shown || /[?&]popout=/.test(location.search)) return; // a popped-out window isn't the session
     const s = this.snap(), key = JSON.stringify(s);
     if (key === this.last) return;
     this.last = key;
@@ -33,6 +33,7 @@ const Session = {
   },
 
   async start() {
+    if (/[?&]popout=/.test(location.search)) return; // a popped-out window: nothing to reopen
     // wait until the data is there (and the PIN screen, if any, is passed)
     for (let i = 0; i < 120 && (Lock.shown || !S.entries.length); i++) await new Promise(r => setTimeout(r, 500));
     const s = S.settings.last_session;

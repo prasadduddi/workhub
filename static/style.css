@@ -1326,3 +1326,19 @@ body.side-top #nav .navgroup .navgrp { width: auto; padding: 4px 6px; }
 @media (prefers-reduced-motion: reduce) { .recdot { animation: none; } }
 button.rec { border-color: #e02424; color: var(--text); background: color-mix(in srgb, #e02424 8%, var(--panel)); font-weight: 600; }
 .tcap .recdot { width: 7px; height: 7px; margin-right: 4px; }
+
+/* a button pointed at from a menu (e.g. File → Install) */
+button.flash { animation: btnflash .8s ease-in-out 3; }
+@keyframes btnflash { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent); } }
+
+/* ⧉ pop-out windows */
+.tab .pop { margin-left: 6px; opacity: .55; cursor: pointer; font-size: 12px; }
+.tab .pop:hover { opacity: 1; color: var(--accent); }
+.popchips { display: flex; gap: 4px; margin-right: 8px; flex-wrap: wrap; }
+.popchip { font-size: 12px; padding: 2px 8px; border-radius: 12px; border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.popchip span { margin-left: 4px; color: var(--accent); }
+.popbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--panel2); }
+.popbar .popicon { color: var(--accent); }
+body.popout .side, body.popout #sideSplit, body.popout #menubar, body.popout #gsearch, body.popout .upd-pill, body.popout #popChips,
+body.popout .tree-host, body.popout .tree-split, body.popout #chatFab { display: none !important; }
+body.popout main { margin-left: 0; }

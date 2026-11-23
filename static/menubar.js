@@ -106,6 +106,7 @@ const Menubar = {
         ['Go to', null, PAGE_GROUPS.flatMap(([g, ic, , , vs], i) => [...(i ? ['-'] : []), ...vs.map(v => [`${$('.view.active')?.id === 'view-' + v ? '● ' : ''}${ic} ${this.label(v)}`, go(v)])])],
         ['Pages in the sidebar', null, PAGE_GROUPS.flatMap(([g, ic, , , vs], i) => [...(i ? ['-'] : []), ...vs.map(v => [`${hid.has(v) ? '☐' : '☑'} ${this.label(v)}  — ${ic} ${g}`, () => this.togglePage(v)])])],
         '-',
+        ['⧉ Open this page in a new window', () => Popout.popPage($('.view.active')?.id.replace('view-', '') || 'dashboard')],
         [`${document.body.classList.contains('side-collapsed') ? 'Show' : 'Hide'} the sidebar\tCtrl+B`, () => toggleSide()],
         [`Sidebar on the ${document.body.classList.contains('side-top') ? 'left' : 'top'}`, () => $('#sideFlip')?.click()],
         ['Theme', null, [['auto', 'Follow Windows'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => [`${theme === k ? '● ' : ''}${l}`, () => Theme.set(k)])],
@@ -128,6 +129,7 @@ const Menubar = {
         ['🔑 My SSH keys (copy for GitHub)…', () => SSHKeys.open()],
         '-',
         ['↗ Programs for “Open in”…', () => External.settings()],
+        ['📌 Install for easy access…', () => this.install()],
       ],
       Help: [
         ['❓ Help\tF1', () => Help.open()],
@@ -139,6 +141,17 @@ const Menubar = {
         [`About — ${$('#appVersion')?.textContent || 'WorkHub'}`, () => Settings.open()],
       ],
     };
+  },
+
+  // Tools → Install: Settings at "This PC", with the Install button highlighted.
+  async install() {
+    const inst = await api('GET', '/api/install').catch(() => ({}));
+    if (!inst.supported) return toast('Install for easy access is for the Windows versions of WorkHub', true);
+    await Settings.open();
+    const b = $('#settingsBody [data-set="install"]'), row = b?.closest('.set-row') || $('#settingsBody .set-row');
+    row?.scrollIntoView({ block: 'center' });
+    if (b) { b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 2400); b.focus(); }
+    else toast(`Already installed in ${inst.target} — it is in the Start menu (type “WorkHub”)`);
   },
 
   openMenu(name, btn) {
