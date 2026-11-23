@@ -771,7 +771,7 @@ function renderStats(list) {
   const fix = S.entries.filter(e => problems(e).length).length;
   $('#stats').innerHTML = (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing (user, password, environment, service name) or a failed login — click to list them"><b>⚠ ${fix}</b><span>Need attention</span></button>` : '')
     + ((n => n ? `<button class="stat inbox" data-find="is:unsorted" title="New captures you haven't looked at yet — each with a suggested folder"><b>📥 ${n}</b><span>New to sort</span></button>` : '')(S.entries.filter(e => e.unsorted).length))
-    + `<button class="stat" data-view-go="inbox" title="Open Captured"><b>${capturedToday}</b><span>Captured today</span></button>`
+    + (capturedToday ? `<button class="stat" data-view-go="inbox" title="Open Captured"><b>${capturedToday}</b><span>Captured today</span></button>` : '')
     + `<button class="stat act" id="retestBtn" title="Try every connection shown (SSH, SFTP/FTP, databases) with its saved login and update ✓ / ✗"><b>↻</b><span>Re-test ${list.filter(isConn).length} connections</span></button>`
     + `<div class="stat-line">${counts.map(([k, v, f]) => f ? `<a href="#" data-find="${f}">${v} ${k}</a>` : `<span>${v} ${k}</span>`).join(' · ')}</div>`;
   $('#inboxCount').textContent = capturedToday || '';
@@ -1285,6 +1285,48 @@ $('#board').addEventListener('change', ev => {
 });
 
 // Re-test: tries each connection with its saved login (4 at a time) and updates ✓ / ✗.
+// 🔑 Change a password everywhere: a user's new password on every connection
+// that logs in as that user (ticked ones only), optionally re-tested.
+const PwAll = {
+  conns(user) { return S.entries.filter(e => isConn(e) && !e.hidden && (e.username || '').toLowerCase() === user.trim().toLowerCase()); },
+  open(user = '') {
+    const counts = {};
+    for (const e of S.entries) if (isConn(e) && e.username) counts[e.username] = (counts[e.username] || 0) + 1;
+    $('#pwAllUsers').innerHTML = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([u, n]) => `<option value="${esc(u)}">${n} connection${n > 1 ? 's' : ''}</option>`).join('');
+    $('#pwAllUser').value = user; $('#pwAllPw').value = ''; $('#pwAllPw').type = 'password';
+    this.list();
+    $('#pwAllDlg').showModal();
+    (user ? $('#pwAllPw') : $('#pwAllUser')).focus();
+  },
+  list() {
+    const list = this.conns($('#pwAllUser').value).sort((a, b) => (ENV_RANK[a.env] ?? 9) - (ENV_RANK[b.env] ?? 9) || a.host.localeCompare(b.host));
+    $('#pwAllList').innerHTML = list.map(e => `<label class="pwall-row"><input type="checkbox" value="${e.id}" checked>${dot(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="mono">${esc(e.username)}@${esc(e.host)}${e.port && e.port !== 22 ? ':' + e.port : ''}</span><span class="muted tiny">${esc(e.protocol || dbKindOf(e) || '')} · ${esc(e.project)}</span></label>`).join('')
+      || `<div class="muted tiny" style="padding:8px">${$('#pwAllUser').value.trim() ? 'No connections log in as this user.' : 'Type or pick a user.'}</div>`;
+    this.count();
+  },
+  picked() { return $$('#pwAllList input:checked').map(c => c.value); },
+  count() { const n = this.picked().length; $('#pwAllN').textContent = n ? `${n} connection${n > 1 ? 's' : ''} will get the new password` : ''; $('#pwAllSave').disabled = !n; },
+  async save() {
+    const ids = this.picked(), pw = $('#pwAllPw').value;
+    if (!pw) { $('#pwAllPw').focus(); return toast('Type the new password', true); }
+    try {
+      const r = await api('POST', '/api/entries/bulk', { ids, op: 'password', value: pw });
+      $('#pwAllDlg').close();
+      await poll();
+      toast(`🔑 New password set on ${r.changed} connection${r.changed === 1 ? '' : 's'}${r.changed < ids.length ? ` (${ids.length - r.changed} already had it)` : ''}`);
+      if ($('#pwAllTest').checked) retest(ids.map(byId).filter(Boolean));
+    } catch (err) { toast(err.message, true); }
+  },
+};
+$('#pwAllUser').addEventListener('input', () => PwAll.list());
+$('#pwAllList').addEventListener('change', () => PwAll.count());
+$('#pwAllAll').onclick = () => { $$('#pwAllList input').forEach(c => { c.checked = true; }); PwAll.count(); };
+$('#pwAllNone').onclick = () => { $$('#pwAllList input').forEach(c => { c.checked = false; }); PwAll.count(); };
+$('#pwAllShow').onclick = () => { $('#pwAllPw').type = $('#pwAllPw').type === 'password' ? 'text' : 'password'; };
+$('#pwAllCancel').onclick = () => $('#pwAllDlg').close();
+$('#pwAllSave').onclick = () => PwAll.save();
+$('#pwAllPw').addEventListener('keydown', ev => { if (ev.key === 'Enter') PwAll.save(); });
+
 async function retest(list) {
   list = list.filter(isConn);
   if (!list.length) return toast('No connections to test here', true);
@@ -1562,6 +1604,7 @@ const Term = {
     const ex = t.entry.extra || {};
     if (t.local || ex.run_macros !== '1' || !ex.commands) return;
     const queue = ex.commands.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+    if (t.entry.env === 'PROD' && !confirm(`${t.entry.name} is a PRODUCTION server.\n\nRun these commands on it now?\n\n${queue.join('\n')}`)) return toast('Commands not run (PROD)');
     let timer = null, seen = false;
     const next = () => {
       if (t.closed || t.ws?.readyState !== 1) { t.macroKick = null; return; }
@@ -1577,6 +1620,7 @@ const Term = {
   activate(t) {
     this.active = t;
     this.tabs.forEach(x => x.el.classList.toggle('active', x === t));
+    $('#termWrap').classList.toggle('prod', !!t && !t.local && t.entry.env === 'PROD');
     $('#termEmpty').style.display = t ? 'none' : '';
     if (!t) this.emptyHTML();
     this.renderTabs();
@@ -1601,8 +1645,8 @@ const Term = {
   },
 
   renderTabs() {
-    $('#termTabs').innerHTML = this.tabs.map(t => `<div class="tab ${t === this.active ? 'active' : ''}" data-t="${t.id}">
-      <span style="color:${t.closed ? 'var(--muted)' : 'var(--ok)'}">●</span>${typeof Groups !== 'undefined' ? Groups.chip(t.local ? t.local.label + ' ' + t.local.dir : Groups.entryText(t.entry)) : ''}${t.local ? '⌨ ' + esc(t.local.label) : esc((t.creds.username || t.entry.username || '') + '@' + t.entry.host)}
+    $('#termTabs').innerHTML = this.tabs.map(t => `<div class="tab ${t === this.active ? 'active' : ''} ${!t.local && t.entry.env === 'PROD' ? 'prod' : ''}" data-t="${t.id}" ${!t.local && t.entry.env === 'PROD' ? 'title="PRODUCTION server"' : ''}>
+      <span style="color:${t.closed ? 'var(--muted)' : 'var(--ok)'}">●</span>${!t.local && t.entry.env === 'PROD' ? '<span class="badge PROD">PROD</span>' : ''}${typeof Groups !== 'undefined' ? Groups.chip(t.local ? t.local.label + ' ' + t.local.dir : Groups.entryText(t.entry)) : ''}${t.local ? '⌨ ' + esc(t.local.label) : esc((t.creds.username || t.entry.username || '') + '@' + t.entry.host)}
       <span class="x" data-x="${t.id}">✕</span></div>`).join('');
     $('#termCount').textContent = this.tabs.filter(t => !t.closed).length || '';
   },
@@ -1963,7 +2007,7 @@ const Tree = {
     const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
     const dbOpen = isDb && SQL.expanded.has(e.id);
     out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
-      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢 ' : ''}<span class="nm">${label || ruleName(e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢 ' : ''}<span class="nm">${label || (canDB(e) ? ruleName(e) : cardName(e) || esc(e.host || e.name))}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) || cardName(e) ? `<small>${esc(target)}</small>` : e.username || port !== def ? `<small>${esc(e.username || '')}${port !== def ? ':' + port : ''}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
     if (dbOpen) {
       const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
       if (dbt) out += SQL.treeHTML(dbt, depth + 1);
@@ -2142,6 +2186,7 @@ const Tree = {
         ['Copy host', () => copyText(e.host)]);
       if (e.username) items.push(['Copy username', () => copyText(e.username)]);
       if (e.password) items.push(['Copy password', () => copyText(e.password, 'Password copied')]);
+      if (e.username && isConn(e)) items.push([`🔑 Change ${e.username}'s password everywhere…`, () => PwAll.open(e.username)]);
       items.push(['Copy all details', () => copyText(detailsText(e), 'All details copied')]);
       if (canSSH(e)) items.push(['Copy ssh command', () => copyText(`ssh ${e.username ? e.username + '@' : ''}${e.host}${sshPort(e) !== 22 ? ' -p ' + sshPort(e) : ''}`)]);
       if (canDB(e) && jdbcURL(e)) items.push(['Copy JDBC URL', () => copyText(jdbcURL(e))]);

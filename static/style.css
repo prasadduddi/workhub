@@ -917,3 +917,13 @@ body.side-top #nav button.active { font-weight: inherit; box-shadow: inset 0 -2p
 /* collapsed sidebar: a short line between Find / Connect / Tools (icons stay put) */
 body.side-collapsed:not(.side-top) .navhead:not(:first-child) { position: relative; }
 body.side-collapsed:not(.side-top) .navhead:not(:first-child)::after { content: ""; position: absolute; left: 16px; width: 32px; top: 55%; height: 1px; background: var(--border); }
+
+/* PROD terminals: red tab and a thin red frame */
+.tab.prod { border-color: var(--prod); border-top: 3px solid var(--prod); }
+.tab.prod .badge { font-size: 10px; }
+#termWrap.prod { box-shadow: 0 0 0 2px var(--prod); }
+/* change a password everywhere */
+.pwall-list { max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; margin: 6px 0; }
+.pwall-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 13px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); cursor: pointer; }
+.pwall-row .mono { font-family: var(--mono); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pwAllDlg { width: min(620px, 94vw); }

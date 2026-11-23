@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -106,5 +107,25 @@ func TestJenkinsJobNames(t *testing.T) {
 	_, got := st.Ingest("https://ci.corp.local/job/Payments/job/pay-api-deploy/\nhttps://ci.corp.local/job/Payments/job/pay-batch/", "paste", "General")
 	if len(got) != 2 || got[0].Name != "Jenkins – Payments › pay-api-deploy" || got[1].Name != "Jenkins – Payments › pay-batch" {
 		t.Fatalf("%q %q", got[0].Name, got[1].Name)
+	}
+}
+
+func TestBulkPassword(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	s.Ingest("ssh deploy@srv-01.example.com pass Old#1\n\nssh deploy@srv-02.example.com pass Old#1", "paste", "")
+	var ids []string
+	for _, e := range s.st.Entries {
+		ids, e.Password, e.Status = append(ids, e.ID), "Old#1", "fail"
+	}
+	if n, err := s.Bulk(ids, "password", "New#2"); err != nil || n != 2 {
+		t.Fatalf("changed %d, %v", n, err)
+	}
+	for _, e := range s.st.Entries {
+		if e.Password != "New#2" || !slices.Contains(e.PrevPasswords, "Old#1") || e.Status != "" {
+			t.Fatalf("%s: pw %q prev %v status %q", e.Name, e.Password, e.PrevPasswords, e.Status)
+		}
+	}
+	if n, _ := s.Bulk(ids, "password", "New#2"); n != 0 {
+		t.Fatalf("same password counted as a change: %d", n)
 	}
 }

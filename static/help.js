@@ -46,6 +46,10 @@ const HELP_TOPICS = [
     'Copy any text with hosts, users, passwords or links (an email, Teams message, wiki page) — WorkHub files what it recognises.',
     'Click “Saving to …” under the switch to choose the project new captures go to.',
     'Everything captured is listed on the Captured page; copying the same text twice is ignored.'] },
+  { t: 'Change a password on every server', k: 'change update new password rotate expired everywhere all servers user same', v: 'terminal', s: [
+    'Right-click a connection of that user (in a tree, or ⋯ on its card) → 🔑 Change … password everywhere. Or ☰ → Change a password everywhere and pick the user.',
+    'Type the new password. Every connection that logs in as that user is listed and ticked — untick any that keep the old one.',
+    'Change password saves it (the old one stays in history) and, with the box ticked, tests them all.'] },
   { t: 'Use the server tree with the keyboard', k: 'keyboard keys arrow tree navigate move enter connect fold open', v: 'terminal', s: [
     'Click in the SSH, FTP or SQL tree (or Tab to it).',
     '↑ ↓ move, Home / End jump to the top / bottom.',

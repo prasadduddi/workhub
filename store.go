@@ -451,6 +451,14 @@ func (s *Store) Bulk(ids []string, op, value string) (int, error) {
 			e.Project = orDefault(strings.TrimSpace(value), "General")
 		case "env":
 			e.Env = strings.ToUpper(strings.TrimSpace(value))
+		case "password": // a changed password, set on every login of that user
+			if value == e.Password {
+				continue
+			}
+			if e.Password != "" && !slices.Contains(e.PrevPasswords, e.Password) {
+				e.PrevPasswords = append(e.PrevPasswords, e.Password)
+			}
+			e.Password, e.Status, e.StatusMsg = value, "", "" // not tried with the new one yet
 		default:
 			return 0, fmt.Errorf("unknown bulk action %q", op)
 		}

@@ -112,7 +112,7 @@ $('#mainMenuBtn').onclick = () => {
     ["✨ What's new & tips", click('#whatsNewBtn')],
     [document.body.classList.contains('side-top') ? '⇤ Menu on the left' : '⇡ Menu at the top', click('#sideFlip')],
     [`🌓 Theme: ${{ auto: 'follow Windows', light: 'light', dark: 'dark' }[Theme.pref()]} — switch to ${{ auto: 'light', light: 'dark', dark: 'follow Windows' }[Theme.pref()]}`, () => Theme.set({ auto: 'light', light: 'dark', dark: 'auto' }[Theme.pref()])], '-',
-    ['👤 Your profile', click('#profileBtn')], ['🔒 Lock (Ctrl+L)', click('#lockBtn')], '-',
+    ['👤 Your profile', click('#profileBtn')], ['🔑 Change a password everywhere…', () => PwAll.open()], ['🔒 Lock (Ctrl+L)', click('#lockBtn')], '-',
     ['↗ Programs for “Open in”…', click('#extBtn')], ['🛟 Backups…', click('#backupBtn')], ['Import data…', click('#importBtn')], ['Data location…', click('#dataLocBtn')], '-',
     ['Quit WorkHub', click('#quitBtn')]]));
 };
