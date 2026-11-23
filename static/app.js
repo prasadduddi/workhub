@@ -2455,6 +2455,21 @@ function openExternal(u) {
   if (window.WH_DESKTOP && window.whOpenExternal) window.whOpenExternal(u, !!window.WH_NEW_WINDOW?.()); // Ctrl+Click → new Chrome window
   else window.open(u, '_blank', 'noopener');
 }
+// A file attached in WorkHub (task threads, Properties) downloads here, in the
+// WorkHub window — never in a new tab or the outside browser, which isn't
+// signed in. Also fixes links in posts saved by earlier versions.
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('a[href*="/api/props/files/"]');
+  if (!a || ev.button !== 0 || a.closest('[contenteditable="true"]')) return;
+  const u = new URL(a.href, location.href);
+  if (u.origin !== location.origin) return;
+  ev.preventDefault(); ev.stopPropagation();
+  u.searchParams.set('download', '1');
+  const dl = document.createElement('a');
+  dl.href = u.pathname + u.search; dl.download = a.textContent.trim() || '';
+  document.body.appendChild(dl); dl.click(); dl.remove();
+  toast(`⬇ Downloading ${a.textContent.trim()}`);
+}, true);
 document.addEventListener('click', ev => {
   const a = ev.target.closest('a[target="_blank"]'); // external links: handled by the desktop window itself
   if (a && window.WH_DESKTOP && !ev.defaultPrevented) { ev.preventDefault(); openExternal(a.href); }

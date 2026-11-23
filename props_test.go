@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -22,10 +21,10 @@ func TestProps(t *testing.T) {
 	if !img.Image || img.Text {
 		t.Fatalf("screenshot not recognised: %+v", img)
 	}
-	// Stored encrypted on disk.
+	// Stored as it is on disk (not encrypted).
 	raw, _ := os.ReadFile(filepath.Join(dir, "attachments", f.ID))
-	if strings.Contains(string(raw), "db.url") {
-		t.Fatal("attachment stored in plain text")
+	if string(raw) != props {
+		t.Fatalf("attachment on disk: %q", raw)
 	}
 	if _, b, _ := s.ReadAttachment(f.ID); string(b) != props {
 		t.Fatalf("read back %q", b)
@@ -45,5 +44,26 @@ func TestProps(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "attachments", f.ID)); !os.IsNotExist(err) {
 		t.Fatal("attachment file left behind")
+	}
+}
+
+func TestAttachmentsNotEncrypted(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	at, err := s.storeAttachment("notes.txt", []byte("plain words"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(s.attachDir(), at.ID)); string(raw) != "plain words" {
+		t.Fatalf("stored as %q", raw)
+	}
+	// a file saved encrypted by an older version still reads back
+	old, _ := s.encrypt([]byte("older secret"))
+	if got := s.attachmentData(old); string(got) != "older secret" {
+		t.Fatalf("old file: %q", got)
+	}
+	// and a plain file that happens to start like an encrypted one is left alone
+	odd := []byte(fileMagic + " just text")
+	if got := s.attachmentData(odd); string(got) != string(odd) {
+		t.Fatalf("plain file changed: %q", got)
 	}
 }

@@ -151,14 +151,11 @@ func (s *Store) AddAttachment(nodeID, name string, data []byte) (Attachment, err
 	return a, nil
 }
 
-// storeAttachment writes an encrypted copy of a file and describes it.
+// storeAttachment writes a copy of a file (as it is, not encrypted) and
+// describes it.
 func (s *Store) storeAttachment(name string, data []byte) (Attachment, error) {
 	if len(data) > maxAttachment {
 		return Attachment{}, fmt.Errorf("%s is larger than 50 MB", name)
-	}
-	blob, err := s.encrypt(data)
-	if err != nil {
-		return Attachment{}, err
 	}
 	a := Attachment{ID: randomHex(10), Name: filepath.Base(strings.ReplaceAll(name, `\`, "/")), Size: int64(len(data)), Added: time.Now()}
 	a.Mime = mime.TypeByExtension(strings.ToLower(filepath.Ext(a.Name)))
@@ -170,10 +167,20 @@ func (s *Store) storeAttachment(name string, data []byte) (Attachment, error) {
 	if err := os.MkdirAll(s.attachDir(), 0o700); err != nil {
 		return Attachment{}, err
 	}
-	if err := os.WriteFile(filepath.Join(s.attachDir(), a.ID), blob, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(s.attachDir(), a.ID), data, 0o600); err != nil {
 		return Attachment{}, err
 	}
 	return a, nil
+}
+
+// attachmentData: files saved before 1.9.5 are encrypted, newer ones are not.
+func (s *Store) attachmentData(blob []byte) []byte {
+	if strings.HasPrefix(string(blob[:min(len(blob), len(fileMagic))]), fileMagic) {
+		if data, err := s.decrypt(blob); err == nil {
+			return data
+		}
+	}
+	return blob
 }
 
 func (s *Store) findAttachment(id string) (*PropNode, int) {
@@ -205,23 +212,18 @@ func (s *Store) ReadAttachment(id string) (Attachment, []byte, error) {
 	if err != nil {
 		return a, nil, err
 	}
-	data, err := s.decrypt(blob)
-	return a, data, err
+	return a, s.attachmentData(blob), nil
 }
 
 // WriteAttachment replaces a text file's content (edited in the app).
 func (s *Store) WriteAttachment(id string, data []byte) (Attachment, error) {
-	blob, err := s.encrypt(data)
-	if err != nil {
-		return Attachment{}, err
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n, i := s.findAttachment(id)
 	if n == nil {
 		return Attachment{}, errors.New("file not found")
 	}
-	if err := os.WriteFile(filepath.Join(s.attachDir(), id), blob, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(s.attachDir(), id), data, 0o600); err != nil {
 		return Attachment{}, err
 	}
 	n.Files[i].Size = int64(len(data))

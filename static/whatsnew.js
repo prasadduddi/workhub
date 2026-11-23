@@ -4,6 +4,10 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.9.5', title: 'Attachments download', items: [
+    ['⬇', 'Click an attachment to download it', 'In task threads, clicking a 📎 file saves it to your Downloads folder instead of opening a browser tab (older posts too).', 'work'],
+    ['📎', 'Attachments kept as normal files', 'Files you drop into threads or Properties are saved as they are in the attachments folder of your data (no longer encrypted). Files added before stay readable.', 'work'],
+  ] },
   { v: '1.9.4', title: 'Master password, change a password everywhere, tidier screens', items: [
     ['🗂', 'One server, its users underneath', 'In the SSH and FTP trees, a server with several logins shows once (with 👤 and the number of users); its users are listed under it. Double-click a user to connect as them; right-click the server to add another login.', 'terminal'],
     ['🧹', 'Tidier dashboard and trees', 'The dashboard shows only tiles you can act on (Need attention, New to sort, Captured today, Re-test) with the counts in one line. Cards are about half the height: the host isn’t repeated, Open in / Details / Edit appear when you point at a connection, and where it was captured from is in Details. The server tree is wider on big screens (drag its edge to resize) and users under a server take one line.', ''],

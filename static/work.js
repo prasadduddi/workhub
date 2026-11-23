@@ -283,7 +283,7 @@ const Work = {
     if (!r.ok) { toast(d.error || 'Upload failed', true); return ''; }
     return d.map(a => a.image
       ? `<p><img src="/api/props/files/${a.id}" alt="${esc(a.name)}"></p>`
-      : `<p>📎 <a href="${location.origin}/api/props/files/${a.id}?download=1" target="_blank" rel="noopener">${esc(a.name)}</a> <span class="muted">(${fmtSize(a.size)})</span></p>`).join('');
+      : `<p>📎 <a href="${location.origin}/api/props/files/${a.id}?download=1" title="Download">${esc(a.name)}</a> <span class="muted">(${fmtSize(a.size)})</span></p>`).join('');
   },
 
   saveHeader() {
