@@ -356,9 +356,10 @@ CodeMirror.commands.duplicateLine = cm => {
 // ---------- navigation ----------
 // Pages with their own list or tree on the left (SSH, FTP, SQL, Tasks…) shrink
 // the sidebar to icons when opened — from the sidebar or by connecting — so
-// the tree and the window get the room; Dashboard, Bookmarks, Captured and
-// Calendar bring it back (» expands it any time).
-const WORK_VIEWS = ['terminal', 'files', 'sql', 'tasks', 'ref', 'jira', 'groups', 'notes', 'git'];
+// the tree, the window (and the calendar) get the room; Dashboard, Bookmarks
+// and Captured bring it back. Clicking the current page's icon again switches
+// it either way on any page (» too).
+const WORK_VIEWS = ['terminal', 'files', 'sql', 'tasks', 'ref', 'jira', 'groups', 'notes', 'git', 'cal'];
 function roomForWork() {
   if (document.body.classList.contains('side-top')) return; // a bar across the top takes no room from the tree
   if (S.userSide || document.body.classList.contains('side-collapsed')) return;
@@ -406,10 +407,13 @@ $('#nav').addEventListener('click', e => {
   const b = e.target.closest('button[data-view]'); if (!b) return;
   // Clicking the page you are on again (SSH, FTP, SQL, Tasks…) switches the
   // sidebar between icons only and full size.
-  if (b.classList.contains('active') && WORK_VIEWS.includes(b.dataset.view) && !document.body.classList.contains('side-top')) {
+  if (b.classList.contains('active') && !document.body.classList.contains('side-top')) {
     const collapsed = document.body.classList.contains('side-collapsed');
-    if (collapsed) { document.body.classList.remove('side-collapsed'); S.autoSide = false; S.userSide = true; $('#sideToggle').textContent = '«'; }
-    else { S.userSide = false; roomForWork(); }
+    if (collapsed) { document.body.classList.remove('side-collapsed'); S.autoSide = false; S.userSide = WORK_VIEWS.includes(b.dataset.view); $('#sideToggle').textContent = '«'; } // "keep it open" only matters on the tree pages
+    else {
+      S.userSide = false; roomForWork();
+      if (!WORK_VIEWS.includes(b.dataset.view)) S.autoSide = false; // your choice on a page that keeps the sidebar: it stays so
+    }
     setTimeout(() => { fitActiveTerm(); window.dispatchEvent(new Event('resize')); }, 50);
     return;
   }
