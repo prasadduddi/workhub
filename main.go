@@ -350,7 +350,13 @@ func copyDir(src, dst string) error {
 	return nil
 }
 
+// beforeExit runs just before WorkHub quits (e.g. removing the tray icon).
+var beforeExit []func()
+
 func (a *App) shutdown() {
+	for _, f := range beforeExit {
+		f()
+	}
 	if a.store != nil { // nil while the password page or the recovery page is shown
 		a.store.Flush()
 	}

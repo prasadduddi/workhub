@@ -18,6 +18,9 @@ var (
 	mainOrigProc     uintptr
 	mainHotkeyTarget webview2.WebView
 	mainProcCallback = syscall.NewCallback(func(hwnd, msg, wp, lp uintptr) uintptr {
+		if r, ok := trayProc(hwnd, msg, wp, lp); ok { // close to the tray (desktop_tray_windows.go)
+			return r
+		}
 		if msg == 0x0312 && wp == 1 { // WM_HOTKEY
 			if ic, _, _ := pIsIconic.Call(hwnd); ic != 0 {
 				pShowWindow.Call(hwnd, 9) // SW_RESTORE

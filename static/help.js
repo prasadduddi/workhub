@@ -59,6 +59,11 @@ const HELP_TOPICS = [
     'Right-click a connection of that user (in a tree, or ⋯ on its card) → 🔑 Change … password everywhere. Or ☰ → Change a password everywhere and pick the user.',
     'Type the new password. Every connection that logs in as that user is listed and ticked — untick any that keep the old one.',
     'Change password saves it (the old one stays in history) and, with the box ticked, tests them all.'] },
+  { t: 'WorkHub in the tray (Desktop version)', k: 'tray close window minimise running background quit exit notification area icon clock', v: '', s: [
+    'Closing the WorkHub window (✕) hides it to the tray, next to the clock — it keeps capturing, tunnels stay open, transfers finish.',
+    'Click the WorkHub icon in the tray (or press Ctrl+Alt+W) to open it again.',
+    'To stop WorkHub: right-click the tray icon → Quit WorkHub, or ☰ → Quit WorkHub.',
+    'Prefer ✕ to quit? ☰ → untick “Close button keeps WorkHub running (in the tray)”.'] },
   { t: 'Save and search SSH session text', k: 'session log logging history record save terminal output commands what did i run search putty log', v: 'terminal', s: [
     '☰ → 📝 Session logs → switch on “Save the text of SSH sessions”.',
     'Sessions you open from then on are kept per server and day (plain text, in session-logs in your data folder); the terminal says when it is saving.',

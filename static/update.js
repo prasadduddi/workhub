@@ -114,6 +114,7 @@ $('#mainMenuBtn').onclick = () => {
     [`🌓 Theme: ${{ auto: 'follow Windows', light: 'light', dark: 'dark' }[Theme.pref()]} — switch to ${{ auto: 'light', light: 'dark', dark: 'follow Windows' }[Theme.pref()]}`, () => Theme.set({ auto: 'light', light: 'dark', dark: 'auto' }[Theme.pref()])], '-',
     ...((o => o.ssh.length || o.ftp || o.sql ? [[`⏏ Disconnect all (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && 'FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')})`, disconnectAll], '-'] : [])(openSessions())),
     ['👤 Your profile', click('#profileBtn')], ['🔑 Change a password everywhere…', () => PwAll.open()], ['🔒 Lock (Ctrl+L)', click('#lockBtn')], ['🔐 Master password…', () => Master.open()], '-',
+    ...(window.WH_DESKTOP ? [[`${Tray.on() ? '☑' : '☐'} Close button keeps WorkHub running (in the tray)`, () => Tray.set(!Tray.on())]] : []),
     ['📝 Session logs…', () => SessionLogs.open()],
     ['↗ Programs for “Open in”…', click('#extBtn')], ['🛟 Backups…', click('#backupBtn')], ['Import data…', click('#importBtn')], ['Data location…', click('#dataLocBtn')], '-',
     ...(S.dataDir ? [[`📁 Data: ${DataDir.short(S.dataDir)} — open`, DataDir.open], ['📋 Copy data folder path', () => copyText(S.dataDir, 'Data folder path copied')], '-'] : []),
@@ -125,3 +126,15 @@ $('#updLater').onclick = () => { Update.asking = false; $('#updDlg').close(); };
 $('#updSkip').onclick = () => { try { localStorage.setItem('skipUpdate', Update.info?.latest || ''); } catch { /* ignore */ } $('#updDlg').close(); toast('You won\'t be asked about this version again (⟳ Check for updates still shows it)'); };
 $('#updPage').onclick = () => openExternal(Update.info?.page || 'https://github.com/prasadduddi/workhub/releases/latest');
 setTimeout(() => { if (!Lock.shown) Update.check(false); }, 8000);
+
+// Desktop version: the window's ✕ hides WorkHub to the tray (clipboard capture,
+// tunnels and transfers carry on) unless this is switched off.
+const Tray = {
+  on() { try { return localStorage.getItem('closeToTray') !== '0'; } catch { return true; } },
+  set(v) {
+    try { localStorage.setItem('closeToTray', v ? '1' : '0'); } catch { /* private mode */ }
+    window.whCloseToTray?.(v);
+    toast(v ? 'Closing the window now keeps WorkHub running in the tray — right-click its icon to quit' : 'Closing the window now quits WorkHub');
+  },
+};
+if (window.WH_DESKTOP) window.whCloseToTray?.(Tray.on());
