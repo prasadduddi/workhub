@@ -4,7 +4,7 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
-  { v: '1.9.4', title: 'Logins grouped by server', items: [
+  { v: '1.9.4', title: 'Master password, change a password everywhere, tidier screens', items: [
     ['🗂', 'One server, its users underneath', 'In the SSH and FTP trees, a server with several logins shows once (with 👤 and the number of users); its users are listed under it. Double-click a user to connect as them; right-click the server to add another login.', 'terminal'],
     ['🧹', 'Tidier dashboard and trees', 'The dashboard shows only tiles you can act on (Need attention, New to sort, Captured today, Re-test) with the counts in one line. Cards are about half the height: the host isn’t repeated, Open in / Details / Edit appear when you point at a connection, and where it was captured from is in Details. The server tree is wider on big screens (drag its edge to resize) and users under a server take one line.', ''],
     ['🔐', 'Master password', '☰ → 🔐 Master password… : WorkHub then asks for it the first time each new version starts, and your saved connections and passwords can\'t be opened without it — not even from a copy of the data folder. The recovery code is emailed to you, in case you forget the password.', ''],
