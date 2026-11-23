@@ -484,7 +484,7 @@ func (a *App) handlePostAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := a.store.AddPost(r.PathValue("id"), Post{Kind: in.Kind, HTML: in.HTML, Text: in.Text, Ref: in.Ref, At: in.At, Parent: in.Parent, Pinned: in.Pinned,
-		Reactions: in.Reactions, Saved: in.Saved})
+		Reactions: in.Reactions, Saved: in.Saved, From: in.From})
 	if err != nil {
 		writeErr(w, 404, err)
 		return

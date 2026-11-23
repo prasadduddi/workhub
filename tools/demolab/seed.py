@@ -208,7 +208,7 @@ def seed_api(sim, port):
     except Exception:
         pass
     git_repo(os.path.join(sim, "repos", "pay-api"))
-    w = a.call("POST", "/api/work", {"title": "PAY-123 Refund limits – UAT testing", "status": "doing", "tags": ["PAY-123", "UAT"]})
+    w = a.call("POST", "/api/work", {"title": "PAY-123 Refund limits – UAT testing", "status": "doing", "tags": ["PAY-123", "UAT"], "jira": "PAY-123"})
     for h in ["<p><b>What:</b> raise refund limits for merchants (PAY-123).</p>",
               "<p>Deployed to UAT — <a href=\"https://jenkins.acme.local/job/Payments/job/pay-api-deploy/412/console\">Deploy #412</a></p>",
               "<ul><li>Batch frozen 01:00–05:30</li><li>Check Touchpoint gateway timeouts</li></ul>"]:
@@ -222,9 +222,150 @@ def seed_api(sim, port):
         print("jira:", e)
     print("seeded")
 
+# ---- test threads: linked to the pretend Jira, with messages and screenshots ----
+import struct, zlib, datetime
+
+def png(w, h, shapes, bg):
+    """A small PNG drawn from rectangles: shapes = [(x, y, w, h, (r, g, b)), …]."""
+    px = [bytearray(bytes(bg) * w) for _ in range(h)]
+    for x, y, ww, hh, c in shapes:
+        for yy in range(max(0, y), min(h, y + hh)):
+            row = px[yy]
+            for xx in range(max(0, x), min(w, x + ww)):
+                row[xx * 3:xx * 3 + 3] = bytes(c)
+    raw = b"".join(b"\x00" + bytes(r) for r in px)
+    chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+
+def shot_terminal():  # a terminal with log lines and one error line
+    s = [(0, 0, 640, 26, (45, 52, 69)), (12, 9, 9, 9, (237, 106, 94)), (28, 9, 9, 9, (245, 191, 79)), (44, 9, 9, 9, (98, 197, 84))]
+    for i in range(12):
+        y = 40 + i * 20
+        col = (224, 82, 82) if i == 7 else (120, 200, 120) if i == 11 else (170, 178, 190)
+        s.append((16, y, 90, 10, (110, 118, 130)))
+        s.append((116, y, 160 + (i * 37) % 300, 10, col))
+    return png(640, 290, s, (29, 35, 48))
+
+def shot_chart():  # a monitoring chart with one spike
+    s = [(40, 20, 2, 230, (150, 150, 150)), (40, 248, 580, 2, (150, 150, 150))]
+    for i in range(24):
+        h = 40 + (i * 17) % 60 + (150 if i == 17 else 0)
+        s.append((50 + i * 23, 248 - h, 16, h, (231, 140, 40) if i == 17 else (47, 125, 225)))
+    return png(640, 270, s, (255, 255, 255))
+
+def shot_ui():  # a web form with a validation error
+    s = [(0, 0, 640, 40, (47, 111, 222)), (0, 40, 150, 320, (236, 240, 246))]
+    for i in range(5):
+        s.append((20, 60 + i * 30, 110, 12, (170, 180, 195)))
+    for i, err in enumerate([False, False, True, False]):
+        y = 70 + i * 62
+        s += [(180, y, 120, 10, (90, 98, 110)), (180, y + 16, 400, 28, (224, 82, 82) if err else (200, 206, 214)), (182, y + 18, 396, 24, (255, 255, 255))]
+    s.append((180, 320, 120, 30, (47, 111, 222)))
+    return png(640, 370, s, (250, 251, 253))
+
+def shot_table():  # a query result grid
+    s = [(10, 10, 620, 26, (225, 232, 242))]
+    for r in range(8):
+        for c in range(5):
+            s.append((14 + c * 124, 44 + r * 26, 100 - (r * c * 7) % 50, 10, (110, 118, 130) if (r, c) != (3, 2) else (231, 140, 40)))
+        s.append((10, 62 + r * 26, 620, 1, (220, 224, 230)))
+    return png(640, 260, s, (255, 255, 255))
+
+class Uploader(Api):
+    def upload(self, thread, name, data):
+        b = "----workhubdemo%d" % len(data)
+        body = (f"--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: image/png\r\n\r\n").encode() + data + f"\r\n--{b}--\r\n".encode()
+        req = urllib.request.Request(self.base + "/api/work/%s/files" % thread, data=body, method="POST",
+                                     headers={"Cookie": self.cookie, "Content-Type": "multipart/form-data; boundary=" + b})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read())[0]
+
+THREADS = [
+    ("PAY-130 Refund limits screen – review", "PAY-130", "doing", ["PAY-130", "UI"], False, [
+        ("note", "<p><b>Review notes</b> for the limits screen:</p><ul><li>Amount field accepts negative values ❌</li><li>Currency missing next to the limit</li><li>Save button disabled until a tier is chosen ✅</li></ul>"),
+        ("capture", "From: Raj Dev\nSubject: RE: limits screen review\n\nFixed the negative amounts in build 4.2.2-rc1, please re-test on acme-app-02.uat.acme.local", "Outlook — RE: limits screen review"),
+        ("shot", shot_ui, "limits-screen-validation.png", "<p>The validation error on <i>Max refund</i> — screenshot from UAT:</p>"),
+        ("reply", "<p>Re-tested on rc1: negative amounts now refused 👍</p>"),
+    ]),
+    ("PAY-201 Refund approval workflow", "PAY-201", "doing", ["PAY-201", "design"], True, [
+        ("note", "<p><b>Design</b>: refunds over the merchant limit wait for a second approver.</p><pre><code>status: PENDING_APPROVAL -&gt; APPROVED | REJECTED\napprover != requester</code></pre>"),
+        ("entry", "acme-ora-uat01.acme.local"),
+        ("shot", shot_chart, "approvals-per-hour.png", "<p>Approvals per hour in UAT — note the spike at 17:00 (batch replay):</p>"),
+        ("remind", 2),
+    ]),
+    ("PAY-205 Limits per merchant tier – blocked", "PAY-205", "blocked", ["PAY-205"], False, [
+        ("note", "<p>⛔ <b>Blocked</b>: waiting for the tier list from the merchant team (asked on Monday).</p>"),
+        ("capture", "Tier A: 5000 EUR\nTier B: 2500 EUR\nTier C: 1000 EUR (draft, not confirmed)", "Teams — Merchant onboarding"),
+    ]),
+    ("OPS-77 Renew batch server certificates", "OPS-77", "todo", ["OPS-77", "certs"], False, [
+        ("capture", "$ openssl x509 -enddate -noout -in /etc/pki/tls/certs/batch.crt\nnotAfter=Dec 14 23:59:59 2026 GMT", "PuTTY — batch@acme-bat-01"),
+        ("shot", shot_terminal, "cert-check.png", "<p>Expiry check on acme-bat-01 (the red line is the old intermediate cert):</p>"),
+        ("note", "<p>Plan: order new certs → install on <b>acme-bat-01</b> and <b>acme-bat-02</b> → restart batch in the 01:00 window.</p>"),
+    ]),
+    ("OPS-90 Scale refund batch for 2.0 volumes", "OPS-90", "doing", ["OPS-90", "batch"], False, [
+        ("pin", "<p>📌 <b>Target</b>: 3× today's refunds within the 01:00–05:30 window.</p>"),
+        ("shot", shot_table, "batch-durations.png", "<p>Batch step durations from <code>pay_batch_runs</code> (step 3 is the slow one):</p>"),
+        ("note", "<p>Try <code>batch.threads=16</code> on UAT tonight.</p>"),
+    ]),
+    ("CM-4411 PROD release 4.2.1", "CM-4411", "doing", ["CM-4411", "PROD", "release"], True, [
+        ("pin", "<p><b>Release checklist</b></p><ul><li>☑ UAT sign-off</li><li>☐ DB migration dry run</li><li>☐ Deploy pay-api 4.2.1</li><li>☐ Smoke test</li></ul>"),
+        ("note", "<p>Change window: <b>Saturday 06:00–08:00</b>. Rollback plan in the Folders page (Runbooks).</p>"),
+        ("remind", 20),
+    ]),
+    ("Incident: ORA-00060 deadlocks in refunds", "PAY-200", "doing", ["incident", "PAY-200"], False, [
+        ("capture", "2026-11-23 10:14:02,881 ERROR [pool-3-thread-4] c.a.pay.PaymentService - Payment 700097 failed: ORA-00060: deadlock detected while waiting for resource", "Log acme-app-01:/app/logs/application.log"),
+        ("shot", shot_terminal, "deadlock-log.png", "<p>Same error on both app servers at 10:14:</p>"),
+        ("react", "👀"),
+        ("reply", "<p>Looks like two refunds for the same payment in parallel — adding a row lock (PAY-200).</p>"),
+    ]),
+    ("PAY-101 Refund report CSV export", "PAY-101", "done", ["PAY-101"], False, [
+        ("note", "<p>Released in 4.1.7 ✅ — CSV export works for all merchants.</p>"),
+    ]),
+]
+
+def seed_threads(sim, port):
+    a = Uploader(sim, port)
+    have = {w["title"] for w in a.call("GET", "/api/work")}
+    entries = a.call("GET", "/api/entries")
+    for title, jira, status, tags, starred, posts in THREADS:
+        if title in have:
+            continue
+        w = a.call("POST", "/api/work", {"title": title, "status": status, "tags": tags, "jira": jira})
+        last = None
+        for p in posts:
+            kind = p[0]
+            if kind == "note" or kind == "pin":
+                last = a.call("POST", "/api/work/%s/posts" % w["id"], {"kind": "note", "html": p[1], "pinned": kind == "pin"})
+            elif kind == "capture":
+                last = a.call("POST", "/api/work/%s/posts" % w["id"], {"kind": "capture", "text": p[1], "from": p[2]})
+            elif kind == "shot":
+                at = a.upload(w["id"], p[2], p[1]())
+                last = a.call("POST", "/api/work/%s/posts" % w["id"], {"kind": "note", "html": p[3] + '<p><img src="/api/props/files/%s" alt="%s"></p>' % (at["id"], p[2])})
+            elif kind == "reply" and last:
+                a.call("POST", "/api/work/%s/posts" % w["id"], {"kind": "note", "html": p[1], "parent": last["id"]})
+            elif kind == "react" and last:
+                a.call("PUT", "/api/work/%s/posts/%s" % (w["id"], last["id"]), {"reactions": [p[1]]})
+            elif kind == "remind" and last:
+                at = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=p[1])).isoformat()
+                a.call("PUT", "/api/work/%s/posts/%s" % (w["id"], last["id"]), {"remind_at": at})
+            elif kind == "entry":
+                e = next((x for x in entries if x.get("host") == p[1]), None)
+                if e:
+                    a.call("POST", "/api/work/%s/posts" % w["id"], {"kind": "entry", "ref": e["id"]})
+        if starred:
+            a.call("POST", "/api/work/%s/star" % w["id"], {"starred": True})
+    try:  # the linked issues show on the Jira page too
+        a.call("POST", "/api/jira", {"ref": ", ".join(t[1] for t in THREADS if t[1] and not t[1].startswith("CM-"))})
+    except Exception as e:
+        print("jira:", e)
+    print("threads seeded")
+
 if __name__ == "__main__":
     import urllib.parse
     if sys.argv[1] == "home":
         home(sys.argv[2])
+    elif sys.argv[1] == "threads":
+        seed_threads(sys.argv[2], int(sys.argv[3]))
     else:
         seed_api(sys.argv[2], int(sys.argv[3]))
+        seed_threads(sys.argv[2], int(sys.argv[3]))

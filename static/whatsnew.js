@@ -4,6 +4,11 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.12.2', title: 'Menu bar, grouped pages, recording dot', items: [
+    ['☰', 'Menu bar', 'File · Edit · View · Connect · Tools · Help across the top (Alt+F, Alt+E…): new items, import, backups, lock; search, passwords, settings; pages, sidebar, theme; quick connect, recent, reopen, disconnect all; compare, tail a log, SSH keys; help, shortcuts, updates.', ''],
+    ['📋', 'Pages in groups', 'The sidebar holds only pages, in three coloured groups — 📋 My work, 🔌 Connect, 📚 Saved — that fold. Hide pages you don’t use: View → Pages in the sidebar (they stay in View → Go to).', ''],
+    ['🔴', 'Recording dot', '“Capturing here” shows a pulsing red dot, like a recorder, on the thread’s button and in the thread list.', 'tasks'],
+  ] },
   { v: '1.12.1', title: 'API requests, Compare, Today, PROD safety and more', items: [
     ['🌐', 'API page (like Postman)', 'Send HTTP requests from WorkHub: method, URL, headers, Basic / Bearer / API-key auth and a JSON / XML / text / form body. {{variables}} per environment (DEV, UAT, PROD — ⚙ Environments…, also filled from a saved connection). Answers pretty-printed with search; save requests in folders; History; Copy as curl (secrets stay as {{variables}}); 📌 send request + answer to a thread. Ctrl+Enter sends, Ctrl+S saves.', 'api'],
     ['⬇', 'Import Postman and Bruno collections', 'API page → ⬇ Import: Postman collection and environment files (v2.0 / v2.1), a Bruno collection folder (requests, sub-folders, environments, collection auth and headers) or Bruno’s JSON export. Folders, headers, auth (also inherited), bodies and {{variables}} come along; scripts and tests are listed, not run. Importing again updates the same requests. Right-click a folder → ⬆ Export as Postman collection (Bruno imports it too); ⚙ Environments → ⬆ Export.', 'api'],

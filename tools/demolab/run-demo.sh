@@ -11,7 +11,13 @@ PORT=47950
 export PATH="$HOME/sdk/go/bin:$PATH"
 
 stop() {
-  for f in "$SIM"/*.pid; do [ -f "$f" ] && { kill "$(cat "$f")" 2>/dev/null || true; }; rm -f "$f"; done
+  for f in "$SIM"/*.pid; do
+    [ -f "$f" ] || continue
+    p=$(cat "$f"); kill "$p" 2>/dev/null || true
+    # wait for it to exit: a WorkHub still shutting down removes the new one's session.token
+    for i in $(seq 1 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
+    rm -f "$f"
+  done
   return 0
 }
 case "$1" in
@@ -29,6 +35,7 @@ python3 tools/demolab/fake_jira.py 47990 > "$SIM/jira.log" 2>&1 & echo $! > "$SI
 HOME="$SIM/home" "$SIM/workhub" -data "$SIM/data" -port $PORT -no-browser > "$SIM/workhub.log" 2>&1 & echo $! > "$SIM/workhub.pid"
 for i in $(seq 1 100); do grep -q "Open:" "$SIM/workhub.log" 2>/dev/null && break; sleep 0.1; done
 URL=$(grep -o 'http://[^ ]*' "$SIM/workhub.log" | head -1)
+for i in $(seq 1 100); do [ -f "$SIM/data/session.token" ] && break; sleep 0.1; done # the seed signs in with it
 [ $fresh = 1 ] && python3 tools/demolab/seed.py api "$SIM" $PORT
 echo "Demo running: $URL"
 echo "  Live servers: 127.0.0.1:2222 deploy/Demo#2026 · 127.0.0.1:2223 batch/Batch#2026"
