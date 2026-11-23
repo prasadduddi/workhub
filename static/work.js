@@ -826,3 +826,31 @@ const QuickNote = {
 };
 window.whQuickNote = () => QuickNote.open();
 window.addEventListener('keydown', e => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'n') { e.preventDefault(); QuickNote.open(); } });
+
+// ---- right-click: the same menus as ⋯ ----
+$('#workList').addEventListener('contextmenu', e => {
+  const li = e.target.closest('[data-work]'); if (!li) return;
+  e.preventDefault();
+  const w = Work.list.find(x => x.id === li.dataset.work); if (!w) return;
+  setTimeout(() => Tree.showMenu({ clientX: e.clientX, clientY: e.clientY }, [
+    ['Open', () => Work.open(w.id)],
+    [w.starred ? '☆ Unstar' : '★ Star', () => Work.star(w, !w.starred)],
+    [w.id === Work.active() ? '● Stop capturing here' : '📥 Capture here', async () => { await Work.open(w.id); Work.setCapture(w.id !== Work.active()); }],
+    ...(w.unread ? [['✓ Mark as read', () => Work.markRead(w.id)]] : []),
+    ['🔗 Copy link to thread', () => copyText(`${location.origin}/#tasks/${w.id}`, 'Link copied')],
+    '-',
+    [w.archived ? '↩ Unarchive' : '🗄 Archive', () => Work.archive(w, !w.archived)],
+    ...(w.general ? [] : [['Delete…', async () => {
+      if (!confirm(`Delete the thread "${w.title}" and everything in it?`)) return;
+      if (w.id === S.settings.active_thread) await saveSettings({ active_thread: '' });
+      await api('DELETE', '/api/work/' + w.id); if (Work.current?.id === w.id) Work.current = null; await Work.loadList(); Work.show();
+    }]])]));
+});
+$('#taskMain').addEventListener('contextmenu', e => {
+  const el = e.target.closest('[data-post]');
+  if (!el || e.target.closest('[contenteditable=true], a, input, textarea')) return;
+  const p = Work.current?.posts.find(x => x.id === el.dataset.post); if (!p) return;
+  if (getSelection().toString()) return; // let the browser copy selected text
+  e.preventDefault();
+  postMenu(p, el, { left: e.clientX + 160, bottom: e.clientY });
+});

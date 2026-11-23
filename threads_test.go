@@ -4,8 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"strings"
-	"time"
 	"testing"
+	"time"
 )
 
 func TestThreads(t *testing.T) {

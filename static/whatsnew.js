@@ -4,6 +4,18 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.9.8', title: 'Threads like Slack, smarter capture', items: [
+    ['💬', 'Replies in a side panel', 'Hover a message → 💬 (or click “💬 3 replies”) to open the conversation on the right; the main thread stays tidy. Esc closes it.', 'tasks'],
+    ['😀', 'Reactions, Save, Remind me', 'Hover a message for ✅ 👀 👍 and more reactions, 🔖 Save for later and ⋯ → ⏰ Remind me (20 min … next Monday). 🔖 Saved above the thread list shows both.', 'tasks'],
+    ['✍', 'Type like Slack', '*bold* _italic_ ~strike~ `code`, ``` for a code block (with a Copy button) and :tada: style emoji. Your unsent text is kept per thread; ↑ in an empty box edits your last message.', 'tasks'],
+    ['🔴', 'Unread, Starred, Ctrl+K', 'Threads with new messages are bold with a count and a red “New” line; ⭐ Starred / Threads / Done sections; Ctrl+K on the Tasks page jumps to any thread.', 'tasks'],
+    ['🔗', 'Previews and links', 'Jira keys and links in a message show a small card; ⋯ → Copy link to this message opens WorkHub right there.', 'tasks'],
+    ['📸', 'Screenshots captured', 'A screenshot you copy (Win+Shift+S) goes into the capture thread as a picture — switch it off in ⚙ Settings.', 'tasks'],
+    ['🎯', 'Captures find their thread', 'Copied text that mentions a Jira key (PAY-123) goes to the thread linked to it, and every capture shows where it came from (“from Outlook — RE: …”).', 'tasks'],
+    ['📝', 'Quick note: Ctrl+Alt+N', 'From anywhere (Desktop version), jot a note into a thread without switching to WorkHub.', 'tasks'],
+    ['✉', 'Drop emails on a thread', 'Drag a message from Outlook (or an .eml) onto a thread: subject, sender, date, text and attachments become one message.', 'tasks'],
+    ['🖱', 'Right-click everywhere', 'Cards, table rows, bookmarks, captures, threads and messages all have a right-click menu — the same as their ⋯.', ''],
+  ] },
   { v: '1.9.7', title: 'Settings in one place', items: [
     ['📌', 'Install for easy access', '⚙ Settings → This PC → Install copies WorkHub to your own programs folder (safe from Downloads clean-ups and accidental deletes), adds it to the Start menu — and, if you tick them, the Desktop and Start with Windows — then restarts it from there. Your data is not moved.', ''],
     ['↔', 'Calendar gets the room', 'Calendar now shrinks the sidebar like SSH and Tasks, and clicking the current page\'s icon again switches the sidebar on every page.', 'cal'],

@@ -64,8 +64,8 @@ func TestSourceLabel(t *testing.T) {
 	for exe, want := range map[string]string{
 		`C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE|RE: Release plan - Outlook`: "Outlook — RE: Release plan",
 		`C:\Program Files\Google\Chrome\Application\chrome.exe|Jenkins - Google Chrome`:          "Chrome — Jenkins",
-		`C:\Tools\putty.exe|PuTTY`:                                                              "PuTTY",
-		`C:\Users\x\AppData\Local\Programs\WorkHub\WorkHub-Desktop.exe|WorkHub`:                 "",
+		`C:\Tools\putty.exe|PuTTY`: "PuTTY",
+		`C:\Users\x\AppData\Local\Programs\WorkHub\WorkHub-Desktop.exe|WorkHub`: "",
 	} {
 		var e, title string
 		for i := range exe {

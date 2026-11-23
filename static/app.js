@@ -1540,7 +1540,7 @@ function renderClips() {
   el.innerHTML = S.clips.map(c => {
     const chips = (c.entry_ids || []).map(byId).filter(Boolean).map(e =>
       `<span class="chip" data-find="${esc(e.host || e.url || e.username)}">${linkLabel(e.url) ? esc(linkLabel(e.url)) + ' · ' : ''}${esc(e.username ? e.username + ' @ ' : '')}${esc(e.host || e.url || '')}${e.port ? ':' + e.port : ''}</span>`).join('');
-    return `<div class="clip"><div class="clip-head"><span>${new Date(c.created).toLocaleString()}</span><span class="proto">${esc(c.source)}</span><span>${esc(c.project)}</span>
+    return `<div class="clip" data-clip="${c.id}"><div class="clip-head"><span>${new Date(c.created).toLocaleString()}</span><span class="proto">${esc(c.source)}</span>${c.from ? `<span class="muted tiny" title="Copied from">from ${esc(c.from)}</span>` : ''}<span>${esc(c.project)}</span>
       <span class="spacer"></span><button class="icon more" data-clipmore="${c.id}" title="Copy or delete this capture">⋯</button></div>
       <pre>${maskedText(c.text)}</pre><div class="chips">${chips || '<span class="muted tiny">no hosts or credentials recognised</span>'}</div></div>`;
   }).join('');
@@ -1549,18 +1549,23 @@ $('#clips').addEventListener('click', async e => {
   const chip = e.target.closest('[data-find]');
   if (chip) { $('#search').value = chip.dataset.find; $('#fProject').value = ''; $('#fEnv').value = ''; show('dashboard'); return renderBoard(); }
   const more = e.target.closest('[data-clipmore]');
-  if (more) {
-    const c = S.clips.find(x => x.id === more.dataset.clipmore); if (!c) return;
-    const r = more.getBoundingClientRect();
-    setTimeout(() => Tree.showMenu({ clientX: r.left - 150, clientY: r.bottom }, [
-      ['Copy the text', () => copyText(c.text)],
-      ['🧵 Add to task thread…', () => Work.addClip(c, { clientX: r.left - 150, clientY: r.bottom })],
-      ['Delete this capture', async () => {
-        await api('DELETE', `/api/clips/${c.id}`); poll();
-        toast('Capture deleted', false, async () => { await api('POST', '/api/ingest', { text: c.text, source: c.source, project: c.project }); poll(); toast('Restored'); });
-      }]]));
-  }
+  if (more) { const r = more.getBoundingClientRect(); clipMenu(S.clips.find(x => x.id === more.dataset.clipmore), { clientX: r.left - 150, clientY: r.bottom }); }
 });
+// Right-click a capture: the same menu as its ⋯
+$('#clips').addEventListener('contextmenu', e => {
+  const el = e.target.closest('[data-clip]'); if (!el || e.target.closest('a')) return;
+  e.preventDefault(); clipMenu(S.clips.find(x => x.id === el.dataset.clip), { clientX: e.clientX, clientY: e.clientY });
+});
+function clipMenu(c, at) {
+  if (!c) return;
+  setTimeout(() => Tree.showMenu(at, [
+    ['Copy the text', () => copyText(c.text)],
+    ['🧵 Add to task thread…', () => Work.addClip(c, at)],
+    ['Delete this capture', async () => {
+      await api('DELETE', `/api/clips/${c.id}`); poll();
+      toast('Capture deleted', false, async () => { await api('POST', '/api/ingest', { text: c.text, source: c.source, project: c.project }); poll(); toast('Restored'); });
+    }]]));
+}
 async function ingestPaste() {
   const text = $('#pasteText').value;
   if (!text.trim()) return;
@@ -2275,6 +2280,7 @@ const Tree = {
     const e = node?.dataset.id && byId(node.dataset.id);
     const items = [];
     if (e) {
+      if (e.url && !canDB(e)) items.push(['↗ Open link', () => openURL(e)], ['Copy URL', () => copyText(e.url)]);
       if (canDB(e)) {
         const t = SQL.tabs.find(x => x.entry.id === e.id);
         items.push(['Open in SQL', () => SQL.open(e)]);
@@ -2833,6 +2839,11 @@ $('#bmGroup').addEventListener('click', ev => {
     Bookmarks.render();
   }, true);
 }
+// Right-click a bookmark (tile or table row): the same menu as everywhere else
+$('#bmBoard').addEventListener('contextmenu', ev => {
+  const t = ev.target.closest('[data-bm]'); if (!t || ev.target.closest('input')) return;
+  ev.preventDefault(); Tree.menu(ev, { dataset: { id: t.dataset.bm } }, 'board');
+});
 $('#bmBoard').addEventListener('toggle', ev => { if (ev.target.classList?.contains('ext-group')) Bookmarks.extOpen = ev.target.open; }, true);
 $('#bmBoard').addEventListener('click', async ev => {
   const t = ev.target.closest('button');

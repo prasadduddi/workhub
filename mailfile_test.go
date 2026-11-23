@@ -145,12 +145,12 @@ func TestParseMSG(t *testing.T) {
 	binary.LittleEndian.PutUint32(props[32:], 0x00390040)
 	binary.LittleEndian.PutUint64(props[40:], uint64(when.UnixNano()/100+116444736000000000))
 	items := map[string][]byte{
-		"__substg1.0_0037001F":                                u16("RE: Release plan for PAY-123"),
-		"__substg1.0_0C1A001F":                                u16("Jane Doe"),
-		"__substg1.0_5D01001F":                                u16("jane.doe@example.com"),
-		"__substg1.0_0E04001F":                                u16("Release Team"),
-		"__substg1.0_1000001F":                                u16("Hi,\r\nDeploy on srv-07.example.com at 18:00.\r\nThanks"),
-		"__properties_version1.0":                             props,
+		"__substg1.0_0037001F":                               u16("RE: Release plan for PAY-123"),
+		"__substg1.0_0C1A001F":                               u16("Jane Doe"),
+		"__substg1.0_5D01001F":                               u16("jane.doe@example.com"),
+		"__substg1.0_0E04001F":                               u16("Release Team"),
+		"__substg1.0_1000001F":                               u16("Hi,\r\nDeploy on srv-07.example.com at 18:00.\r\nThanks"),
+		"__properties_version1.0":                            props,
 		"__attach_version1.0_#00000000/__substg1.0_3707001F": u16("runbook.txt"),
 		"__attach_version1.0_#00000000/__substg1.0_37010102": []byte("step 1\nstep 2\n"),
 	}

@@ -76,6 +76,19 @@ const HELP_TOPICS = [
     '☰ → ⚙ Settings → 🛟 Backups → Manage… → ☁ Use OneDrive (or Choose folder… for any folder).',
     'Every automatic backup (at start-up and each morning, when something changed) is then copied there too; the newest 30 are kept.',
     'To restore on a new laptop: unzip a backup into an empty folder and choose it with ☰ → ⚙ Settings → Data folder → Change…. With a master password it opens with that password; without one only on the same Windows login.'] },
+  { t: 'Use threads like Slack', k: 'slack thread reply replies react reaction emoji save later remind reminder unread star switch ctrl+k code block bold italic draft edit', v: 'tasks', s: [
+    'Reply: hover a message → 💬, or click “💬 N replies” — the conversation opens on the right (Esc closes).',
+    'React: hover → ✅ 👀 👍 or 😀 for more; click a reaction again to remove it.',
+    'Format as you type: *bold* _italic_ ~strike~ `code`, ``` around lines for a code block, :tada: for 🎉.',
+    '↑ in the empty box edits your last message; what you haven\'t sent is kept when you switch threads.',
+    '⋯ (or right-click) on a message: pin, 🔖 save for later, ⏰ remind me, copy a link to it.',
+    '🔖 Saved above the thread list shows saved messages and reminders; Ctrl+K jumps to any thread; ☆ stars a thread.'] },
+  { t: 'Quick note from anywhere', k: 'quick note ctrl+alt+n jot write anywhere', v: 'tasks', s: [
+    'Press Ctrl+Alt+N (anywhere in Windows with the Desktop version, or in the WorkHub window).',
+    'Pick the thread (the capture thread is chosen already), type, press Enter.'] },
+  { t: 'Add an Outlook email to a thread', k: 'email outlook msg eml drag drop mail message add', v: 'tasks', s: [
+    'Drag the email from Outlook onto the thread (or drop a saved .msg / .eml file).',
+    'It becomes one message with the subject, sender, recipients, date and text; its attachments are added too.'] },
   { t: 'Which thread gets my captures', k: 'thread capture default general where clipboard copied goes capture here', v: 'tasks', s: [
     'Copied text that Watch clipboard captures goes to the General thread (marked default on the Tasks page).',
     'To send captures to another thread, open it and press 📥 Capture here; press it again to go back to General.',
