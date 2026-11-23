@@ -378,6 +378,7 @@ function show(view) {
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   history.replaceState(null, '', '#' + view);
   if (view === 'terminal') { fitActiveTerm(); if (!Term.tabs.length) Term.emptyHTML(); }
+  if (view === 'files') Jobs.tick();
   if (view === 'files' && !Local.loaded) Local.load(lsGet('ftp.local'), true).then(() => { if (!Local.loaded) Local.load(''); });
   if (view === 'notes') { Notes.cm.refresh(); Notes.cm.focus(); }
   if (view === 'tasks') Work.show();
@@ -1883,22 +1884,56 @@ drop.addEventListener('drop', async e => {
   Remote.load(Remote.path);
 });
 
+// Transfers panel (FTP page): every copy between This PC and a server, with
+// progress, speed, Cancel, Retry and — for downloads — Show (This PC opens at
+// the file).
 const Jobs = {
-  timer: null, running: 0,
+  timer: null, running: 0, last: {}, list: [],
   watch() { if (!this.timer) this.timer = setInterval(() => this.tick(), 800); this.tick(); },
   async tick() {
     const jobs = await api('GET', '/api/jobs').catch(() => []);
-    $('#jobs').innerHTML = jobs.slice(0, 20).map(j => {
+    this.list = jobs;
+    const now = Date.now();
+    $('#xferPanel').hidden = !jobs.length;
+    $('#jobs').innerHTML = jobs.slice(0, 30).map(j => {
       const pct = j.total ? Math.round(j.done * 100 / j.total) : (j.status === 'done' ? 100 : 0);
-      return `<div class="job ${j.status}"><span>${j.dir === 'upload' ? '↑ upload' : '↓ download'}</span><span>${esc(j.name)}${j.error ? ' — ' + esc(j.error) : ''}</span>
-        <div class="bar"><i style="width:${pct}%"></i></div><span>${j.status === 'running' ? pct + '%' : j.status}</span></div>`;
+      const prev = this.last[j.id], speed = prev && j.status === 'running' ? (j.done - prev.done) / ((now - prev.t) / 1000) : 0;
+      this.last[j.id] = { done: j.done, t: now };
+      const took = j.ended ? Math.max(1, (Date.parse(j.ended) - Date.parse(j.started)) / 1000) : 0;
+      const size = j.total ? `${fmtSize(j.done)}${j.status === 'running' ? ' of ' + fmtSize(j.total) : ''}` : '';
+      const info = j.status === 'running' ? [size, speed > 0 && fmtSize(speed) + '/s'].filter(Boolean).join(' · ')
+        : j.status === 'done' ? [size, took && fmtSize(j.total / took) + '/s', fmtTime(j.ended)].filter(Boolean).join(' · ')
+        : j.status === 'failed' ? j.error : 'cancelled';
+      const acts = j.status === 'running' ? `<button class="icon" data-jcancel="${j.id}" title="Stop this transfer">Cancel</button>`
+        : (j.status === 'failed' || j.status === 'cancelled' ? `<button class="icon" data-jretry="${j.id}" title="Start it again">↻ Retry</button>` : '')
+          + (j.dir === 'download' && j.status === 'done' ? `<button class="icon" data-jshow="${j.id}" title="Show it in This PC">Show</button>` : '');
+      return `<div class="job ${j.status}" title="${esc(j.dir === 'upload' ? j.local + '  →  ' + j.host + ':' + j.remote : j.host + ':' + j.remote + '  →  ' + j.local)}">
+        <span class="jdir">${j.dir === 'upload' ? '↑' : '↓'}</span><span class="jname">${esc(j.name)} <span class="muted tiny">${esc(j.host || '')}</span></span>
+        <div class="bar"><i style="width:${pct}%"></i></div><span class="jinfo">${j.status === 'running' ? pct + '% · ' : j.status === 'done' ? '✓ ' : j.status === 'failed' ? '✗ ' : ''}${esc(info || '')}</span><span class="jacts">${acts}</span></div>`;
     }).join('');
-    const running = jobs.filter(j => j.status === 'running').length;
+    const n = k => jobs.filter(j => j.status === k).length;
+    $('#xferSum').textContent = [n('running') && `${n('running')} running`, n('done') && `${n('done')} done`, n('failed') && `${n('failed')} failed`, n('cancelled') && `${n('cancelled')} cancelled`].filter(Boolean).join(' · ');
+    const running = n('running');
     if (running < this.running) { Local.load(Local.path); if (Remote.sid) Remote.load(Remote.path); }
     this.running = running;
     if (!running) { clearInterval(this.timer); this.timer = null; }
   },
 };
+$('#jobs').addEventListener('click', async ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  try {
+    if (b.dataset.jcancel) await api('POST', `/api/jobs/${b.dataset.jcancel}/cancel`);
+    if (b.dataset.jretry) await api('POST', `/api/jobs/${b.dataset.jretry}/retry`, { sid: Remote.sid || '' });
+    if (b.dataset.jshow) {
+      const j = Jobs.list.find(x => x.id === b.dataset.jshow);
+      const dir = j.local.replace(/[\\/][^\\/]*$/, ''), name = j.local.split(/[\\/]/).pop(); // the name it was saved under here
+      await Local.load(dir); Local.sel.clear(); Local.sel.add(name); Local.render();
+      $(`#localPane .frow[data-n="${CSS.escape(name)}"]`)?.scrollIntoView({ block: 'center' });
+    }
+  } catch (err) { toast(err.message, true); }
+  Jobs.watch();
+});
+$('#xferClear').addEventListener('click', async ev => { ev.preventDefault(); await api('POST', '/api/jobs/clear').catch(() => {}); Jobs.last = {}; Jobs.tick(); });
 
 // ---------- connection tree (Terminal + Files) ----------
 // Folders come from the project name ("Payments/Batch" nests), then the

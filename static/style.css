@@ -501,8 +501,14 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .mid button { cursor: pointer; }
 .mid button.arrow { font-size: 22px; line-height: 1; padding: 6px 14px; }
 .mid button.flip { transform: scaleX(-1); }
-#jobs { margin-top: 8px; max-height: 140px; overflow: auto; }
-.job { display: grid; grid-template-columns: 90px 1fr 200px 70px; gap: 8px; align-items: center; font-size: 12px; padding: 2px 0; }
+.xfer-panel { margin-top: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+.xfer-panel > summary { display: flex; align-items: center; gap: 8px; padding: 5px 10px; cursor: pointer; font-size: 13px; }
+#jobs { max-height: 170px; overflow: auto; padding: 0 10px 6px; }
+.job { display: grid; grid-template-columns: 18px minmax(120px, 1fr) minmax(80px, 180px) minmax(150px, 260px) auto; gap: 8px; align-items: center; font-size: 12px; padding: 3px 0; border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.job .jname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job .jinfo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.job .jacts { display: flex; gap: 4px; justify-content: flex-end; }
+.job.cancelled { opacity: .7; }
 .bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--accent); }
 .job.failed { color: var(--danger); } .job.done .bar i { background: var(--ok); }

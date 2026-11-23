@@ -189,7 +189,10 @@
         <div class="listing drop"><div class="empty">Double-click a server in the tree to connect.<br>Drop files here to upload.</div></div>
       </div>
     </div>
-    <div id="jobs"></div>
+    <details id="xferPanel" class="xfer-panel" open hidden>
+      <summary><b>Transfers</b> <span id="xferSum" class="muted tiny"></span><span class="spacer"></span><button id="xferClear" class="icon" title="Remove finished transfers from the list">Clear finished</button></summary>
+      <div id="jobs"></div>
+    </details>
     </div>
    </div>
   </section>

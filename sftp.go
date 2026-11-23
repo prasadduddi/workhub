@@ -229,14 +229,24 @@ func (a *App) handleSFTPOp(w http.ResponseWriter, r *http.Request) {
 // ---- background transfers between this PC and the server ----
 
 type job struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Dir    string `json:"dir"`
-	Total  int64  `json:"total"`
-	Done   int64  `json:"done"`
-	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
+	ID      string    `json:"id"`
+	Name    string    `json:"name"`
+	Dir     string    `json:"dir"` // upload / download
+	Host    string    `json:"host"`
+	Local   string    `json:"local"`
+	Remote  string    `json:"remote"`
+	Total   int64     `json:"total"`
+	Done    int64     `json:"done"`
+	Status  string    `json:"status"` // running / done / failed / cancelled
+	Error   string    `json:"error,omitempty"`
+	Started time.Time `json:"started"`
+	Ended   time.Time `json:"ended,omitzero"`
+	sid     string    // the FTP/SFTP session it used (for Retry)
+	entryID string
+	cancel  int32
 }
+
+var errCancelled = errors.New("cancelled")
 
 type jobList struct {
 	mu   sync.Mutex
@@ -246,7 +256,7 @@ type jobList struct {
 func (j *jobList) add(name, dir string) *job {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	jb := &job{ID: randomHex(6), Name: name, Dir: dir, Status: "running"}
+	jb := &job{ID: randomHex(6), Name: name, Dir: dir, Status: "running", Started: time.Now()}
 	j.list = append(j.list, jb)
 	if len(j.list) > 50 {
 		j.list = j.list[len(j.list)-50:]
@@ -269,22 +279,97 @@ func (j *jobList) snapshot() []job {
 func (j *jobList) finish(jb *job, err error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if err != nil {
+	jb.Ended = time.Now()
+	switch {
+	case errors.Is(err, errCancelled):
+		jb.Status = "cancelled"
+	case err != nil:
 		jb.Status, jb.Error = "failed", err.Error()
-	} else {
+	default:
 		jb.Status = "done"
 	}
 }
 
+func (j *jobList) find(id string) *job {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	for _, jb := range j.list {
+		if jb.ID == id {
+			return jb
+		}
+	}
+	return nil
+}
+
+// clear forgets finished transfers (running ones stay).
+func (j *jobList) clear() {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	keep := j.list[:0]
+	for _, jb := range j.list {
+		if jb.Status == "running" {
+			keep = append(keep, jb)
+		}
+	}
+	j.list = keep
+}
+
 type progressWriter struct {
-	w io.Writer
-	n *int64
+	w  io.Writer
+	jb *job
 }
 
 func (p progressWriter) Write(b []byte) (int, error) {
+	if atomic.LoadInt32(&p.jb.cancel) != 0 {
+		return 0, errCancelled
+	}
 	n, err := p.w.Write(b)
-	atomic.AddInt64(p.n, int64(n))
+	atomic.AddInt64(&p.jb.Done, int64(n))
 	return n, err
+}
+
+func (a *App) handleJobCancel(w http.ResponseWriter, r *http.Request) {
+	jb := a.jobs.find(r.PathValue("id"))
+	if jb == nil {
+		writeErr(w, 404, errors.New("transfer not found"))
+		return
+	}
+	atomic.StoreInt32(&jb.cancel, 1)
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (a *App) handleJobsClear(w http.ResponseWriter, r *http.Request) {
+	a.jobs.clear()
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// handleJobRetry starts a failed or cancelled transfer again, on its own
+// session if that is still open, otherwise on the session given (the server
+// you are connected to now, if it is the same one).
+func (a *App) handleJobRetry(w http.ResponseWriter, r *http.Request) {
+	var in struct{ SID string }
+	_ = readJSON(r, &in)
+	old := a.jobs.find(r.PathValue("id"))
+	if old == nil {
+		writeErr(w, 404, errors.New("transfer not found"))
+		return
+	}
+	sid := old.sid
+	if s, err := a.sftp.get(sid); err != nil || s == nil {
+		if s2, err := a.sftp.get(in.SID); err == nil && s2.entry.ID == old.entryID {
+			sid = in.SID
+		} else {
+			writeErr(w, 410, fmt.Errorf("connect to %s again, then press Retry", old.Host))
+			return
+		}
+	}
+	kind := map[string]string{"upload": "put", "download": "get"}[old.Dir]
+	jb, err := a.startTransfer(sid, kind, old.Local, old.Remote)
+	if err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	writeJSON(w, map[string]string{"id": jb.ID})
 }
 
 func (a *App) handleJobs(w http.ResponseWriter, r *http.Request) {
@@ -304,24 +389,39 @@ func (a *App) handleSFTPTransfer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err)
 		return
 	}
-	s, err := a.sftp.get(in.SID)
+	jb, err := a.startTransfer(in.SID, in.Dir, in.Local, in.Remote)
 	if err != nil {
-		writeErr(w, 410, err)
-		return
-	}
-	var jb *job
-	switch in.Dir {
-	case "put":
-		jb = a.jobs.add(filepath.Base(in.Local), "upload")
-		go func() { a.jobs.finish(jb, putPath(s.fs, in.Local, in.Remote, jb)) }()
-	case "get":
-		jb = a.jobs.add(path.Base(in.Remote), "download")
-		go func() { a.jobs.finish(jb, getPath(s.fs, in.Remote, in.Local, jb)) }()
-	default:
-		writeErr(w, 400, errors.New("dir must be put or get"))
+		writeErr(w, 400, err)
 		return
 	}
 	writeJSON(w, map[string]string{"id": jb.ID})
+}
+
+func (a *App) startTransfer(sid, kind, local, remote string) (*job, error) {
+	s, err := a.sftp.get(sid)
+	if err != nil {
+		return nil, err
+	}
+	var jb *job
+	switch kind {
+	case "put":
+		jb = a.jobs.add(filepath.Base(local), "upload")
+	case "get":
+		jb = a.jobs.add(path.Base(remote), "download")
+	default:
+		return nil, errors.New("dir must be put or get")
+	}
+	a.jobs.mu.Lock()
+	jb.Host, jb.Local, jb.Remote, jb.sid, jb.entryID = s.entry.Host, local, remote, sid, s.entry.ID
+	a.jobs.mu.Unlock()
+	go func() {
+		if kind == "put" {
+			a.jobs.finish(jb, putPath(s.fs, local, remote, jb))
+		} else {
+			a.jobs.finish(jb, getPath(s.fs, remote, local, jb))
+		}
+	}()
+	return jb, nil
 }
 
 func putPath(c remoteFS, local, remote string, jb *job) error {
@@ -354,7 +454,7 @@ func putPath(c remoteFS, local, remote string, jb *job) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(progressWriter{dst, &jb.Done}, src); err != nil {
+	if _, err := io.Copy(progressWriter{dst, jb}, src); err != nil {
 		dst.Close()
 		return err
 	}
@@ -391,7 +491,7 @@ func getPath(c remoteFS, remote, local string, jb *job) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(progressWriter{dst, &jb.Done}, src); err != nil {
+	if _, err := io.Copy(progressWriter{dst, jb}, src); err != nil {
 		dst.Close()
 		return err
 	}
