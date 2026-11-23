@@ -1540,6 +1540,15 @@ $('#pasteBtn').onclick = ingestPaste;
 $('#pasteText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) ingestPaste(); });
 
 // ---------- terminal ----------
+// Looks like PuTTY's defaults: Courier New, light grey on black, PuTTY's
+// 16 colours, a steady green block cursor.
+const PUTTY_FONT = '"Courier New", Courier, "Liberation Mono", monospace';
+const PUTTY_THEME = {
+  background: '#000000', foreground: '#bbbbbb', cursor: '#00ff00', cursorAccent: '#000000', selectionBackground: '#bbbbbb', selectionForeground: '#000000',
+  black: '#000000', red: '#bb0000', green: '#00bb00', yellow: '#bbbb00', blue: '#0000bb', magenta: '#bb00bb', cyan: '#00bbbb', white: '#bbbbbb',
+  brightBlack: '#555555', brightRed: '#ff5555', brightGreen: '#55ff55', brightYellow: '#ffff55', brightBlue: '#5555ff', brightMagenta: '#ff55ff', brightCyan: '#55ffff', brightWhite: '#ffffff',
+};
+
 const Term = {
   tabs: [], active: null,
 
@@ -1560,7 +1569,7 @@ const Term = {
     const el = document.createElement('div');
     el.className = 'termhost';
     $('#termWrap').append(el);
-    const term = new Terminal({ cursorBlink: true, fontSize: Fonts.size('term'), scrollback: 20000, fontFamily: '"Cascadia Mono", Consolas, "SF Mono", Menlo, monospace', theme: { background: '#0c0e12' } });
+    const term = new Terminal({ cursorBlink: false, cursorStyle: 'block', fontSize: Fonts.size('term'), scrollback: 20000, fontFamily: PUTTY_FONT, theme: PUTTY_THEME, drawBoldTextInBrightColors: true, minimumContrastRatio: 1 });
     const fit = new FitAddon.FitAddon();
     term.loadAddon(fit);
     term.open(el);
@@ -3752,7 +3761,7 @@ const root = document.documentElement;
 // Text size per pane: A−/A+ buttons or Ctrl + mouse wheel. (Ctrl +/− in the
 // browser still zooms the whole app.)
 const Fonts = {
-  sizes: store.get('fonts', { term: 14, editor: 13, sql: 13 }),
+  sizes: store.get('fonts', { term: 13, editor: 13, sql: 13 }), // terminal 13px ≈ PuTTY's Courier New 10pt
   size(k) { return this.sizes[k] || 13; },
   set(k, v) {
     this.sizes[k] = clamp(Math.round(v), 8, 32);

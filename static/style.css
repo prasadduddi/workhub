@@ -436,7 +436,7 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .tab .x { opacity: .6; } .tab .x:hover { opacity: 1; color: var(--danger); }
 .qc { width: 220px; font-family: var(--mono); }
 #view-terminal { overflow: hidden; }
-#termWrap { flex: 1; min-height: 0; position: relative; background: #0c0e12; border-radius: var(--radius); }
+#termWrap { flex: 1; min-height: 0; position: relative; background: #000; border-radius: var(--radius); }
 .termhost { position: absolute; inset: 6px; display: none; }
 .termhost.active { display: block; }
 
