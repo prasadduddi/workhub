@@ -43,6 +43,7 @@ var (
 	updCache   *releaseInfo
 	updChecked time.Time
 	updateURL  = releasesAPI // tests point this at a local server
+	updPending string        // a version already installed, waiting for the next start
 )
 
 var updClient = &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}
@@ -129,7 +130,7 @@ func (a *App) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	out := map[string]any{"current": version, "latest": rel.Tag, "name": rel.Name, "notes": rel.Notes,
 		"published": rel.Published, "page": orDefault(rel.URL, releasesPage), "newer": isNewer(rel.Tag, rel.Published, version),
-		"can_apply": runtime.GOOS == "windows"}
+		"can_apply": runtime.GOOS == "windows", "pending": updPending}
 	for _, as := range rel.Assets {
 		if strings.EqualFold(as.Name, exeName()) {
 			out["size"] = as.Size
@@ -138,9 +139,11 @@ func (a *App) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-// handleUpdateApply downloads the new exe next to the running one, swaps them
-// (Windows lets a running exe be renamed, not overwritten) and restarts.
+// handleUpdateApply downloads the new exe next to the running one and swaps
+// them (Windows lets a running exe be renamed, not overwritten). It then
+// restarts, or with ?later=1 keeps running: the new version starts next time.
 func (a *App) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
+	later := r.URL.Query().Get("later") == "1"
 	if runtime.GOOS != "windows" {
 		writeErr(w, 400, errors.New("automatic updating works on Windows — download the new version from the releases page"))
 		return
@@ -186,7 +189,35 @@ func (a *App) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err)
 		return
 	}
+	if later {
+		updPending = rel.Tag
+		writeJSON(w, map[string]string{"ok": "next-start", "version": rel.Tag})
+		return
+	}
 	writeJSON(w, map[string]string{"ok": "restarting", "version": rel.Tag})
+	a.restartAs(exe)
+}
+
+// handleUpdateRestart restarts now to finish an update installed for the next start.
+func (a *App) handleUpdateRestart(w http.ResponseWriter, r *http.Request) {
+	if updPending == "" {
+		writeErr(w, 400, errors.New("no update is waiting"))
+		return
+	}
+	exe, err := os.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	if err != nil {
+		writeErr(w, 500, err)
+		return
+	}
+	writeJSON(w, map[string]string{"ok": "restarting", "version": updPending})
+	a.restartAs(exe)
+}
+
+// restartAs saves everything and starts exe (the updated file) in our place.
+func (a *App) restartAs(exe string) {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		if a.store != nil {

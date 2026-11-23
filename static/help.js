@@ -161,9 +161,10 @@ const HELP_TOPICS = [
   { t: 'Lock WorkHub with a PIN', k: 'lock pin security forgot reset idle', v: '', s: [
     'Right-click 🔒 at the bottom of the sidebar (or ☰ → Lock) to set a PIN and the idle time.',
     'Ctrl+L locks now. Forgot the PIN: use the recovery code, or have a code emailed to the address in your profile.'] },
-  { t: 'Update WorkHub', k: 'update upgrade new version install check', v: '', s: [
+  { t: 'Update WorkHub', k: 'update upgrade new version install check restart later next start', v: '', s: [
     '☰ → Check for updates & install (a green ⬆ button appears at the top when there is one).',
-    'Update now downloads it and restarts WorkHub; your data stays as it is.'] },
+    'Update now tells you WorkHub will restart; choose ↻ Restart now, or Update at next start to keep working — the new version starts the next time you open WorkHub.',
+    'Your data stays as it is. Until you restart, ☰ (and the ⬆ button) offer ↻ Restart to finish.'] },
   { t: 'Backups and data location', k: 'backup backups restore data location folder move', v: '', s: [
     'WorkHub backs up at start-up and every morning (when something changed); ☰ → Backups… shows them.',
     'To restore: quit, unzip a backup into an empty folder, start WorkHub and pick it with ☰ → Data location…'] },

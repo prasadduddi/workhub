@@ -6,6 +6,7 @@
 const RELEASES = [
   { v: '1.9.4', title: 'Logins grouped by server', items: [
     ['🗂', 'One server, its users underneath', 'In the SSH and FTP trees, a server with several logins shows once (with 👤 and the number of users); its users are listed under it. Double-click a user to connect as them; right-click the server to add another login.', 'terminal'],
+    ['↻', 'Restart now or at next start', 'Update now tells you WorkHub will restart and asks: ↻ Restart now, or Update at next start — the new version is installed and starts the next time you open WorkHub, so you can finish what you are doing.', ''],
   ] },
   { v: '1.9.3', title: 'Several users on one server', items: [
     ['👥', 'Paste a server with several logins', 'Copy or paste a server with a list of users and passwords — one “ssh user@host pass …” per line, a server line then “user: … password: …” or “user / password” lines, or a Host / User / Password table. Each user becomes its own connection in SSH and FTP; double-click connects as that user.', 'terminal'],

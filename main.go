@@ -554,6 +554,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/calendar/outlook", a.handleOutlookEvents)
 	mux.HandleFunc("GET /api/update", a.handleUpdateCheck)
 	mux.HandleFunc("POST /api/update", a.handleUpdateApply)
+	mux.HandleFunc("POST /api/update/restart", a.handleUpdateRestart)
 	mux.HandleFunc("GET /api/profile", a.handleProfileGet)
 	mux.HandleFunc("PUT /api/profile", a.handleProfilePut)
 	mux.HandleFunc("GET /api/lock", a.handleLockStatus)
