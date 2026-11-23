@@ -233,6 +233,7 @@ const HELP_TOPICS = [
     'On SSH, FTP, SQL, Tasks and other tree pages the sidebar shrinks to icons; click that page’s icon again (or ») to bring it back to full size.'] },
   { t: 'Light or dark theme', k: 'theme dark light mode colours', v: '', s: ['☰ → ⚙ Settings → Theme: follow Windows, light or dark.'] },
   { t: 'Keyboard shortcuts', k: 'keyboard shortcuts keys hotkey ctrl', v: '', s: [
+    'Press ? (when not typing) for the full list of keyboard shortcuts.',
     'Ctrl+K search · Ctrl+J assistant · Ctrl+L lock · Ctrl+B sidebar · F1 help.',
     'Desktop version: Ctrl+Alt+W in any program brings WorkHub up with the search ready.',
     'In the search: ↑/↓, Enter, Shift+Enter, Alt+P / U / H / J.'] },

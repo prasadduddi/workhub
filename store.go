@@ -118,6 +118,18 @@ type Settings struct {
 	BackupCopy    string       `json:"backup_copy,omitempty"`     // second folder for backups, e.g. in OneDrive
 	NoShots       bool         `json:"no_shots,omitempty"`        // don't capture copied screenshots
 	NoUpdateFetch bool         `json:"no_update_fetch,omitempty"` // don't download new versions in the background
+	LastSession   *SessionSnap `json:"last_session,omitempty"`    // reopened after a restart or update
+	NoReopen      bool         `json:"no_reopen,omitempty"`       // don't offer to reopen the last session
+}
+
+// SessionSnap is what was open: SSH terminals and SQL tabs (connection ids),
+// the thread and the page.
+type SessionSnap struct {
+	SSH    []string  `json:"ssh,omitempty"`
+	SQL    []string  `json:"sql,omitempty"`
+	Thread string    `json:"thread,omitempty"`
+	View   string    `json:"view,omitempty"`
+	At     time.Time `json:"at,omitzero"`
 }
 
 // SavedQuery is a search kept in the sidebar, e.g. "PROD Batch" = env:prod app:batch.
@@ -140,21 +152,25 @@ type Group struct {
 }
 
 type State struct {
-	Entries    []*Entry     `json:"entries"`
-	Clips      []*Clip      `json:"clips"`
-	Notes      []*Note      `json:"notes"`
-	Recent     []RecentFile `json:"recent"`
-	LocalDir   string       `json:"local_dir,omitempty"`         // last folder in This PC
-	MailFrom   time.Time    `json:"mail_since,omitzero"`         // newest mail already checked
-	MailIDs    []string     `json:"mail_seen,omitempty"`         // EntryIDs already captured
-	Ignored    []string     `json:"ignored_bookmarks,omitempty"` // browser bookmark URLs deleted in WorkHub
-	Props      []*PropNode  `json:"props,omitempty"`             // Properties page tree
-	WorkItems  []*WorkItem  `json:"work_items,omitempty"`        // Notepad++ work item pages
-	Jira       JiraConfig   `json:"jira"`
-	JiraIssues []*JiraIssue `json:"jira_issues,omitempty"`
-	Events     []*Event     `json:"events,omitempty"` // Calendar
-	Snippets   []*Snippet   `json:"sql_snippets,omitempty"`
-	Settings   Settings     `json:"settings"`
+	Entries      []*Entry     `json:"entries"`
+	Clips        []*Clip      `json:"clips"`
+	Notes        []*Note      `json:"notes"`
+	Recent       []RecentFile `json:"recent"`
+	LocalDir     string       `json:"local_dir,omitempty"`         // last folder in This PC
+	MailFrom     time.Time    `json:"mail_since,omitzero"`         // newest mail already checked
+	MailIDs      []string     `json:"mail_seen,omitempty"`         // EntryIDs already captured
+	Ignored      []string     `json:"ignored_bookmarks,omitempty"` // browser bookmark URLs deleted in WorkHub
+	Props        []*PropNode  `json:"props,omitempty"`             // Properties page tree
+	WorkItems    []*WorkItem  `json:"work_items,omitempty"`        // Notepad++ work item pages
+	Jira         JiraConfig   `json:"jira"`
+	JiraIssues   []*JiraIssue `json:"jira_issues,omitempty"`
+	Events       []*Event     `json:"events,omitempty"` // Calendar
+	Snippets     []*Snippet   `json:"sql_snippets,omitempty"`
+	HTTPReqs     []*HTTPReq   `json:"http_requests,omitempty"` // 🌐 API page
+	HTTPEnvs     []*HTTPEnv   `json:"http_envs,omitempty"`
+	HTTPHistory  []HTTPHist   `json:"http_history,omitempty"`
+	HTTPLocalEnv bool         `json:"http_local_env,omitempty"` // the default "localhost" environment was made (once)
+	Settings     Settings     `json:"settings"`
 }
 
 const (

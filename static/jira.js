@@ -12,6 +12,7 @@ const Jira = {
     if (this.cfg.mode === 'browser') this.session = await api('GET', '/api/jira/browser').catch(() => ({}));
     this.render();
     if ($('#search').value.trim()) renderBoard(); // main search shows Jira issues too
+    else if (typeof Today !== 'undefined') Today.render(); // 📅 Today: my Jira issues
     if (typeof Cal !== 'undefined') Cal.render(); // CM windows
   },
   persist() { try { localStorage.setItem('jiraOpen', JSON.stringify([...this.open])); } catch { /* ignore */ } },

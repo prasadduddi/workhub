@@ -4,6 +4,20 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.12.1', title: 'API requests, Compare, Today, PROD safety and more', items: [
+    ['🌐', 'API page (like Postman)', 'Send HTTP requests from WorkHub: method, URL, headers, Basic / Bearer / API-key auth and a JSON / XML / text / form body. {{variables}} per environment (DEV, UAT, PROD — ⚙ Environments…, also filled from a saved connection). Answers pretty-printed with search; save requests in folders; History; Copy as curl (secrets stay as {{variables}}); 📌 send request + answer to a thread. Ctrl+Enter sends, Ctrl+S saves.', 'api'],
+    ['⬇', 'Import Postman and Bruno collections', 'API page → ⬇ Import: Postman collection and environment files (v2.0 / v2.1), a Bruno collection folder (requests, sub-folders, environments, collection auth and headers) or Bruno’s JSON export. Folders, headers, auth (also inherited), bodies and {{variables}} come along; scripts and tests are listed, not run. Importing again updates the same requests. Right-click a folder → ⬆ Export as Postman collection (Bruno imports it too); ⚙ Environments → ⬆ Export.', 'api'],
+    ['⇆', 'Compare files and folders (Folders page)', 'Ctrl+click a second file or folder, right-click → ⇆ Select for compare, or the ⇆ button (also for files and folders anywhere on this PC). Files side by side with the changed characters marked, a map of the differences, ▲▼ / Alt+↑↓ to move between them, ignore whitespace / case, only differences; copy a change → or ← and save. Folders as one tree: ≠ different, ◀ only left, ▶ only right; double-click to compare a file, → / ← copies it across (asks first; the old copy is kept).', 'ref'],
+    ['📅', 'Today on the Dashboard', 'Recent connections (one click connects), open threads (unread first), reminders due today and your open Jira issues — above the tiles.', 'dashboard'],
+    ['⚠', 'PROD safety', 'Connections in PROD get a red frame (SSH terminal and SQL editor) and a confirm step: before opening a PROD terminal, before pasting several lines into it, before every SQL statement that changes data (read-only queries once per tab) and before Commit.', 'sql'],
+    ['↺', 'Reopen your last session', 'After an update WorkHub reopens your SSH terminals, SQL tabs, thread and page by itself; after a normal start it offers to (Reopen). Settings → Reopen last session.', 'terminal'],
+    ['🔑', 'My SSH keys (copy for GitHub)', '☰ → My SSH keys (or 🔑 Keys on the SSH page): the public keys in your .ssh folder (and PuTTY .ppk) with their fingerprints and 📋 Copy for GitHub, plus the hosts in .ssh/config. WorkHub only reads that folder — it never changes it, and private keys are never read.', ''],
+    ['⌨', '? for shortcuts', 'Press ? (when not typing) for every keyboard shortcut on one sheet.', ''],
+    ['𝐁', 'Ctrl+B / I / U in messages', 'Bold, italic and underline (Ctrl+Shift+X strikethrough) in thread messages; Ctrl+B still hides the sidebar elsewhere.', 'tasks'],
+  ] },
+  { v: '1.11.1', title: 'Follow a log on several servers at once', items: [
+    ['📜', 'Tail a log on all servers', 'Right-click a folder, environment or group → 📜 Tail a log on all N servers…: the same file followed on every server in one window, each line tagged with its server in its own colour. Click a server chip to hide / show its lines (double-click: only that one); its dot shows connected or ✕ failed. Servers without a saved login ask once for all of them.', 'terminal'],
+  ] },
   { v: '1.11.0', title: 'SQL snippets, a live log viewer, move messages', items: [
     ['➡', 'Move or copy a message', 'A message’s ⋯ (or right-click) → ➡ Move to another thread… or ⧉ Copy to another thread…. Its replies and pictures go with it; it lands at the end of that thread marked “↪ Moved from …”. Undo is on the notice.', 'tasks'],
     ['📌', 'SQL snippets', 'SQL page → 📌 Snippets (next to History): ＋ Save current statement keeps the selection or the query at the cursor under a name, for this connection or all. Click one to put it in the editor (selected, so Run runs just it); double-click to put it in and run. ⋯ renames, updates, shares or deletes.', 'sql'],

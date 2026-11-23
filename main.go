@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -53,6 +54,8 @@ type App struct {
 	backedUp map[string]bool
 
 	shots shotLog // screenshots posted (clipboard and Screenshots folder)
+
+	restarted atomic.Bool // started by WorkHub itself (update, install): the page reopens the last session
 }
 
 func main() {
@@ -98,6 +101,7 @@ func main() {
 		jobs:      &jobList{},
 		backedUp:  map[string]bool{},
 	}
+	app.restarted.Store(os.Getenv("WORKHUB_RESTART") == "1")
 	url := fmt.Sprintf("http://%s/?t=%s", app.addr, app.token)
 
 	_ = os.WriteFile(filepath.Join(dir, "session.token"), []byte(app.token), 0o600)
@@ -514,6 +518,12 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/clips", a.handleListClips)
 	mux.HandleFunc("DELETE /api/clips/{id}", a.handleDeleteClip)
 
+	mux.HandleFunc("GET /api/http", a.handleHTTPData)
+	mux.HandleFunc("POST /api/http/send", a.handleHTTPSend)
+	mux.HandleFunc("POST /api/http/req", a.handleHTTPSaveReq)
+	mux.HandleFunc("DELETE /api/http/req/{id}", a.handleHTTPDeleteReq)
+	mux.HandleFunc("POST /api/http/env", a.handleHTTPSaveEnv)
+	mux.HandleFunc("DELETE /api/http/env/{id}", a.handleHTTPDeleteEnv)
 	mux.HandleFunc("GET /api/snippets", a.handleSnippets)
 	mux.HandleFunc("POST /api/snippets", a.handleSaveSnippet)
 	mux.HandleFunc("POST /api/snippets/{id}/used", a.handleUseSnippet)
@@ -645,6 +655,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/ref/reveal", a.handleRefReveal)
 	mux.HandleFunc("POST /api/ref/open", a.handleRefOpen)
 	mux.HandleFunc("GET /api/ref/search", a.handleRefSearch)
+	mux.HandleFunc("GET /api/sshkeys", a.handleSSHKeys) // read-only
+	mux.HandleFunc("POST /api/compare/dirs", a.handleCompareDirs)
+	mux.HandleFunc("POST /api/compare/stat", a.handleCompareStat)
 	mux.HandleFunc("GET /api/ref/history", a.handleRefHistory)
 	mux.HandleFunc("GET /api/props", a.handlePropsList)
 	mux.HandleFunc("POST /api/props", a.handlePropsSave)

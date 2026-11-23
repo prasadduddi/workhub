@@ -359,7 +359,7 @@ CodeMirror.commands.duplicateLine = cm => {
 // the tree, the window (and the calendar) get the room; Dashboard, Bookmarks
 // and Captured bring it back. Clicking the current page's icon again switches
 // it either way on any page (» too).
-const WORK_VIEWS = ['terminal', 'files', 'sql', 'tasks', 'ref', 'jira', 'groups', 'notes', 'git', 'cal'];
+const WORK_VIEWS = ['terminal', 'files', 'sql', 'tasks', 'ref', 'jira', 'groups', 'notes', 'git', 'cal', 'api'];
 function roomForWork() {
   if (document.body.classList.contains('side-top')) return; // a bar across the top takes no room from the tree
   if (S.userSide || document.body.classList.contains('side-collapsed')) return;
@@ -395,6 +395,7 @@ function show(view) {
   if (view === 'groups') Groups.render();
   if (view === 'props') Props.load();
   if (view === 'ref') Ref.load();
+  if (view === 'api') Api.load();
   if (view === 'jira') Jira.load();
   if (view === 'cal') Cal.load();
   if (view === 'git') {
@@ -443,7 +444,8 @@ async function refreshAll() {
 
 async function poll() {
   try {
-    const { v, data_dir, app_version } = await api('GET', '/api/version');
+    const { v, data_dir, app_version, restarted } = await api('GET', '/api/version');
+    if (restarted) S.restarted = true; // WorkHub restarted itself (update / install): reopen the last session
     $('#dataDir').textContent = 'Data: ' + data_dir; S.dataDir = data_dir;
     $('#appVersion').textContent = 'Version ' + app_version;
     $('#appVersion').title = 'Data: ' + data_dir + ' — ☰ › ⚙ Settings › Data folder';
@@ -945,7 +947,49 @@ const Saved = {
   run(i) { const x = this.all()[i]; if (!x) return; show('dashboard'); $('#search').value = x.query; S.kbSel = 0; renderBoard(); },
 };
 
+// ---------- 📅 Today: recent connections, open threads, reminders due, my Jira ----------
+const Today = {
+  rem: [], remAt: 0,
+  open: (() => { try { return localStorage.getItem('todayOpen') !== '0'; } catch { return true; } })(),
+  async reminders() {
+    if (Date.now() - this.remAt < 60000) return this.rem;
+    this.remAt = Date.now();
+    this.rem = await api('GET', '/api/work/reminders').catch(() => []) || [];
+    return this.rem;
+  },
+  render() {
+    const el = $('#today'); if (!el) return;
+    if ($('#search').value.trim()) { el.innerHTML = ''; return; }
+    const end = new Date(); end.setHours(23, 59, 59, 999);
+    const recent = S.entries.filter(e => e.last_used && isConn(e)).sort((a, b) => new Date(b.last_used) - new Date(a.last_used)).slice(0, 6);
+    const threads = typeof Work === 'undefined' ? [] : Work.list.filter(w => w.status !== 'done' && !w.archived)
+      .sort((a, b) => (b.unread > 0) - (a.unread > 0) || (b.starred - a.starred) || new Date(b.updated) - new Date(a.updated)).slice(0, 6);
+    const due = this.rem.filter(r => r.post.remind_at && new Date(r.post.remind_at) <= end).sort((a, b) => new Date(a.post.remind_at) - new Date(b.post.remind_at)).slice(0, 6);
+    const jira = typeof Jira === 'undefined' ? [] : Jira.issues.filter(j => !j.done).slice(0, 6);
+    const snip = p => (p.text || (p.html || '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim().slice(0, 70);
+    const card = (icon, title, n, rows, empty, go) => `<div class="tcardx"><div class="tc-head">${icon} <b>${title}</b>${n ? `<span class="n">${n}</span>` : ''}<span class="spacer"></span>${go ? `<a href="#" data-tgo="${go}" class="tiny">All →</a>` : ''}</div>${rows.join('') || `<div class="muted tiny tc-empty">${empty}</div>`}</div>`;
+    const kind = e => canDB(e) ? '<span class="dbic-s">SQL</span>' : canSSH(e) ? '<span class="dbic-s">SSH</span>' : canFiles(e) ? '<span class="dbic-s">FTP</span>' : '';
+    el.innerHTML = `<details class="todayx" ${this.open ? 'open' : ''}><summary>📅 Today <span class="muted tiny">${new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span></summary><div class="today-grid">
+      ${card('🔌', 'Recent connections', '', recent.map(e => `<div class="tc-row" data-tconn="${e.id}" title="Connect · ${esc(e.host || e.url || '')}">${STATE_DOT[connState(e)]}${kind(e)}<span class="tc-t">${canDB(e) ? dbLabel(e) : esc(e.name || e.host)}</span>${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="muted tiny">${ago(e.last_used)}</span></div>`), 'Nothing used yet.', 'terminal')}
+      ${card('🧵', 'Open threads', threads.filter(w => w.unread).length ? threads.filter(w => w.unread).length + ' new' : '', threads.map(w => `<div class="tc-row ${w.unread ? 'unread' : ''}" data-tthread="${w.id}"><span class="tc-t">${w.starred ? '★ ' : ''}${esc(w.title)}</span>${w.unread ? `<span class="tunread">${w.unread}</span>` : ''}<span class="muted tiny">${fmtTime(w.updated)}</span></div>`), 'No open threads.', 'tasks')}
+      ${card('⏰', 'Reminders due', due.length, due.map(r => { const late = new Date(r.post.remind_at) < new Date(); return `<div class="tc-row" data-trem="${r.thread}" data-tpost="${r.post.id}"><span class="tc-t">${esc(snip(r.post) || '(a message)')}</span><span class="muted tiny ${late ? 'late' : ''}">${late ? 'due ' : ''}${new Date(r.post.remind_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>`; }), 'Nothing due today.', '')}
+      ${card('◆', 'My Jira issues', jira.length, jira.map(j => `<div class="tc-row" data-tjira="${esc(j.key)}" title="${esc(j.summary || '')}"><b class="jkey">${esc(j.key)}</b><span class="tc-t">${esc(j.summary || '')}</span><span class="jstat">${esc(j.status || '')}</span></div>`), 'No open issues (Jira page → My issues).', 'jira')}
+    </div></details>`;
+    this.reminders().then(r => { if (r !== this.lastRem) { this.lastRem = r; this.render(); } });
+  },
+};
+$('#today').addEventListener('toggle', e => { if (e.target.classList?.contains('todayx')) { Today.open = e.target.open; try { localStorage.setItem('todayOpen', Today.open ? '1' : '0'); } catch { /* ignore */ } } }, true);
+$('#today').addEventListener('click', e => {
+  const g = e.target.closest('[data-tgo]'); if (g) { e.preventDefault(); return show(g.dataset.tgo); }
+  const c = e.target.closest('[data-tconn]'); if (c) return connectEntry(byId(c.dataset.tconn));
+  const t = e.target.closest('[data-tthread]'); if (t) return Work.open(t.dataset.tthread);
+  const r = e.target.closest('[data-trem]'); if (r) return Work.open(r.dataset.trem, r.dataset.tpost);
+  const j = e.target.closest('[data-tjira]');
+  if (j) { show('jira'); Jira.sel = 'i:' + j.dataset.tjira; Jira.open.add('f:open'); Jira.open.delete('-f:open'); return Jira.render(); }
+});
+
 function renderBoard() {
+  Today.render();
   renderViewChips();
   viewSummary();
   const list = filtered();
@@ -1405,6 +1449,15 @@ $('#stats').addEventListener('click', ev => {
   if (b) { ev.preventDefault(); $('#search').value = b.dataset.find; S.kbSel = 0; renderBoard(); }
   if (ev.target.closest('[data-view-go]')) show(ev.target.closest('[data-view-go]').dataset.viewGo);
 });
+// Connect or open: SSH terminal, SQL, FTP, the link — or the details.
+function connectEntry(e) {
+  if (canSSH(e)) return Term.open(e);
+  if (canDB(e)) return SQL.open(e);
+  if (canFiles(e)) return Remote.connect(e);
+  if (e.url) return openURL(e);
+  showDetails(e);
+}
+
 // Keyboard: ↑/↓ choose a result, Enter connects or opens it, Shift+Enter shows
 // its details, Alt+P / U / H / J copy password, user, host, JDBC or URL.
 $('#search').addEventListener('keydown', ev => {
@@ -1419,11 +1472,7 @@ $('#search').addEventListener('keydown', ev => {
   } else if (ev.key === 'Enter') {
     ev.preventDefault();
     if (ev.shiftKey) return showDetails(e);
-    if (canSSH(e)) return Term.open(e);
-    if (canDB(e)) return SQL.open(e);
-    if (canFiles(e)) return Remote.connect(e);
-    if (e.url) return openURL(e);
-    showDetails(e);
+    connectEntry(e);
   } else if (ev.altKey && !ev.ctrlKey && 'puhj'.includes(key) && key) {
     ev.preventDefault();
     const v = { p: e.password, u: e.username, h: e.host || e.url, j: jdbcURL(e) || e.url }[key];
@@ -1786,10 +1835,19 @@ const PUTTY_THEME = {
 const Term = {
   tabs: [], active: null,
 
-  async open(e) {
+  async open(e, opts = {}) {
+    if (isProd(e) && !opts.confirmed && !confirm(`⚠ PROD — open a terminal on a production server?\n\n${prodName(e)}\n\nCommands you type there run on PROD.`)) return;
     let creds = {};
     if (needsCreds(e)) { creds = await askCreds(e); if (!creds) return; }
     this.create(e, creds, null);
+  },
+
+  // Pasting several lines runs several commands: on PROD, ask first.
+  pasteOK(t, txt) {
+    if (t.local || !isProd(t.entry)) return true;
+    const lines = txt.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
+    if (lines.length < 2 && !/\n$/.test(txt.replace(/\r\n?/g, '\n'))) return true;
+    return confirm(`⚠ PROD — paste and run ${lines.length} line${lines.length > 1 ? 's' : ''} on ${t.entry.host}?\n\n${lines.slice(0, 8).join('\n')}${lines.length > 8 ? '\n…' : ''}`);
   },
 
   // A command prompt on this PC (cmd, PowerShell, Git Bash, or the Mac shell).
@@ -1801,7 +1859,8 @@ const Term = {
   create(e, creds, local) {
     show('terminal'); roomForWork();
     const el = document.createElement('div');
-    el.className = 'termhost';
+    el.className = 'termhost' + (!local && isProd(e) ? ' prod' : '');
+    if (!local && isProd(e)) el.dataset.prod = `PROD · ${e.host}`;
     $('#termWrap').append(el);
     const term = new Terminal({ cursorBlink: false, cursorStyle: 'block', fontSize: Fonts.size('term'), scrollback: 20000, fontFamily: PUTTY_FONT, theme: PUTTY_THEME, drawBoldTextInBrightColors: true, minimumContrastRatio: 1 });
     const fit = new FitAddon.FitAddon();
@@ -1813,10 +1872,11 @@ const Term = {
     term.onSelectionChange(() => { const s = term.getSelection(); if (s) navigator.clipboard.writeText(s).catch(() => {}); });
     el.addEventListener('contextmenu', async ev => {
       ev.preventDefault();
-      try { const txt = await navigator.clipboard.readText(); if (txt && !t.closed) t.ws.send(JSON.stringify({ t: 'd', d: txt })); } catch { toast('Allow clipboard access to paste with right-click (or use Ctrl+V)', true); }
+      try { const txt = await navigator.clipboard.readText(); if (txt && !t.closed && this.pasteOK(t, txt)) t.ws.send(JSON.stringify({ t: 'd', d: txt })); } catch { toast('Allow clipboard access to paste with right-click (or use Ctrl+V)', true); }
     });
     term.onData(d => {
       if (t.closed) { if (d === '\r') this.connect(t); return; }
+      if (d.length > 1 && !this.pasteOK(t, d)) return; // Ctrl+V of several lines on PROD
       t.ws.send(JSON.stringify({ t: 'd', d }));
     });
     term.onResize(({ cols, rows }) => { if (!t.closed) t.ws.send(JSON.stringify({ t: 'r', cols, rows })); });
@@ -2206,6 +2266,12 @@ setTimeout(() => Tunnels.load(), 1500);
 // Connection trees (PuTTY, FileZilla, SQL) can be grouped like bookmarks:
 // by your folders, environment, application (from the server name),
 // domain / IP subnet, type, your Groups, or login user. One choice per tree.
+// PROD safety: production connections get a red frame and a confirm step.
+const isProd = e => (e?.env || '').toUpperCase() === 'PROD';
+const prodName = e => `${e.name || e.host}${e.username ? `\n${e.username}@${e.host}` : `\n${e.host}`}`;
+// Read-only SQL: SELECT / WITH … SELECT / EXPLAIN / DESCRIBE / SHOW.
+const readOnlySQL = sql => /^(select|with|explain|desc|describe|show|values|table)\b/i.test(sql.replace(/^(\s*(--[^\n]*\n|\/\*[\s\S]*?\*\/))*\s*/, '').trim())
+  && !/\b(insert|update|delete|merge|drop|alter|truncate|create|grant|revoke)\b/i.test(sql.replace(/'[^']*'/g, ''));
 // Tree expanders: Windows-style [+] / [−] boxes.
 const pm = open => `<i class="pm">${open ? '−' : '+'}</i>`;
 const TREE_GROUPS = { folder: 'Folders', env: 'Env', app: 'App', domain: 'Domain / subnet', type: 'Type', group: 'My groups', user: 'User' };
@@ -2342,7 +2408,7 @@ const Tree = {
   render() {
     for (const host of $$('.tree-host')) {
       if (!host.firstChild) {
-        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷 Names</button><button data-tool="new" title="New connection">+ New</button></div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
+        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷 Names</button><button data-tool="new" title="New connection">+ New</button>${host.dataset.mode === 'ssh' ? '<button data-tool="sshkeys" title="My SSH keys: copy your public key for GitHub (read-only — nothing in .ssh is changed)">🔑 Keys</button>' : ''}</div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
         this.wire(host);
       }
       $('select[data-tool=groupby]', host).value = this.groupMode(host.dataset.mode);
@@ -2396,6 +2462,7 @@ const Tree = {
       const tool = ev.target.closest('button[data-tool]')?.dataset.tool;
       if (tool === 'new') return openEntryDialog(null);
       if (tool === 'rules') return openNameRules();
+      if (tool === 'sshkeys') return SSHKeys.open();
       const exp = ev.target.closest('[data-dbexp]');
       if (exp) return SQL.toggleConn(byId(exp.dataset.dbexp), !!exp.dataset.retry);
       const n = ev.target.closest('.tnode');
@@ -2511,6 +2578,11 @@ const Tree = {
     Tree.render();
     toast(parts.length ? `Disconnected ${parts.join(', ')} in ${where}` : `Nothing open in ${where}`);
   },
+  // "📜 Tail a log on all N servers…" for a folder / group with SSH servers.
+  tailItem(list) {
+    const hosts = new Set(list.filter(canSSH).map(e => `${(e.host || '').toLowerCase()}:${sshPort(e)}`));
+    return hosts.size ? [[hosts.size > 1 ? `📜 Tail a log on all ${hosts.size} servers…` : '📜 Tail a log…', () => LogView.openMany(list)]] : [];
+  },
   // "⏏ Disconnect all" menu item for a folder / group, when something in it is open.
   disconnectItem(list, label) {
     const n = this.sessionCount(this.entrySessions(list));
@@ -2621,6 +2693,7 @@ const Tree = {
       const inside = this.nodeEntries(node.dataset.key, mode);
       if (inside.length) items.push([`Duplicate ${inside.length} connection${inside.length > 1 ? 's' : ''}…`, () => this.duplicate(inside, proj, node.querySelector('.nm')?.textContent || node.dataset.env || proj)]);
       items.push(...this.disconnectItem(inside, node.dataset.env && !node.querySelector('.nm') ? `${proj} / ${node.dataset.env}` : proj));
+      items.push(...this.tailItem(inside));
       if (!node.dataset.env) items.push(['Rename folder…', async () => {
         const to = prompt('Rename folder', proj);
         if (to && to !== proj) { await api('POST', '/api/projects/rename', { from: proj, to: to.trim() }); poll(); }
@@ -2629,6 +2702,7 @@ const Tree = {
       const inside = this.nodeEntries(node.dataset.key, mode);
       if (inside.length) items.push([`Duplicate ${inside.length} connection${inside.length > 1 ? 's' : ''}…`, () => this.duplicate(inside, null, node.querySelector('.nm')?.textContent || node.textContent.trim())]);
       items.push(...this.disconnectItem(inside, node.querySelector('.nm')?.textContent || node.dataset.env || 'this group'));
+      items.push(...this.tailItem(inside));
     } else {
       items.push(['New connection…', () => openEntryDialog(null)],
         ['New folder…', () => { const n = prompt('Folder name (use / for subfolders)'); if (n) openEntryDialog({ project: n.trim() }); }]);
@@ -3309,6 +3383,8 @@ const SQL = {
     this.cm.setValue(t.sql);
     this.cm.clearHistory();
     $('#sqlInfo').textContent = `${t.kind === 'oracle' ? 'Oracle' : 'PostgreSQL'} · ${t.info.user || ''}`;
+    $('#sqlWork').classList.toggle('prod', isProd(t.entry));
+    $('#sqlWork').dataset.prod = isProd(t.entry) ? `PROD · ${t.entry.host}` : '';
     this.renderTabs(); this.renderResult(); this.renderOut(); this.renderHist(); this.renderObjects(); this.renderTx();
     setTimeout(() => { this.cm.refresh(); this.cm.focus(); });
   },
@@ -3373,6 +3449,16 @@ const SQL = {
     if (!t || this.running) return;
     const stmts = this.pick(all);
     if (!stmts.length) return toast('Nothing to run', true);
+    if (isProd(t.entry)) { // ⚠ PROD: every change is confirmed; read-only queries once per tab
+      const writes = stmts.filter(x => !readOnlySQL(x.sql)), name = `${t.entry.name || t.entry.host} (${t.info.user || t.entry.username || ''})`;
+      if (writes.length) {
+        const show = writes.slice(0, 3).map(x => x.sql.length > 300 ? x.sql.slice(0, 300) + '…' : x.sql).join('\n\n');
+        if (!confirm(`⚠ PROD — run ${writes.length === 1 ? 'this statement' : writes.length + ' statements that change data'} on ${name}?\n\n${show}${writes.length > 3 ? '\n\n…' : ''}${!$('#sqlAuto').checked ? '\n\n(Auto-commit is off: nothing is kept until you press Commit.)' : '\n\nAuto-commit is ON: the change is kept at once.'}`)) return;
+      } else if (!t.prodReadOK) {
+        if (!confirm(`⚠ PROD — run read-only queries on ${name}?\n\nYou won't be asked again for SELECTs in this tab; anything that changes data is always asked.`)) return;
+        t.prodReadOK = true;
+      }
+    }
     this.busy(true);
     if (all || stmts.length > 1) this.showOut('out');
     const max = +$('#sqlMax').value, auto = $('#sqlAuto').checked;
@@ -3622,7 +3708,7 @@ $('#sqlReconnect').onclick = () => SQL.reconnect();
 $('#sqlDisconnect').onclick = () => SQL.active && SQL.close(SQL.active);
 $('#sqlScript').onclick = () => SQL.run(true);
 $('#sqlStop').onclick = () => SQL.active && api('POST', '/api/db/cancel', { sid: SQL.active.sid }).catch(() => {});
-$('#sqlCommit').onclick = () => SQL.tx('commit');
+$('#sqlCommit').onclick = () => { const t = SQL.active; if (t && isProd(t.entry) && !confirm(`⚠ PROD — commit the changes on ${t.entry.name || t.entry.host}?`)) return; SQL.tx('commit'); };
 $('#sqlRollback').onclick = () => SQL.tx('rollback');
 $('#sqlAuto').checked = (() => { try { return localStorage.getItem('sqlAuto') === '1'; } catch { return false; } })();
 $('#sqlAuto').onchange = e => { try { localStorage.setItem('sqlAuto', e.target.checked ? '1' : '0'); } catch { /* ignore */ } };
@@ -4237,7 +4323,13 @@ function toggleSide() {
 }
 $('#sideToggle').textContent = document.body.classList.contains('side-collapsed') ? '»' : '«';
 $('#sideToggle').onclick = toggleSide;
-document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); toggleSide(); } });
+// Ctrl+B hides / shows the sidebar — except where you are writing text, where
+// it means bold (message boxes) or belongs to that box.
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'b' || e.shiftKey || e.altKey) return;
+  if (e.target.isContentEditable || e.target.closest?.('input, textarea, select, .CodeMirror, .xterm')) return;
+  e.preventDefault(); toggleSide();
+});
 $$('#nav button[data-view]').forEach(b => (b.title = $('.nl', b)?.textContent || ''));
 
 // Server trees (PuTTY and FileZilla, sized separately)

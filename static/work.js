@@ -99,6 +99,7 @@ const Work = {
     this.renderList();
     this.renderCapture();
     if ($('#search').value.trim() && $('#view-dashboard').classList.contains('active')) renderBoard(); // threads in the main search
+    else if ($('#view-dashboard').classList.contains('active') && typeof Today !== 'undefined') Today.render(); // 📅 Today's open threads
   },
   // The thread captures go to: the one with "Capture here", else General ("off" = none).
   active() {
@@ -589,6 +590,16 @@ page.addEventListener('keydown', e => {
   if (ed && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); return ed.parentElement.querySelector('[data-pact=save-edit]')?.click(); }
   if (ed && e.key === 'Escape') return Work.render();
   if (e.key === 'Escape' && Work.panel) { e.preventDefault(); return Work.closePanel(); }
+});
+// Ctrl+B / Ctrl+I / Ctrl+U: bold, italic, underline in message boxes (and
+// Ctrl+Shift+X strikethrough), on the selection or for what you type next.
+page.addEventListener('keydown', e => {
+  const box = e.target.closest?.('.tbox, .tbody[contenteditable=true]'); if (!box || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const k = e.key.toLowerCase();
+  const cmd = !e.shiftKey && { b: 'bold', i: 'italic', u: 'underline' }[k] || (e.shiftKey && k === 'x' ? 'strikeThrough' : '');
+  if (!cmd) return;
+  e.preventDefault(); e.stopPropagation();
+  document.execCommand(cmd);
 });
 // Slack typing in every message box; the draft is kept.
 page.addEventListener('input', e => {

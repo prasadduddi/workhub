@@ -304,6 +304,17 @@ $('#refTree').addEventListener('click', e => {
   if (Ref.isDir(p)) Ref.open.add(p);
   Ref.select(p);
 });
+// Ctrl+click a second file or folder: compare it with the selected one.
+$('#refTree').addEventListener('click', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const n = e.target.closest('[data-rp]'); if (!n) return;
+  const first = Compare.pick || Ref.sel, second = n.dataset.rp;
+  if (!first || first === second) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  Compare.pick = null;
+  Compare.open(Compare.ref(first), Compare.ref(second));
+}, true);
+$('#refCompare').onclick = () => Compare.chooser(Compare.pick || Ref.sel || '');
 $('#refTree').addEventListener('contextmenu', e => {
   const n = e.target.closest('[data-rp]'); e.preventDefault();
   if (n) Ref.select(n.dataset.rp);
@@ -311,6 +322,16 @@ $('#refTree').addEventListener('contextmenu', e => {
   const openIt = it && !it.dir && !it.missing ? [['↗ Open (in its default program)', () => api('POST', '/api/ref/open', { path: it.path }).then(r => toast('Opening ' + r.path.split(/[\\/]/).pop())).catch(err => toast(err.message, true))], '-'] : [];
   const items = it?.linked ? [...openIt, ['Open in Explorer', () => api('POST', '/api/ref/reveal', { path: Ref.sel })]]
     : [...openIt, ['+ New folder here', () => Ref.newFolder()], ['+ New file here', () => Ref.newFile()], ['🔗 Link to a path here…', () => Ref.linkPath()], ['Open in Explorer', () => api('POST', '/api/ref/reveal', { path: Ref.sel })]];
+  if (it && !it.missing) {
+    const pk = Compare.pick, label = p => p.split('/').pop();
+    items.push('-');
+    if (pk && pk !== it.path) items.push([`⇆ Compare with “${label(pk)}”`, () => { Compare.pick = null; Compare.open(Compare.ref(pk), Compare.ref(it.path)); }]);
+    items.push(['⇆ Select for compare', () => { Compare.pick = it.path; toast(`“${label(it.path)}” selected — right-click another ${it.dir ? 'folder' : 'file'} → Compare with…, or Ctrl+click it`); }],
+      [`⇆ Compare with a ${it.dir ? 'folder' : 'file'} on this PC…`, async () => {
+        const r = await api('POST', it.dir ? '/api/local/pick' : '/api/local/pickfile', {}).catch(err => (toast(err.message, true), {}));
+        if (r.ok) Compare.open(Compare.ref(it.path), Compare.local(r.path));
+      }]);
+  }
   if (it?.link) items.push('-', ['Rename link', () => Ref.rename()], ['Remove link (files stay)', () => Ref.remove()]);
   else if (n && !it?.linked) items.push('-', ['Rename', () => Ref.rename()], ['Delete', () => Ref.remove()]);
   Tree.showMenu(e, items);

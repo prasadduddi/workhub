@@ -42,6 +42,7 @@ const Settings = {
       ${row('📸 Capture screenshots', 'Pictures you copy (Win+Shift+S, PrtScn) go into the capture thread — General, a thread with 📥 Capture here, or the one for a Jira key', sw('shots', !S.settings.no_shots))}
       ${row('📝 Save SSH session text', 'Keep what each terminal shows, per server and day, searchable', sw('slog', !!S.settings.session_log) + btn('slogopen', 'Logs…'))}
       ${row('Import data', 'From an older WorkHub data folder or a file', btn('import', 'Import…'))}
+      ${row('↺ Reopen last session', 'After starting WorkHub, offer to reopen the SSH terminals, SQL tabs and thread you had open (after an update it reopens them by itself)', sw('reopen', !S.settings.no_reopen))}
       ${row('⬇ Download updates in the background', 'New versions are fetched quietly and wait — nothing is installed until you click ⬆ in the sidebar', sw('updfetch', !S.settings.no_update_fetch))}
       <h4>Programs</h4>
       ${row('↗ Programs for “Open in”', 'PuTTY, FileZilla, SQL Developer, DBeaver…', btn('ext', 'Choose…'))}
@@ -88,6 +89,7 @@ $('#settingsBody').addEventListener('change', async e => {
     case 'menu': if ((t.value === 'top') !== document.body.classList.contains('side-top')) $('#sideFlip').click(); break;
     case 'slog': await saveSettings({ session_log: t.checked }); toast(t.checked ? 'SSH sessions you open from now on are saved' : 'SSH sessions are no longer saved'); break;
     case 'tray': Tray.set(t.checked); break;
+    case 'reopen': await saveSettings({ no_reopen: !t.checked }); toast(t.checked ? 'You will be offered to reopen your last session' : 'The last session is no longer offered at start (an update still reopens it)'); break;
     case 'updfetch': await saveSettings({ no_update_fetch: !t.checked }); toast(t.checked ? 'New versions download in the background — you choose when to install' : 'New versions are no longer downloaded until you ask'); break;
     case 'shots': await saveSettings({ no_shots: !t.checked }); toast(t.checked ? 'Copied screenshots go into the capture thread' : 'Screenshots are no longer captured'); break;
     case 'inst-desktop': case 'inst-startup': if (Settings.inst?.installed) Settings.install(); break; // not installed yet: used by Install
