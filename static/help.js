@@ -46,6 +46,13 @@ const HELP_TOPICS = [
     'Copy any text with hosts, users, passwords or links (an email, Teams message, wiki page) — WorkHub files what it recognises.',
     'Click “Saving to …” under the switch to choose the project new captures go to.',
     'Everything captured is listed on the Captured page; copying the same text twice is ignored.'] },
+  { t: 'Use the server tree with the keyboard', k: 'keyboard keys arrow tree navigate move enter connect fold open', v: 'terminal', s: [
+    'Click in the SSH, FTP or SQL tree (or Tab to it).',
+    '↑ ↓ move, Home / End jump to the top / bottom.',
+    '→ opens a folder or server (again steps into it); ← folds it, or steps out to its folder.',
+    'Enter connects to the selected login (or opens / folds a folder).'] },
+  { t: 'Reconnect to a recent server', k: 'reconnect recent last used servers terminal empty chips', v: 'terminal', s: [
+    'With no session open, the SSH page lists your last used servers under Reconnect — click one to connect.'] },
   { t: 'Several users on one server', k: 'several multiple users logins accounts same server host paste list table each user password', v: 'terminal', s: [
     'Copy or paste the server with its logins in any of these shapes:',
     'one per line: ssh deploy@srv-07 pass Dep#1 (pass with or without “:”);',

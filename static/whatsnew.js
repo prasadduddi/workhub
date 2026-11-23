@@ -7,6 +7,11 @@ const RELEASES = [
   { v: '1.9.4', title: 'Logins grouped by server', items: [
     ['🗂', 'One server, its users underneath', 'In the SSH and FTP trees, a server with several logins shows once (with 👤 and the number of users); its users are listed under it. Double-click a user to connect as them; right-click the server to add another login.', 'terminal'],
     ['🧹', 'Tidier dashboard and trees', 'The dashboard shows only tiles you can act on (Need attention, New to sort, Captured today, Re-test) with the counts in one line. Cards are about half the height: the host isn’t repeated, Open in / Details / Edit appear when you point at a connection, and where it was captured from is in Details. The server tree is wider on big screens (drag its edge to resize) and users under a server take one line.', ''],
+    ['⌨', 'Keyboard in the server trees', 'Click the SSH, FTP or SQL tree, then ↑ ↓ to move, → ← to open and fold, Enter to connect.', 'terminal'],
+    ['⚡', 'Reconnect in one click', 'With no session open, the SSH page shows your last used servers — click one to connect.', 'terminal'],
+    ['🌲', 'Cleaner trees', 'No 🖥 on every row; a folder whose servers are all in one environment shows its badge on the folder line instead of an extra level; the tree buttons say what they do (🏷 Names, + New, ⊟ Fold).', 'terminal'],
+    ['📁', 'FTP remembers your folder', 'This PC opens where you were last time, and the ➜ / ← buttons say what they will copy.', 'files'],
+    ['🎨', 'Calmer colours', 'PROD cards keep their red badge with a softer edge, “No password or key” on its own is plain text, and the folded sidebar has lines between Find, Connect and Tools.', ''],
     ['↻', 'Restart now or at next start', 'Update now tells you WorkHub will restart and asks: ↻ Restart now, or Update at next start — the new version is installed and starts the next time you open WorkHub, so you can finish what you are doing.', ''],
   ] },
   { v: '1.9.3', title: 'Several users on one server', items: [

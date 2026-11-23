@@ -377,8 +377,8 @@ function show(view) {
   $('#pageTitle').textContent = $(`#nav [data-view="${view}"] .nl`)?.textContent || '';
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   history.replaceState(null, '', '#' + view);
-  if (view === 'terminal') fitActiveTerm();
-  if (view === 'files' && !Local.loaded) Local.load('');
+  if (view === 'terminal') { fitActiveTerm(); if (!Term.tabs.length) Term.emptyHTML(); }
+  if (view === 'files' && !Local.loaded) Local.load(lsGet('ftp.local'), true).then(() => { if (!Local.loaded) Local.load(''); });
   if (view === 'notes') { Notes.cm.refresh(); Notes.cm.focus(); }
   if (view === 'tasks') Work.show();
   if (view === 'bookmarks') {
@@ -952,7 +952,8 @@ function cardsHTML(items) {
 
 function warnChip(e) {
   const p = problems(e);
-  return p.length ? `<button class="warnchip" data-act="edit" data-id="${e.id}" title="${esc(p.map(x => '• ' + x[1]).join('\n'))}\nClick to fill in${p.some(x => x[0] === 'password') ? ' (or tick “Logs in with a key / SSO”)' : ''}">⚠ ${p.length === 1 ? esc(p[0][1]) : p.length + ' to fix'}</button>` : '';
+  // a missing password alone is common (keys, SSO): shown quietly
+  return p.length ? `<button class="warnchip${p.length === 1 && p[0][0] === 'password' ? ' soft' : ''}" data-act="edit" data-id="${e.id}" title="${esc(p.map(x => '• ' + x[1]).join('\n'))}\nClick to fill in${p.some(x => x[0] === 'password') ? ' (or tick “Logs in with a key / SSO”)' : ''}">⚠ ${p.length === 1 ? esc(p[0][1]) : p.length + ' to fix'}</button>` : '';
 }
 
 // The name on a card without the host (the card's title) or the user (its own
@@ -1577,8 +1578,16 @@ const Term = {
     this.active = t;
     this.tabs.forEach(x => x.el.classList.toggle('active', x === t));
     $('#termEmpty').style.display = t ? 'none' : '';
+    if (!t) this.emptyHTML();
     this.renderTabs();
     if (t) requestAnimationFrame(() => { t.fit.fit(); t.term.focus(); });
+  },
+
+  // With no session open: the servers you used last, one click to reconnect.
+  emptyHTML() {
+    const recent = S.entries.filter(e => canSSH(e) && e.last_used).sort((a, b) => Date.parse(b.last_used) - Date.parse(a.last_used)).slice(0, 8);
+    $('#termEmpty').innerHTML = (recent.length ? `<div class="recent-h">Reconnect</div><div class="recent-chips">${recent.map(e => `<button data-recent="${e.id}" title="${esc(e.name)}\nlast used ${esc(new Date(e.last_used).toLocaleString())}">${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span> ` : ''}${esc(e.username ? e.username + '@' : '')}${esc(e.host)}${sshPort(e) !== 22 ? ':' + sshPort(e) : ''}</button>`).join('')}</div>` : '')
+      + '<div class="muted">Double-click a server in the tree, use Quick connect,<br>or open a command prompt on this PC with the buttons above.</div>';
   },
 
   close(t) {
@@ -1625,14 +1634,14 @@ $('#qcHost').addEventListener('keydown', e => { if (e.key === 'Enter') $('#qcGo'
 function makePane(root, loader) {
   const pane = {
     root, path: '', parent: '', sep: '/', items: [], sel: new Set(), loaded: false,
-    async load(p) {
+    async load(p, quiet) {
       try {
         const r = await loader(p);
         Object.assign(pane, { path: r.path, parent: r.parent, items: r.entries || [], sep: r.sep || '/', loaded: true, roots: !!r.roots });
         pane.sel.clear();
         $('.path', root).value = r.path;
         pane.render();
-      } catch (err) { toast(err.message, true); }
+      } catch (err) { if (!quiet) toast(err.message, true); }
     },
     join(name) { return pane.roots ? name : pane.path.endsWith(pane.sep) ? pane.path + name : pane.path + pane.sep + name; },
     sortBy: (() => { try { return JSON.parse(localStorage.getItem('sort.' + root.id)); } catch { return null; } })() || { key: 'mtime', dir: -1 },
@@ -1648,6 +1657,7 @@ function makePane(root, loader) {
       const head = `<div class="fhead">${col('name', 'Name')}${col('type', 'Type')}${col('size', 'Size')}${col('mtime', 'Modified')}</div>`;
       $('.listing', root).innerHTML = head + (pane.sorted().map(f => `<div class="frow ${f.dir ? 'dir' : 'file'} ${pane.sel.has(f.name) ? 'sel' : ''}" data-n="${esc(f.name)}">
         <span class="nm" title="${esc(f.name)}">${esc(f.name)}</span><span class="ty">${esc(fileType(f))}</span><span class="sz">${f.dir ? '' : fmtSize(f.size)}</span><span class="mt">${fmtDateTime(f.mtime)}</span></div>`).join('') || '<div class="empty">Empty folder</div>');
+      xferHint();
     },
     selected() { return pane.items.filter(f => pane.sel.has(f.name)); },
   };
@@ -1676,6 +1686,8 @@ function makePane(root, loader) {
   return pane;
 }
 
+$('#termEmpty').addEventListener('click', ev => { const b = ev.target.closest('[data-recent]'); if (b) Term.open(byId(b.dataset.recent)); });
+
 const Local = makePane($('#localPane'), p => api('GET', '/api/local/ls?path=' + encodeURIComponent(p)));
 const Remote = makePane($('#remotePane'), p => {
   if (!Remote.sid) throw new Error('Not connected');
@@ -1683,6 +1695,18 @@ const Remote = makePane($('#remotePane'), p => {
 });
 Remote.join = name => (Remote.path === '/' ? '' : Remote.path) + '/' + name;
 Local.onOpenFile = () => transfer('put');
+// This PC opens where you were last time
+// Under the ➜ / ← buttons: what they will copy, or how to start.
+function xferHint() {
+  const el = $('#xferHint'); if (!el) return;
+  let up = 0, down = 0, conn = false;
+  try { up = Local.sel.size; down = Remote.sel.size; conn = !!Remote.sid; } catch { return; } // panes not made yet
+  $('#putBtn').classList.toggle('idle', !(up && conn));
+  $('#getBtn').classList.toggle('idle', !down);
+  el.textContent = !conn ? 'Connect to a server, then select files' : up ? `➜ uploads ${up}` : down ? `downloads ${down}` : 'Select files, or drag them across';
+}
+function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch { return ''; } }
+{ const load = Local.load; Local.load = async (p, quiet) => { await load(p, quiet); if (Local.loaded && !Local.roots) try { localStorage.setItem('ftp.local', Local.path); } catch { /* private mode */ } }; }
 Remote.onOpenFile = () => transfer('get');
 
 api('GET', '/api/local/places').then(list => {
@@ -1902,9 +1926,12 @@ const Tree = {
       const key = k.key || k.project + (k.env ? '#' + k.env : '');
       const open = q || !this.collapsed.has(key);
       const gc = k.gmode === 'group' && Groups.get(k.name);
-      out += `<div class="tnode folder" style="padding-left:${8 + depth * 14}px" data-key="${esc(key)}" data-project="${esc(k.project)}" data-env="${esc(k.env || '')}" data-gmode="${esc(k.gmode || 'folder')}">
-        <span class="tw">${open ? '▾' : '▸'}</span>${k.env ? `<span class="badge ${esc(k.env)}">${esc(k.env)}</span>` : (gc ? `<span class="gdot" style="background:${Groups.color(gc)}"></span>` : (icon[k.gmode] || '📁')) + ' <span class="nm">' + esc(k.name) + '</span>'}<span class="n">${this.count(k)}</span></div>`;
-      if (open) out += this.html(k, depth + 1, q);
+      // A folder whose servers are all in one environment shows the badge on
+      // its own line instead of an extra level ("📁 Lab  UAT").
+      const only = !k.env && !k.items.length && Object.values(k.kids).length === 1 && Object.values(k.kids)[0].env ? Object.values(k.kids)[0] : null;
+      out += `<div class="tnode folder" style="padding-left:${8 + depth * 14}px" data-key="${esc(key)}" data-project="${esc(k.project)}" data-env="${esc(k.env || only?.env || '')}" data-gmode="${esc(k.gmode || 'folder')}">
+        <span class="tw">${open ? '▾' : '▸'}</span>${k.env ? `<span class="badge ${esc(k.env)}">${esc(k.env)}</span>` : (gc ? `<span class="gdot" style="background:${Groups.color(gc)}"></span>` : (icon[k.gmode] || '📁')) + ' <span class="nm">' + esc(k.name) + '</span>' + (only && !k.name.toUpperCase().includes(only.env) ? ` <span class="badge ${esc(only.env)}">${esc(only.env)}</span>` : '')}<span class="n">${this.count(k)}</span></div>`;
+      if (open) out += this.html(only || k, depth + 1, q);
     }
     // Several logins on one server: one server row with the users under it.
     const items = node.items.sort(byUsage), byHost = {};
@@ -1936,7 +1963,7 @@ const Tree = {
     const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
     const dbOpen = isDb && SQL.expanded.has(e.id);
     out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
-      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${label || ruleName(e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢 ' : ''}<span class="nm">${label || ruleName(e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
     if (dbOpen) {
       const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
       if (dbt) out += SQL.treeHTML(dbt, depth + 1);
@@ -1949,13 +1976,48 @@ const Tree = {
   render() {
     for (const host of $$('.tree-host')) {
       if (!host.firstChild) {
-        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷</button><button data-tool="new" title="New connection">+</button><button data-tool="collapse" title="Collapse all">⊟</button></div><div class="tree"></div>`;
+        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷 Names</button><button data-tool="new" title="New connection">+ New</button><button data-tool="collapse" title="Collapse all folders">⊟ Fold</button></div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
         this.wire(host);
       }
       $('select[data-tool=groupby]', host).value = this.groupMode(host.dataset.mode);
       const q = $('input', host).value.trim().toLowerCase();
-      $('.tree', host).innerHTML = this.html(this.build(q, host.dataset.mode), 0, q) || '<div class="empty">No servers yet.<br>Copy or paste some details, or press +.</div>';
+      $('.tree', host).innerHTML = this.html(this.build(q, host.dataset.mode), 0, q) || '<div class="empty">No servers yet.<br>Copy or paste some details, or press + New.</div>';
+      if (this.kbKey) $$('.tree > .tnode.folder', host).find(n => n.dataset.key === this.kbKey)?.classList.add('kbfocus');
     }
+  },
+
+  // Keyboard in a tree: ↑/↓ move over servers and folders, → opens a folder
+  // (or steps in), ← folds it (or steps out to its folder), Enter connects.
+  key(host, k) {
+    const rows = $$('.tree > .tnode', host).filter(n => n.dataset.id || n.dataset.key);
+    if (!rows.length) return;
+    let i = rows.findIndex(n => n.classList.contains('kbfocus'));
+    if (i < 0) i = rows.findIndex(n => n.dataset.id && n.dataset.id === this.selected);
+    const cur = rows[i], open = n => n.dataset.key && !this.collapsed.has(n.dataset.key);
+    const indent = n => parseInt(n.style.paddingLeft) || 0;
+    let to = i;
+    if (k === 'ArrowDown') to = Math.min(i + 1, rows.length - 1);
+    else if (k === 'ArrowUp') to = Math.max(i - 1, 0);
+    else if (k === 'Home') to = 0;
+    else if (k === 'End') to = rows.length - 1;
+    else if (k === 'ArrowRight' && cur?.dataset.key) {
+      if (!open(cur)) { this.collapsed.delete(cur.dataset.key); this.kbKey = cur.dataset.key; return this.saveCollapsed(); }
+      to = Math.min(i + 1, rows.length - 1);
+    } else if (k === 'ArrowLeft' && cur) {
+      if (open(cur)) { this.collapsed.add(cur.dataset.key); this.kbKey = cur.dataset.key; return this.saveCollapsed(); }
+      for (let j = i - 1; j >= 0; j--) if (rows[j].dataset.key && indent(rows[j]) < indent(cur)) { to = j; break; }
+    }
+    if (to < 0) to = 0;
+    this.focusRow(host, rows[to]);
+  },
+
+  focusRow(host, n) {
+    if (!n) return;
+    $$('.tnode.kbfocus', host).forEach(x => x.classList.remove('kbfocus'));
+    n.classList.add('kbfocus');
+    this.kbKey = n.dataset.key || '';
+    if (n.dataset.id) { this.selected = n.dataset.id; $$('.tnode.item').forEach(x => x.classList.toggle('sel', x.dataset.id === this.selected)); }
+    n.scrollIntoView({ block: 'nearest' });
   },
 
   activate(e, mode) { mode === 'sftp' ? Remote.connect(e) : mode === 'db' ? SQL.open(e) : Term.open(e); },
@@ -1991,7 +2053,11 @@ const Tree = {
       if (n) this.activate(byId(n.dataset.id), mode);
     });
     host.addEventListener('keydown', ev => {
-      if (ev.key === 'Enter' && this.selected && ev.target.tagName !== 'INPUT') this.activate(byId(this.selected), mode);
+      if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT') return;
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(ev.key)) { ev.preventDefault(); return this.key(host, ev.key); }
+      const f = $('.tnode.kbfocus', host);
+      if (ev.key === 'Enter' && f?.dataset.key) return f.click();
+      if (ev.key === 'Enter' && this.selected) this.activate(byId(this.selected), mode);
     });
     host.addEventListener('contextmenu', ev => {
       ev.preventDefault();
