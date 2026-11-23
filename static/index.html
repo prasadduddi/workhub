@@ -325,7 +325,7 @@
     <div class="tasks-layout">
       <div class="tasks-side">
         <div class="row"><button id="workNew" class="primary">+ New thread</button><button id="workImport" title="Make a thread from each Word document (.docx) — or drop them on the list">⤓ Import Word…</button><input type="file" id="workImportFile" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden></div>
-        <input id="workSearch" type="search" placeholder="Search threads…">
+        <div class="row"><input id="workSearch" type="search" placeholder="Search threads… (Ctrl+K to jump)" style="flex:1"><button id="workSaved" class="icon" title="Messages you saved for later, and reminders">🔖 Saved</button></div>
         <div id="workList"></div>
       </div>
       <div id="taskMain" class="task-main"></div>

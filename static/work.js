@@ -48,8 +48,51 @@ const FMT = [['bold', '<b>B</b>', 'Bold (Ctrl+B)'], ['italic', '<i>I</i>', 'Ital
 const FMT_BAR = `<div class="tfmt">${FMT.map(([c, l, t]) => `<button type="button" class="icon" data-fmt="${c}" title="${t}">${l}</button>`).join('')}</div>`;
 let lastEditable = null;
 
+// ---- Slack-style pieces ----
+const SENDERS = { note: ['You', '🧑'], capture: ['Clipboard', '📋'], entry: ['Server', '🖥'] };
+const QUICK_REACTS = ['✅', '👀', '👍'];
+const EMOJI = { tada: '🎉', '+1': '👍', thumbsup: '👍', '-1': '👎', check: '✅', white_check_mark: '✅', x: '❌', eyes: '👀', fire: '🔥', warning: '⚠️', rocket: '🚀',
+  bug: '🐛', heart: '❤️', smile: '😄', joy: '😂', thinking: '🤔', pray: '🙏', clap: '👏', ok: '🆗', wave: '👋', star: '⭐', bulb: '💡', lock: '🔒', key: '🔑',
+  hourglass: '⏳', stop: '🛑', question: '❓', exclamation: '❗', calendar: '📅', memo: '📝', pin: '📌', link: '🔗', point_up: '☝️', 100: '💯', boom: '💥', sos: '🆘' };
+const PICKER = ['✅', '👀', '👍', '👎', '🎉', '🔥', '❤️', '😄', '😂', '🤔', '🙏', '👏', '🚀', '🐛', '⚠️', '❌', '❗', '❓', '💡', '⏳', '📌', '💯', '🆗', '👋'];
+function dayName(d) {
+  const t = new Date(), y = new Date(Date.now() - 864e5);
+  return d.toDateString() === t.toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+// Code blocks get a Copy button.
+function withCopy(html) {
+  return html.replace(/<pre>/g, '<div class="tcode"><button class="icon tcopy" data-pact="copycode" title="Copy">Copy</button><pre>').replace(/<\/pre>/g, '</pre></div>');
+}
+// ```fenced``` text becomes a code block when posting.
+function slackBlocks(html) {
+  return html.replace(/\u200B/g, '').replace(/```(?:<br>)?([\s\S]*?)```/g, (m, c) => '<pre><code>' + c.replace(/<br\s*\/?>/g, '\n').replace(/<\/?(p|div)>/g, '\n').replace(/^\n+|\n+$/g, '') + '</code></pre>');
+}
+// A half-written message is kept per thread.
+const Drafts = {
+  get(id) { try { return localStorage.getItem('draft.' + id) || ''; } catch { return ''; } },
+  set(id, html) { try { html ? localStorage.setItem('draft.' + id, html) : localStorage.removeItem('draft.' + id); } catch { /* private mode */ } },
+};
+// Slack typing: *bold* _italic_ ~strike~ `code` and :emoji: turn into the real
+// thing as the closing mark is typed.
+const SLACK_MARKS = { '*': 'b', _: 'i', '~': 's', '`': 'code' };
+function slackType(box, ch) {
+  const sel = getSelection(); if (!sel.rangeCount || !sel.isCollapsed) return;
+  const node = sel.anchorNode; if (node?.nodeType !== 3 || !box.contains(node)) return;
+  const before = node.data.slice(0, sel.anchorOffset);
+  let m, el;
+  if (ch === ':' && (m = before.match(/(^|\s):([a-z0-9_+-]{1,20}):$/)) && EMOJI[m[2]]) {
+    el = document.createTextNode(EMOJI[m[2]] + ' ');
+  } else if (SLACK_MARKS[ch] && (m = before.match(new RegExp('(^|[\\s(])' + (ch === '*' ? '\\*' : ch) + '([^\\s' + ch + '](?:[^' + ch + ']*[^\\s' + ch + '])?)' + (ch === '*' ? '\\*' : ch) + '$')))) {
+    el = document.createElement(SLACK_MARKS[ch]); el.textContent = m[2];
+  } else return;
+  const start = sel.anchorOffset - (m[0].length - m[1].length);
+  const r = document.createRange(); r.setStart(node, start); r.setEnd(node, sel.anchorOffset); r.deleteContents(); r.insertNode(el);
+  const after = document.createTextNode('\u200B'); el.after(after);
+  const c = document.createRange(); c.setStartAfter(after); c.collapse(true); sel.removeAllRanges(); sel.addRange(c);
+}
+
 const Work = {
-  list: [], current: null, replyTo: '', openReplies: new Set(), showArchived: false,
+  list: [], current: null, panel: '', showArchived: false, readMark: '',
 
   async loadList() {
     this.list = (await api('GET', '/api/work').catch(() => [])) || [];
@@ -67,10 +110,14 @@ const Work = {
   renderList() {
     const q = ($('#workSearch')?.value || '').trim().toLowerCase();
     const archived = this.list.filter(w => w.archived).length;
-    const items = [...this.list].sort((a, b) => (b.general && !b.archived) - (a.general && !a.archived)).filter(w => (this.showArchived || !w.archived || w.id === this.current?.id) && (!q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t))));
-    $('#workList').innerHTML = (items.map(w => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''}" data-work="${w.id}">
-      <div class="tli-top"><span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.general ? '<span class="tgen" title="Copied text goes here when no other thread has 📥 Capture here on">default</span>' : ''}${w.id === this.active() ? '<span class="tcap" title="Captures are being added here">● capturing</span>' : ''}</div>
-      <b>${esc(w.title)}</b><small>${w.jira && !w.title.toUpperCase().includes(w.jira) ? `◆ ${esc(w.jira)} · ` : ''}${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} post${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`).join('')
+    const items = [...this.list].sort((a, b) => (b.general && !b.archived) - (a.general && !a.archived) || new Date(b.updated) - new Date(a.updated)).filter(w => (this.showArchived || !w.archived || w.id === this.current?.id) && (!q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t))));
+    const item = w => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''} ${w.unread ? 'unread' : ''}" data-work="${w.id}">
+      <div class="tli-top"><span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.general ? '<span class="tgen" title="Copied text goes here when no other thread has 📥 Capture here on">default</span>' : ''}${w.id === this.active() ? '<span class="tcap" title="Captures are being added here">● capturing</span>' : ''}<span class="spacer"></span>${w.unread ? `<span class="tunread" title="New since you last looked">${w.unread}</span>` : ''}<button class="tli-star ${w.starred ? 'on' : ''}" data-star="${w.id}" title="${w.starred ? 'Unstar' : 'Star'}">${w.starred ? '★' : '☆'}</button></div>
+      <b>${esc(w.title)}</b><small>${w.jira && !w.title.toUpperCase().includes(w.jira) ? `◆ ${esc(w.jira)} · ` : ''}${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} message${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`;
+    // Slack-like sections: ⭐ Starred, Threads, Done
+    const sec = (title, list, key) => list.length ? `<div class="tsec" data-sec="${key}"><span>${title}</span><span class="muted tiny">${list.length}</span></div>${this.collapsed?.has(key) ? '' : list.map(item).join('')}` : '';
+    const starred = items.filter(w => w.starred), rest = items.filter(w => !w.starred);
+    $('#workList').innerHTML = (sec('⭐ Starred', starred, 'star') + sec('Threads', rest.filter(w => w.status !== 'done'), 'open') + sec('✓ Done', rest.filter(w => w.status === 'done'), 'done')
       || `<div class="muted tiny" style="padding:8px">${q ? 'No matches' : 'No task threads yet — press + New thread.'}</div>`)
       + (archived ? `<a href="#" class="tmore tarch-toggle" data-toggle-archived>${this.showArchived ? 'Hide archived' : `Show archived (${archived})`}</a>` : '');
   },
@@ -100,12 +147,40 @@ const Work = {
     }
   },
 
-  async open(id) {
+  async open(id, pid) {
     try { this.current = await api('GET', '/api/work/' + id); } catch (err) { return toast(err.message, true); }
     try { localStorage.setItem('workSel', id); } catch { /* ignore */ }
     if (!$('#view-tasks').classList.contains('active')) show('tasks');
-    this.render(true);
+    const li = this.list.find(x => x.id === id);
+    this.readMark = li?.unread ? this.current.read_at : ''; // the "New" line goes above what came since
+    if (this.panel && !this.current.posts?.some(p => p.id === this.panel)) this.panel = '';
+    this.render(!pid);
+    if (pid) { const p = this.current.posts.find(x => x.id === pid); if (p?.parent) this.openPanel(p.parent); setTimeout(() => this.flash(pid), 50); }
+    else if (this.readMark) setTimeout(() => $('#tposts .tnew')?.scrollIntoView({ block: 'center' }), 30);
+    this.markRead(id);
+  },
+  markRead(id) {
+    const li = this.list.find(x => x.id === id);
+    if (li?.unread) { li.unread = 0; api('POST', `/api/work/${id}/read`).catch(() => {}); }
     this.renderList();
+  },
+  // A link to a message (#tasks/<thread>/<message>): open it there.
+  openLink(id, pid) { return this.open(id, pid); },
+  async star(w, on) {
+    await api('POST', `/api/work/${w.id}/star`, { starred: on }).catch(err => toast(err.message, true));
+    w.starred = on; const li = this.list.find(x => x.id === w.id); if (li) li.starred = on;
+    this.renderList(); if (this.current?.id === w.id) { this.current.starred = on; this.render(); }
+  },
+  // While the thread is open, new captures and posts show up.
+  async refresh() {
+    const w = this.current; if (!w || !$('#view-tasks').classList.contains('active') || document.hidden) return;
+    if ($('#taskMain .tbody[contenteditable=true]')) return; // editing
+    const fresh = await api('GET', '/api/work/' + w.id).catch(() => null);
+    if (!fresh || this.current?.id !== w.id) return;
+    const sig = x => (x.posts || []).map(p => p.id + (p.edited || '') + (p.reactions || []).join('')).join();
+    if (sig(fresh) === sig(w)) return;
+    const atEnd = (el => !el || el.scrollHeight - el.scrollTop - el.clientHeight < 40)($('#tposts'));
+    this.current = fresh; this.render(atEnd); api('POST', `/api/work/${w.id}/read`).catch(() => {});
   },
 
   async create(title) {
@@ -168,8 +243,10 @@ const Work = {
     const w = this.current;
     if (!w) { $('#taskMain').innerHTML = '<div class="empty">Start a thread for a task, ticket or change — then post notes, paste screenshots, and let captures land in it.<br><br><button class="primary" data-tact="new">+ New thread</button></div>'; return; }
     const capturing = w.id === this.active();
+    const keep = $('#tposts')?.scrollTop, draft = $('#tbox') ? $('#tbox').innerHTML : null;
     $('#taskMain').innerHTML = `
       <div class="thead">
+        <button class="icon tstar ${w.starred ? 'on' : ''}" data-tact="star" title="${w.starred ? 'Unstar' : 'Star'} — starred threads are listed first">${w.starred ? '★' : '☆'}</button>
         <input id="workTitle" class="wtitle" value="${esc(w.title)}" placeholder="Thread name">
         <select id="workStatus">${STATUSES.map(([v, l]) => `<option value="${v}" ${w.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
  ${this.jiraChip(w)}
@@ -180,14 +257,23 @@ const Work = {
       </div>
       ${w.archived ? `<div class="tarch-bar">🗄 This thread is archived (hidden from the list). <button class="icon" data-tact="unarchive">Unarchive</button></div>` : ''}
       ${this.pinsHTML(w)}
-      <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
-      <div class="tcompose">
-        <div class="tcol">${FMT_BAR}
-          <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Write a note… paste a screenshot (Win+Shift+S, then Ctrl+V) or drop files. Enter posts · Shift+Enter new line"></div>
+      <div class="twrap">
+        <div class="tmainc">
+          <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
+          <div class="tcompose">
+            <div class="tcol">${FMT_BAR}
+              <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Message ${esc(w.title)} — *bold* _italic_ \`code\` :emoji: · paste screenshots or drop files · Enter posts · ↑ edits your last post"></div>
+            </div>
+            <button id="tsend" class="primary" title="Post (Enter)">Post</button>
+          </div>
         </div>
-        <button id="tsend" class="primary" title="Post (Enter)">Post</button>
+        ${this.panel ? this.panelHTML(w) : ''}
       </div>`;
-    if (scroll) this.scrollEnd();
+    const box = $('#tbox');
+    box.innerHTML = draft !== null && this.lastRendered === w.id ? draft : Drafts.get(w.id);
+    this.lastRendered = w.id;
+    if (scroll) this.scrollEnd(); else if (keep != null) $('#tposts').scrollTop = keep;
+    const pb = $('.tpanel .tpbody'); if (pb && this.panelScroll) { pb.scrollTop = pb.scrollHeight; this.panelScroll = false; }
   },
   scrollEnd() { const el = $('#tposts'); if (el) el.scrollTop = el.scrollHeight; },
 
@@ -204,43 +290,85 @@ const Work = {
     return `<div class="tpins"><span class="muted tiny">📌 Pinned</span>${pins.map(p => `<button class="tpin" data-gopost="${p.id}" title="Show it">${esc(label(p))}</button>`).join('')}</div>`;
   },
 
+  // Slack-style: messages from the same sender within a few minutes run
+  // together; replies live in a side panel ("💬 3 replies").
   postsHTML(w) {
-    if (!w.posts?.length) return '<div class="muted tiny" style="padding:16px">Nothing here yet. Write the first note below.</div>';
+    if (!w.posts?.length) return '<div class="muted tiny" style="padding:16px">Nothing here yet. Write the first message below.</div>';
     const replies = {};
     for (const p of w.posts) if (p.parent) (replies[p.parent] ||= []).push(p);
-    let day = '';
-    const dayName = d => { const t = new Date(); const y = new Date(Date.now() - 864e5);
-      return d.toDateString() === t.toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); };
-    const one = (p, isReply) => {
-      const at = new Date(p.at), time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return `<div class="tpost k-${p.kind} ${isReply ? 'reply' : ''} ${p.pinned ? 'pinned' : ''}" data-post="${p.id}"><div class="tmeta"><span class="tkind">${{ note: '📝', capture: '📋', entry: '🖥' }[p.kind] || '📝'}</span>
-        <span class="ttime" title="${esc(at.toLocaleString())}">${isReply && at.toDateString() !== new Date().toDateString() ? esc(at.toLocaleDateString()) + ' ' : ''}${time}</span>${p.kind === 'capture' ? '<span class="muted tiny">captured</span>' : ''}${p.edited ? '<span class="muted tiny">(edited)</span>' : ''}${p.pinned ? '<span class="tpinned" title="Pinned to the top">📌</span>' : ''}
-        <span class="tacts"><button class="icon" data-pact="reply" title="Reply">💬</button>${p.kind === 'note' ? '<button class="icon" data-pact="edit" title="Edit">✎</button>' : ''}<button class="icon more" data-pact="more" title="More: pin, copy, delete">⋯</button></span></div>
-        <div class="tbody">${this.postBody(p)}</div></div>`;
-    };
+    let day = '', prev = null, newShown = false;
     return w.posts.filter(p => !p.parent).map(p => {
       const d = dayName(new Date(p.at));
-      const sep = d !== day ? `<div class="tday"><span>${esc((day = d))}</span></div>` : '';
-      const rs = replies[p.id] || [], all = this.openReplies.has(p.id) || rs.length <= 3, shown = all ? rs : rs.slice(-2);
-      const box = this.replyTo === p.id ? `<div class="treplybox"><div class="tbox rbox" contenteditable="true" data-reply="${p.id}" data-placeholder="Reply… Enter sends · Shift+Enter new line · Esc cancels"></div><button class="primary" data-pact="sendreply" data-parent="${p.id}">Reply</button></div>` : '';
-      const more = !all ? `<a href="#" class="tmore" data-allreplies="${p.id}">Show all ${rs.length} replies</a>` : '';
-      return sep + one(p) + (rs.length || box ? `<div class="treplies">${more}${shown.map(r => one(r, true)).join('')}${box}${rs.length && !box ? `<a href="#" class="tmore" data-replyto="${p.id}">💬 Reply</a>` : ''}</div>` : '');
+      let out = '';
+      if (d !== day) { out += `<div class="tday"><span>${esc((day = d))}</span></div>`; prev = null; }
+      if (!newShown && this.readMark && new Date(p.at) > new Date(this.readMark)) { newShown = true; out += '<div class="tnew"><span>New</span></div>'; prev = null; }
+      out += this.msgHTML(p, prev, replies[p.id] || []);
+      prev = (replies[p.id] || []).length ? null : p;
+      return out;
     }).join('');
   },
 
+  // One message. prev: the message just above (to run on from the same sender).
+  msgHTML(p, prev, rs = [], inPanel = false) {
+    const at = new Date(p.at), time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const [name, icon] = SENDERS[p.kind] || SENDERS.note;
+    const cont = prev && prev.kind === p.kind && !p.pinned && at - new Date(prev.at) < 5 * 60e3 && (p.kind !== 'capture' || prev.from === p.from);
+    const remind = p.remind_at ? `<span class="tflag" title="Reminder ${esc(new Date(p.remind_at).toLocaleString())}">⏰</span>` : '';
+    const head = cont ? '' : `<div class="thdr"><b class="tname">${name}</b><span class="ttime" title="${esc(at.toLocaleString())}">${time}</span>${p.from ? `<span class="tfrom" title="Copied from">from ${esc(p.from)}</span>` : ''}${p.edited ? '<span class="muted tiny">(edited)</span>' : ''}${p.pinned ? '<span class="tflag" title="Pinned">📌</span>' : ''}${p.saved ? '<span class="tflag" title="Saved for later">🔖</span>' : ''}${remind}</div>`;
+    const reacts = p.reactions?.length ? `<div class="treact">${p.reactions.map(e => `<button class="rchip" data-pact="react" data-emoji="${esc(e)}" title="Remove ${esc(e)}">${esc(e)}</button>`).join('')}<button class="rchip add" data-pact="emoji" title="Add a reaction">😀＋</button></div>` : '';
+    const last = rs.length ? new Date(rs[rs.length - 1].at) : null;
+    const thread = !inPanel && rs.length ? `<a href="#" class="tthread" data-pact="thread">💬 ${rs.length} repl${rs.length > 1 ? 'ies' : 'y'} <span class="muted">Last reply ${esc(last.toDateString() === new Date().toDateString() ? last.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : last.toLocaleDateString())}</span></a>` : '';
+    const tools = `<div class="thover">${QUICK_REACTS.map(e => `<button class="icon" data-pact="react" data-emoji="${e}" title="React ${e}">${e}</button>`).join('')}<button class="icon" data-pact="emoji" title="More reactions">😀</button>${inPanel && p.parent ? '' : `<button class="icon" data-pact="thread" title="Reply in thread">💬</button>`}<button class="icon" data-pact="save" title="${p.saved ? 'Remove from Saved' : 'Save for later'}">${p.saved ? '🔖✓' : '🔖'}</button>${p.kind === 'note' ? '<button class="icon" data-pact="edit" title="Edit">✎</button>' : ''}<button class="icon more" data-pact="more" title="More: pin, remind me, copy link, delete">⋯</button></div>`;
+    return `<div class="tmsg k-${p.kind} ${cont ? 'cont' : ''} ${p.pinned ? 'pinned' : ''} ${p.parent ? 'reply' : ''}" data-post="${p.id}">
+      <div class="tav">${cont ? `<span class="tmini" title="${esc(at.toLocaleString())}">${time}</span>` : `<span class="avatar k-${p.kind}">${icon}</span>`}</div>
+      <div class="tcontent">${head}<div class="tbody">${this.postBody(p)}</div>${this.previews(p)}${reacts}${thread}</div>${tools}</div>`;
+  },
+
+  // The reply panel on the right: the message and its replies, and a box.
+  panelHTML(w) {
+    const p = w.posts.find(x => x.id === this.panel);
+    if (!p) { this.panel = ''; return ''; }
+    const rs = w.posts.filter(x => x.parent === p.id);
+    let prev = null;
+    return `<aside class="tpanel"><div class="tphead"><b>Thread</b><span class="muted tiny">${esc(w.title)}</span><span class="spacer"></span><button class="icon" data-pact="closepanel" title="Close (Esc)">✕</button></div>
+      <div class="tpbody">${this.msgHTML(p, null, rs, true)}<div class="tday"><span>${rs.length} repl${rs.length === 1 ? 'y' : 'ies'}</span></div>
+      ${rs.map(r => { const h = this.msgHTML(r, prev, [], true); prev = r; return h; }).join('')}</div>
+      <div class="tpcompose"><div class="tbox rbox" contenteditable="true" data-reply="${p.id}" data-placeholder="Reply… Enter sends · Esc closes"></div><button class="primary" data-pact="sendreply" data-parent="${p.id}">Reply</button></div></aside>`;
+  },
+
   postBody(p) {
-    if (p.kind === 'capture') {
+    if (p.kind === 'capture' && !p.html) {
       const clip = S.clips.find(c => c.id === p.ref);
       const chips = (clip?.entry_ids || []).map(byId).filter(Boolean).map(e => `<span class="chip" data-tentry="${e.id}" title="Details">${dot(e)} ${esc(e.name)}</span>`).join('');
-      return `<pre>${maskedText(p.text || '')}</pre>${chips ? `<div class="chips">${chips}</div>` : ''}`;
+      return `<div class="tcode"><button class="icon tcopy" data-pact="copycode" title="Copy">Copy</button><pre>${maskedText(p.text || '')}</pre></div>${chips ? `<div class="chips">${chips}</div>` : ''}`;
     }
     if (p.kind === 'entry') {
       const e = byId(p.ref);
       if (!e) return '<span class="muted">(this connection was deleted)</span>';
       return `<div class="tentry">${dot(e)} <b>${ruleName(e)}</b> <span class="muted">${esc([e.username, e.host || e.url].filter(Boolean).join(' @ '))}${e.port ? ':' + e.port : ''}</span>${e.env ? ` <span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}
-        <span class="spacer"></span>${canSSH(e) ? `<button class="icon" data-tconn="ssh" data-id="${e.id}">SSH</button>` : ''}${canDB(e) ? `<button class="icon" data-tconn="sql" data-id="${e.id}">SQL</button>` : ''}${e.url ? `<button class="icon" data-tconn="open" data-id="${e.id}">Open</button>` : ''}<button class="icon" data-tentry="${e.id}">Details</button></div>${p.html ? sanitizeHTML(p.html) : ''}`;
+        <span class="spacer"></span>${canSSH(e) ? `<button class="icon" data-tconn="ssh" data-id="${e.id}">SSH</button>` : ''}${canDB(e) ? `<button class="icon" data-tconn="sql" data-id="${e.id}">SQL</button>` : ''}${e.url ? `<button class="icon" data-tconn="open" data-id="${e.id}">Open</button>` : ''}<button class="icon" data-tentry="${e.id}">Details</button></div>${p.html ? withCopy(sanitizeHTML(p.html)) : ''}`;
     }
-    return sanitizeHTML(p.html || '');
+    return withCopy(sanitizeHTML(p.html || ''));
+  },
+
+  // Cards under a message for the Jira issues and links it mentions.
+  previews(p) {
+    const text = p.text || new DOMParser().parseFromString(p.html || '', 'text/html').body.textContent || '';
+    const hrefs = [...(p.html || '').matchAll(/href="(https?:[^"]+)"/g)].map(m => m[1]);
+    const urls = [...new Set([...hrefs, ...(text.match(/https?:\/\/[^\s<>"']+/g) || [])])].filter(u => !u.startsWith(location.origin)).slice(0, 2);
+    const keys = [...new Set(text.match(/\b[A-Z][A-Z0-9_]+-\d+\b/g) || [])].slice(0, 3);
+    const cards = [];
+    for (const k of keys) {
+      const j = (typeof Jira !== 'undefined' ? Jira.issues : []).find(x => x.key === k);
+      if (!j && !Jira?.cfg?.base_url) continue;
+      cards.push(`<a href="#" class="tcard" data-jkey="${esc(k)}"><span class="tcard-k">◆ ${esc(k)}</span>${j ? `<span class="tcard-t">${esc(j.summary || '')}</span><span class="jstat">${esc(j.status || '')}</span>` : '<span class="muted tiny">open in Jira</span>'}</a>`);
+    }
+    for (const u of urls) {
+      const e = S.entries.find(x => x.url && normURL(x.url) === normURL(u));
+      let host = ''; try { host = new URL(u).host; } catch { /* bad URL */ }
+      cards.push(`<a href="${esc(u)}" class="tcard" data-ext="1" title="${esc(u)}">${e ? dot(e) : '🔗'} <span class="tcard-t">${esc(e?.name || linkLabel(u) || host)}</span><span class="muted tiny">${esc(host)}</span></a>`);
+    }
+    return cards.length ? `<div class="tcards">${cards.join('')}</div>` : '';
   },
 
   async post(kind, fields, threadId) {
@@ -256,19 +384,48 @@ const Work = {
   },
 
   flash(pid) {
-    const el = $(`#tposts [data-post="${pid}"]`); if (!el) return;
+    const el = $(`#taskMain [data-post="${pid}"]`); if (!el) return;
     el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600);
   },
-  openReply(pid) {
-    this.replyTo = pid; this.render();
-    const b = $(`#tposts [data-reply="${pid}"]`); if (b) { b.scrollIntoView({ block: 'nearest' }); b.focus(); }
+  // "Reply in thread": the side panel with the message and its replies.
+  openReply(pid) { this.openPanel(pid); },
+  openPanel(pid) {
+    this.panel = pid; this.panelScroll = true; this.render();
+    $('.tpanel .rbox')?.focus();
   },
+  closePanel() { this.panel = ''; this.render(); },
   async sendReply(pid) {
-    const box = $(`#tposts [data-reply="${pid}"]`); if (!box) return;
+    const box = $(`#taskMain [data-reply="${pid}"]`); if (!box) return;
     if (!box.textContent.trim() && !box.querySelector('img')) return;
-    const html = sanitizeHTML(box.innerHTML);
-    this.replyTo = '';
+    const html = slackBlocks(sanitizeHTML(box.innerHTML));
+    box.innerHTML = '';
+    this.panelScroll = true;
     try { await this.post('note', { html, parent: pid }); } catch (err) { toast(err.message, true); }
+    $('.tpanel .rbox')?.focus();
+  },
+  async patch(p, fields, msg) {
+    try { await api('PUT', `/api/work/${this.current.id}/posts/${p.id}`, fields); } catch (err) { return toast(err.message, true); }
+    Object.assign(p, fields);
+    if ('remind_at' in fields && fields.remind_at?.startsWith('0001')) p.remind_at = '';
+    this.render();
+    if (msg) toast(msg);
+  },
+  react(p, emoji) {
+    const r = p.reactions || [];
+    this.patch(p, { reactions: r.includes(emoji) ? r.filter(x => x !== emoji) : [...r, emoji] });
+  },
+  save(p) { this.patch(p, { saved: !p.saved }, p.saved ? 'Removed from Saved' : '🔖 Saved — find it under 🔖 Saved above the thread list'); },
+  remind(p, when) {
+    try { if (when && Notification.permission === 'default') Notification.requestPermission(); } catch { /* not available */ }
+    this.patch(p, { remind_at: when ? when.toISOString() : '0001-01-01T00:00:00Z' }, when ? `⏰ I'll remind you ${when.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Reminder removed');
+  },
+  postLink(p) { return `${location.origin}/#tasks/${this.current.id}/${p.id}`; },
+  editPost(pid) {
+    const postEl = $(`#taskMain [data-post="${pid}"]`); if (!postEl) return;
+    const body = postEl.querySelector('.tbody');
+    body.contentEditable = 'true'; body.classList.add('editing'); body.focus();
+    const r = document.createRange(); r.selectNodeContents(body); r.collapse(false); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    body.insertAdjacentHTML('afterend', '<div class="row tedit"><button class="primary" data-pact="save-edit">Save</button><button data-pact="cancel">Cancel</button><span class="muted tiny">Enter saves · Esc cancels</span></div>');
   },
   async pin(p, on) {
     await api('PUT', `/api/work/${this.current.id}/posts/${p.id}`, { pinned: on }).catch(err => toast(err.message, true));
@@ -277,9 +434,9 @@ const Work = {
 
   async send() {
     const box = $('#tbox'); if (!box) return;
-    const html = sanitizeHTML(box.innerHTML).replace(/^(<p><br><\/p>|<br>)+|(<p><br><\/p>|<br>)+$/g, '');
+    const html = slackBlocks(sanitizeHTML(box.innerHTML)).replace(/^(<p><br><\/p>|<br>)+|(<p><br><\/p>|<br>)+$/g, '');
     if (!box.textContent.trim() && !box.querySelector('img')) return;
-    box.innerHTML = '';
+    box.innerHTML = ''; Drafts.set(this.current.id, '');
     try { await this.post('note', { html }); } catch (err) { toast(err.message, true); box.innerHTML = html; }
     $('#tbox')?.focus();
   },
@@ -360,6 +517,9 @@ side.addEventListener('drop', e => { if (!e.dataTransfer.files.length) return; e
 $('#workSearch').addEventListener('input', () => Work.renderList());
 $('#workList').addEventListener('click', e => {
   if (e.target.closest('[data-toggle-archived]')) { e.preventDefault(); Work.showArchived = !Work.showArchived; return Work.renderList(); }
+  const st = e.target.closest('[data-star]'); if (st) { const x = Work.list.find(w => w.id === st.dataset.star); return x && Work.star(x, !x.starred); }
+  const sec = e.target.closest('[data-sec]');
+  if (sec) { (Work.collapsed ||= new Set()); Work.collapsed.has(sec.dataset.sec) ? Work.collapsed.delete(sec.dataset.sec) : Work.collapsed.add(sec.dataset.sec); return Work.renderList(); }
   const li = e.target.closest('[data-work]'); if (li) Work.open(li.dataset.work);
 });
 $('#captureThread')?.addEventListener('click', e => {
@@ -387,11 +547,24 @@ document.addEventListener('selectionchange', fmtState);
 page.addEventListener('input', e => { if (e.target.id === 'workTitle') Work.saveHeader(); });
 page.addEventListener('change', e => { if (e.target.id === 'workStatus') Work.saveHeader(); });
 page.addEventListener('keydown', e => {
-  if (e.target.id === 'tbox' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); Work.send(); }
+  if (e.target.id === 'tbox' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); return Work.send(); }
+  // ↑ in an empty box edits your last message (as in Slack)
+  if (e.target.id === 'tbox' && e.key === 'ArrowUp' && !e.target.textContent.trim() && !e.target.querySelector('img')) {
+    const mine = (Work.current?.posts || []).filter(p => p.kind === 'note' && !p.parent).pop();
+    if (mine) { e.preventDefault(); Work.flash(mine.id); return Work.editPost(mine.id); }
+  }
   const rb = e.target.closest?.('.rbox');
-  if (rb && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); Work.sendReply(rb.dataset.reply); }
-  if (rb && e.key === 'Escape') { Work.replyTo = ''; Work.render(); }
-  if (e.target.closest?.('.tbody[contenteditable]') && e.key === 'Escape') Work.render();
+  if (rb && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); return Work.sendReply(rb.dataset.reply); }
+  const ed = e.target.closest?.('.tbody[contenteditable=true]');
+  if (ed && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); return ed.parentElement.querySelector('[data-pact=save-edit]')?.click(); }
+  if (ed && e.key === 'Escape') return Work.render();
+  if (e.key === 'Escape' && Work.panel) { e.preventDefault(); return Work.closePanel(); }
+});
+// Slack typing in every message box; the draft is kept.
+page.addEventListener('input', e => {
+  const box = e.target.closest?.('.tbox, .tbody[contenteditable=true]'); if (!box) return;
+  if (e.inputType === 'insertText' && e.data && /[*_~`:]/.test(e.data.slice(-1))) slackType(box, e.data.slice(-1));
+  if (box.id === 'tbox' && Work.current) { clearTimeout(Work.draftT); Work.draftT = setTimeout(() => Drafts.set(Work.current.id, box.textContent.trim() || box.querySelector('img') ? box.innerHTML : ''), 400); }
 });
 page.addEventListener('click', async e => {
   const w = Work.current;
@@ -400,6 +573,7 @@ page.addEventListener('click', async e => {
   if (!w) return;
   if (e.target.closest('#tsend')) return Work.send();
   if (act === 'capture') return Work.setCapture(w.id !== Work.active());
+  if (act === 'star') return Work.star(w, !w.starred);
   if (act === 'unarchive') return Work.archive(w, false);
   if (act === 'jiralink') return Work.linkJira();
   if (act === 'jiraopen') return Work.openJira();
@@ -430,50 +604,83 @@ page.addEventListener('click', async e => {
       }]]));
   }
   const go = e.target.closest('[data-gopost]'); if (go) return Work.flash(go.dataset.gopost);
-  const allr = e.target.closest('[data-allreplies]'); if (allr) { e.preventDefault(); Work.openReplies.add(allr.dataset.allreplies); return Work.render(); }
-  const rto = e.target.closest('[data-replyto]'); if (rto) { e.preventDefault(); return Work.openReply(rto.dataset.replyto); }
   const sr = e.target.closest('[data-pact=sendreply]'); if (sr) return Work.sendReply(sr.dataset.parent);
+  if (e.target.closest('[data-pact=closepanel]')) return Work.closePanel();
   const conn = e.target.closest('[data-tconn]');
   if (conn) { const x = byId(conn.dataset.id); return x && ({ ssh: () => Term.open(x), sql: () => SQL.open(x), open: () => openURL(x) })[conn.dataset.tconn](); }
   const ent = e.target.closest('[data-tentry]'); if (ent) return showDetails(byId(ent.dataset.tentry));
-  const postEl = e.target.closest('[data-post]'), pact = e.target.closest('[data-pact]')?.dataset.pact;
+  const jk = e.target.closest('[data-jkey]');
+  if (jk) { e.preventDefault(); const j = Jira.issues.find(x => x.key === jk.dataset.jkey); if (j) { show('jira'); Jira.sel = 'i:' + j.key; return Jira.render(); } return Jira.cfg?.base_url && openExternal(Jira.cfg.base_url.replace(/\/$/, '') + '/browse/' + jk.dataset.jkey); }
+  const postEl = e.target.closest('[data-post]'), pactEl = e.target.closest('[data-pact]'), pact = pactEl?.dataset.pact;
+  if (pact === 'copycode') { e.preventDefault(); return copyText(pactEl.parentElement.querySelector('pre').innerText, 'Copied'); }
   if (postEl && pact) {
+    e.preventDefault();
     const p = w.posts.find(x => x.id === postEl.dataset.post); if (!p) return;
-    if (pact === 'reply') return Work.openReply(p.parent || p.id);
-    if (pact === 'edit') {
-      const body = postEl.querySelector('.tbody');
-      body.contentEditable = 'true'; body.classList.add('editing'); body.focus();
-      body.insertAdjacentHTML('afterend', '<div class="row tedit"><button class="primary" data-pact="save">Save</button><button data-pact="cancel">Cancel</button><span class="muted tiny">Esc cancels</span></div>');
-      return;
-    }
+    if (pact === 'react') return Work.react(p, pactEl.dataset.emoji);
+    if (pact === 'emoji') return emojiPicker(pactEl, em => Work.react(p, em));
+    if (pact === 'thread') return Work.openPanel(p.parent || p.id);
+    if (pact === 'save') return Work.save(p);
+    if (pact === 'edit') return Work.editPost(p.id);
     if (pact === 'cancel') return Work.render();
-    if (pact === 'save') {
-      const html = sanitizeHTML(postEl.querySelector('.tbody').innerHTML);
+    if (pact === 'save-edit') {
+      const html = slackBlocks(sanitizeHTML(postEl.querySelector('.tbody').innerHTML));
       await api('PUT', `/api/work/${w.id}/posts/${p.id}`, { html }).catch(err => toast(err.message, true));
       p.html = html; p.edited = new Date().toISOString(); return Work.render();
     }
-    if (pact === 'more') {
-      const r = e.target.closest('[data-pact]').getBoundingClientRect();
-      const kids = w.posts.filter(x => x.parent === p.id);
-      return setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
-        [p.pinned ? '📌 Unpin' : '📌 Pin to the top', () => Work.pin(p, !p.pinned)],
-        ['💬 Reply', () => Work.openReply(p.parent || p.id)],
-        ['Copy text', () => copyText(p.text || postEl.querySelector('.tbody').innerText)],
-        [kids.length ? `Delete post and its ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'}` : 'Delete post', async () => {
-          await api('DELETE', `/api/work/${w.id}/posts/${p.id}`);
-          w.posts = w.posts.filter(x => x !== p && x.parent !== p.id); Work.render(); Work.loadList();
-          toast(kids.length ? `Post and ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'} deleted` : 'Post deleted', false, async () => {
-            const back = await Work.post(p.kind, { html: p.html, text: p.text, ref: p.ref, at: p.at, parent: p.parent, pinned: p.pinned }, w.id);
-            for (const k of kids) await Work.post(k.kind, { html: k.html, text: k.text, ref: k.ref, at: k.at, parent: back.id, pinned: k.pinned }, w.id);
-            toast('Restored');
-          });
-        }]]));
-    }
+    if (pact === 'more') return postMenu(p, postEl, pactEl.getBoundingClientRect());
   }
-  // Links in posts open in the browser.
-  const a = e.target.closest('.tbody a[href]');
-  if (a && !e.target.closest('[contenteditable=true]')) { e.preventDefault(); openExternal(a.href); }
+  // Links in posts open in the browser; links to WorkHub posts open them here.
+  const a = e.target.closest('.tbody a[href], a.tcard[data-ext]');
+  if (a && !e.target.closest('[contenteditable=true]')) {
+    e.preventDefault();
+    const own = a.href.startsWith(location.origin) && a.href.match(/#tasks\/([0-9a-f]+)(?:\/([0-9a-f]+))?/);
+    return own ? Work.openLink(own[1], own[2]) : openExternal(a.href);
+  }
 });
+// The ⋯ menu of a message (also its right-click menu).
+function postMenu(p, postEl, r) {
+  const w = Work.current, kids = w.posts.filter(x => x.parent === p.id);
+  const at = (h, m = 0, days = 0) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, m, 0, 0); return d; };
+  const nextMon = () => { const d = at(9); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return d; };
+  setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
+    ['💬 Reply in thread', () => Work.openPanel(p.parent || p.id)],
+    [p.pinned ? '📌 Unpin' : '📌 Pin to the top', () => Work.pin(p, !p.pinned)],
+    [p.saved ? '🔖 Remove from Saved' : '🔖 Save for later', () => Work.save(p)],
+    '-',
+    ['⏰ Remind me in 20 minutes', () => Work.remind(p, new Date(Date.now() + 20 * 60e3))],
+    ['⏰ Remind me in 1 hour', () => Work.remind(p, new Date(Date.now() + 60 * 60e3))],
+    ['⏰ Remind me in 3 hours', () => Work.remind(p, new Date(Date.now() + 3 * 60 * 60e3))],
+    ['⏰ Remind me tomorrow 9:00', () => Work.remind(p, at(9, 0, 1))],
+    ['⏰ Remind me next Monday 9:00', () => Work.remind(p, nextMon())],
+    ...(p.remind_at ? [['⏰ Remove the reminder', () => Work.remind(p, null)]] : []),
+    '-',
+    ['🔗 Copy link to this message', () => copyText(Work.postLink(p), 'Link copied — paste it in another thread or note to jump here')],
+    ['Copy text', () => copyText(p.text || postEl.querySelector('.tbody').innerText)],
+    ...(p.kind === 'note' ? [['✎ Edit', () => Work.editPost(p.id)]] : []),
+    [kids.length ? `Delete message and its ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'}` : 'Delete message', async () => {
+      await api('DELETE', `/api/work/${w.id}/posts/${p.id}`);
+      w.posts = w.posts.filter(x => x !== p && x.parent !== p.id);
+      if (Work.panel === p.id) Work.panel = '';
+      Work.render(); Work.loadList();
+      toast(kids.length ? `Message and ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'} deleted` : 'Message deleted', false, async () => {
+        const back = await Work.post(p.kind, { html: p.html, text: p.text, ref: p.ref, at: p.at, parent: p.parent, pinned: p.pinned, reactions: p.reactions, saved: p.saved }, w.id);
+        for (const k of kids) await Work.post(k.kind, { html: k.html, text: k.text, ref: k.ref, at: k.at, parent: back.id, pinned: k.pinned, reactions: k.reactions }, w.id);
+        toast('Restored');
+      });
+    }]]));
+}
+// A small emoji picker under a button.
+function emojiPicker(anchor, pick) {
+  $('#emojiPick')?.remove();
+  const r = anchor.getBoundingClientRect(), el = document.createElement('div');
+  el.id = 'emojiPick'; el.className = 'emoji-pick';
+  el.innerHTML = PICKER.map(e => `<button type="button" data-em="${e}">${e}</button>`).join('');
+  el.style.left = Math.max(8, Math.min(r.left - 120, innerWidth - 260)) + 'px';
+  el.style.top = Math.min(r.bottom + 4, innerHeight - 150) + 'px';
+  document.body.append(el);
+  el.addEventListener('click', ev => { const b = ev.target.closest('[data-em]'); if (b) { el.remove(); pick(b.dataset.em); } });
+  setTimeout(() => document.addEventListener('mousedown', function off(ev) { if (!el.contains(ev.target)) { el.remove(); document.removeEventListener('mousedown', off); } }), 0);
+}
 page.addEventListener('dblclick', e => { const img = e.target.closest('.tposts img, .tbox img'); if (img) { $('#lightboxImg').src = img.src; $('#lightbox').hidden = false; } });
 
 // Paste into the composer (or a post being edited): screenshots → stored and
@@ -511,3 +718,74 @@ page.addEventListener('drop', async e => {
   toast(`Adding ${e.dataTransfer.files.length} file(s)…`);
   insertAtCaret(await Work.storeFiles([...e.dataTransfer.files]));
 });
+
+// ---- Ctrl+K on the Tasks page: jump to a thread (Slack's quick switcher) ----
+window.addEventListener('keydown', e => {
+  if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') || !$('#view-tasks').classList.contains('active')) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  Switcher.open();
+}, true);
+const Switcher = {
+  open() {
+    $('#switchDlg')?.remove();
+    const d = document.createElement('dialog'); d.id = 'switchDlg'; d.className = 'switcher';
+    d.innerHTML = '<input type="search" placeholder="Jump to a thread…  (Ctrl+K again: search everything)"><div class="sw-list"></div>';
+    document.body.append(d); d.showModal();
+    const inp = $('input', d), list = $('.sw-list', d);
+    let sel = 0, items = [];
+    const draw = () => {
+      const q = inp.value.trim().toLowerCase();
+      items = [...Work.list].filter(w => !w.archived || q).sort((a, b) => (b.unread > 0) - (a.unread > 0) || b.starred - a.starred || new Date(b.updated) - new Date(a.updated))
+        .filter(w => !q || q.split(/\s+/).every(t => w.title.toLowerCase().includes(t) || (w.jira || '').toLowerCase().includes(t))).slice(0, 12);
+      sel = Math.min(sel, Math.max(0, items.length - 1));
+      list.innerHTML = items.map((w, i) => `<div class="sw-item ${i === sel ? 'sel' : ''}" data-i="${i}">${w.starred ? '★ ' : ''}<b>${esc(w.title)}</b>${w.unread ? ` <span class="tunread">${w.unread}</span>` : ''}<span class="spacer"></span><span class="muted tiny">${esc(fmtTime(w.updated))}</span></div>`).join('') || '<div class="muted tiny" style="padding:8px">No thread matches</div>';
+    };
+    const go = i => { const w = items[i]; d.close(); if (w) Work.open(w.id); };
+    inp.addEventListener('input', () => { sel = 0; draw(); });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(sel + 1, items.length - 1); draw(); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(sel - 1, 0); draw(); }
+      if (e.key === 'Enter') { e.preventDefault(); go(sel); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); d.close(); show('dashboard'); $('#search').focus(); }
+    });
+    list.addEventListener('click', e => { const it = e.target.closest('[data-i]'); if (it) go(+it.dataset.i); });
+    d.addEventListener('close', () => d.remove());
+    draw(); inp.focus();
+  },
+};
+
+// ---- 🔖 Saved and ⏰ reminders ----
+const SavedMsgs = {
+  async open(anchor) {
+    const [saved, rem] = await Promise.all([api('GET', '/api/work/saved').catch(() => []), api('GET', '/api/work/reminders').catch(() => [])]);
+    $('#savedPop')?.remove();
+    const el = document.createElement('div'); el.id = 'savedPop'; el.className = 'saved-pop';
+    const snip = x => esc((x.post.text || new DOMParser().parseFromString(x.post.html || '', 'text/html').body.textContent || (/<img/.test(x.post.html || '') ? '🖼 Screenshot' : '')).trim().slice(0, 120));
+    const row = (x, extra) => `<div class="saved-row" data-open="${x.thread}" data-pid="${x.post.id}"><div><b>${esc(x.title)}</b> <span class="muted tiny">${esc(new Date(x.post.at).toLocaleString())}</span>${extra}</div><div class="saved-snip">${snip(x)}</div></div>`;
+    el.innerHTML = `<div class="saved-h">⏰ Reminders</div>${rem.sort((a, b) => new Date(a.post.remind_at) - new Date(b.post.remind_at)).map(x => row(x, ` <span class="tflag">⏰ ${esc(new Date(x.post.remind_at).toLocaleString([], { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))}</span>`)).join('') || '<div class="muted tiny">None — ⋯ on a message → Remind me</div>'}
+      <div class="saved-h">🔖 Saved for later</div>${saved.reverse().map(x => row(x, '')).join('') || '<div class="muted tiny">Nothing saved — 🔖 on a message saves it here</div>'}`;
+    const r = anchor.getBoundingClientRect();
+    el.style.left = r.left + 'px'; el.style.top = r.bottom + 4 + 'px';
+    document.body.append(el);
+    el.addEventListener('click', e => { const x = e.target.closest('[data-open]'); if (x) { el.remove(); Work.open(x.dataset.open, x.dataset.pid); } });
+    setTimeout(() => document.addEventListener('mousedown', function off(ev) { if (!el.contains(ev.target)) { el.remove(); document.removeEventListener('mousedown', off); } }), 0);
+  },
+  // Due reminders pop up (and as a Windows notification when allowed).
+  async check() {
+    const rem = await api('GET', '/api/work/reminders').catch(() => []);
+    for (const x of rem.filter(x => new Date(x.post.remind_at) <= new Date())) {
+      const text = (x.post.text || new DOMParser().parseFromString(x.post.html || '', 'text/html').body.textContent || '').trim().slice(0, 80);
+      await api('PUT', `/api/work/${x.thread}/posts/${x.post.id}`, { remind_at: '0001-01-01T00:00:00Z' }).catch(() => {});
+      toast(`⏰ ${x.title}: ${text || 'reminder'}`, false, () => Work.open(x.thread, x.post.id), 'Open');
+      try { if (Notification.permission === 'granted') new Notification('⏰ ' + x.title, { body: text }).onclick = () => { window.focus(); Work.open(x.thread, x.post.id); }; } catch { /* not available */ }
+    }
+  },
+};
+$('#workSaved').addEventListener('click', e => SavedMsgs.open(e.currentTarget));
+setInterval(() => SavedMsgs.check(), 60 * 1000);
+setTimeout(() => SavedMsgs.check(), 5000);
+setInterval(() => Work.refresh(), 15 * 1000);
+// Links to a message (#tasks/<thread>/<message>) — on start and when followed.
+function followTaskLink() { const m = location.hash.match(/^#tasks\/([0-9a-f]+)(?:\/([0-9a-f]+))?/); if (m) Work.loadList().then(() => Work.openLink(m[1], m[2])); }
+window.addEventListener('hashchange', followTaskLink);
+setTimeout(followTaskLink, 900);

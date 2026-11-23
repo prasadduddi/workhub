@@ -378,11 +378,13 @@ func (a *App) handlePostAdd(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, errors.New("kind must be note, capture or entry"))
 		return
 	}
-	p, err := a.store.AddPost(r.PathValue("id"), Post{Kind: in.Kind, HTML: in.HTML, Text: in.Text, Ref: in.Ref, At: in.At, Parent: in.Parent, Pinned: in.Pinned})
+	p, err := a.store.AddPost(r.PathValue("id"), Post{Kind: in.Kind, HTML: in.HTML, Text: in.Text, Ref: in.Ref, At: in.At, Parent: in.Parent, Pinned: in.Pinned,
+		Reactions: in.Reactions, Saved: in.Saved})
 	if err != nil {
 		writeErr(w, 404, err)
 		return
 	}
+	a.store.MarkRead(r.PathValue("id")) // you just wrote it: nothing new to you
 	_, _ = a.store.writeWorkDocx(r.PathValue("id"))
 	writeJSON(w, p)
 }

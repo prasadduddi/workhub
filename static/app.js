@@ -58,12 +58,12 @@ document.addEventListener('click', ev => {
 }, true);
 
 let toastTimer;
-function toast(msg, err = false, undo = null) {
+function toast(msg, err = false, undo = null, label = 'Undo') {
   const t = $('#toast');
   t.textContent = msg;
-  if (undo) { // e.g. "Deleted x — Undo"
+  if (undo) { // e.g. "Deleted x — Undo", or a reminder's "Open"
     const b = document.createElement('button');
-    b.textContent = 'Undo'; b.className = 'toast-undo';
+    b.textContent = label; b.className = 'toast-undo';
     b.onclick = () => { t.className = ''; undo(); };
     t.append(' ', b);
   }
