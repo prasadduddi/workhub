@@ -10,9 +10,9 @@ package main
 //	user: deploy   password: Dep#1
 //	user: appuser  password: App#2
 //
-//	srv-07.uat.acme.local                 (a server, then "user / password" lines)
-//	deploy / Dep#1
-//	appuser / App#2
+//	srv-07.uat.acme.local                 (a server, then "user / password" or
+//	deploy / Dep#1                         "user/password" lines; blank lines
+//	appuser/App#2                          between them are fine)
 //
 //	Host            User     Password     (a table, e.g. from an email; the
 //	srv-07...       deploy   Dep#1         Host column may be left out under a
@@ -27,6 +27,7 @@ import (
 var (
 	reCredKV    = regexp.MustCompile(`(?i)\b(?:user(?:name)?|login|uid)\s*[:=]?\s*([^\s,;|:=]+)[\s,;|]+(?:password|passwd|pass|pwd|pw)\s*[:=]?\s*(\S+)`)
 	reCredSlash = regexp.MustCompile(`^\s*([A-Za-z0-9._\\-]+)\s+/\s+(\S+)\s*$`)
+	reCredTight = regexp.MustCompile(`^\s*([A-Za-z0-9._\\-]+)/([^\s/]+)\s*$`) // user/password (no further "/", so not a path)
 	reLinePass  = regexp.MustCompile(`(?i)\b(?:password|passwd|pass|pwd|pw)\s*[:=]?\s+(\S+)|\b(?:password|passwd|pass|pwd|pw)\s*[:=]\s*(\S+)`)
 	reCols      = regexp.MustCompile(`\t+|\s{2,}|\s*\|\s*`)
 )
@@ -68,7 +69,7 @@ func parseLoginList(block string) ([]Finding, bool) {
 			creds = append(creds, Finding{Username: m[1], Password: m[2]})
 			continue
 		}
-		if m := reCredSlash.FindStringSubmatch(l); m != nil && !strings.Contains(m[1], ".") {
+		if m := credSlash(l); m != nil {
 			creds = append(creds, Finding{Username: m[1], Password: m[2]})
 			continue
 		}
@@ -86,6 +87,57 @@ func parseLoginList(block string) ([]Finding, bool) {
 		creds[i].Host, creds[i].Port, creds[i].Protocol = host, port, "ssh"
 	}
 	return creds, true
+}
+
+// credSlash matches "user / password" or "user/password" (not "host / x").
+func credSlash(l string) []string {
+	m := reCredSlash.FindStringSubmatch(l)
+	if m == nil {
+		m = reCredTight.FindStringSubmatch(l)
+	}
+	if m == nil || strings.Contains(m[1], ".") {
+		return nil
+	}
+	return m
+}
+
+// isCredLine: a line that is only a login (for joining blocks).
+func isCredLine(l string) bool { return reCredKV.MatchString(l) || credSlash(l) != nil }
+
+// joinLoginBlocks puts a server line and the login lines under it back into
+// one block when blank lines separate them:
+//
+//	srv-07.uat.acme.local
+//
+//	deploy/Dep#1
+//
+//	appuser/App#2
+func joinLoginBlocks(blocks []string) []string {
+	var out []string
+	for i := 0; i < len(blocks); i++ {
+		b := blocks[i]
+		lines := nonEmptyLines(b)
+		last, _ := serverOf(lines[len(lines)-1])
+		first, _ := serverOf(lines[0])
+		// the block ends with a server line, or is a server line and its first logins
+		if last != "" || first != "" && allCredLines(strings.Join(lines[1:], "\n")) {
+			for i+1 < len(blocks) && allCredLines(blocks[i+1]) {
+				b += "\n" + blocks[i+1]
+				i++
+			}
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
+func allCredLines(block string) bool {
+	for _, l := range nonEmptyLines(block) {
+		if !isCredLine(l) {
+			return false
+		}
+	}
+	return true
 }
 
 // serverOf finds a server named on a line ("Server: x", "x", "host x:2222").

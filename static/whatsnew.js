@@ -6,6 +6,7 @@
 const RELEASES = [
   { v: '1.9.5', title: 'Attachments download', items: [
     ['⬇', 'Click an attachment to download it', 'In task threads, clicking a 📎 file saves it to your Downloads folder instead of opening a browser tab (older posts too).', 'work'],
+    ['👥', 'More login lists understood', 'A server followed by user/password lines (no spaces around the slash), even with blank lines between them, now makes one connection per user.', 'terminal'],
     ['📎', 'Attachments kept as normal files', 'Files you drop into threads or Properties are saved as they are in the attachments folder of your data (no longer encrypted). Files added before stay readable.', 'work'],
   ] },
   { v: '1.9.4', title: 'Master password, change a password everywhere, tidier screens', items: [
