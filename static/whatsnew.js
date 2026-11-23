@@ -5,6 +5,8 @@
 
 const RELEASES = [
   { v: '1.9.7', title: 'Settings in one place', items: [
+    ['📌', 'Install for easy access', '⚙ Settings → This PC → Install copies WorkHub to your own programs folder (safe from Downloads clean-ups and accidental deletes), adds it to the Start menu — and, if you tick them, the Desktop and Start with Windows — then restarts it from there. Your data is not moved.', ''],
+    ['↔', 'Calendar gets the room', 'Calendar now shrinks the sidebar like SSH and Tasks, and clicking the current page\'s icon again switches the sidebar on every page.', 'cal'],
     ['⚙', 'Settings', 'Theme, menu position, profile, PIN lock, master password, data folder, backups, session logs, “Open in” programs and the tray switch are now in ☰ → ⚙ Settings. The ☰ menu keeps only everyday actions.', ''],
   ] },
   { v: '1.9.6', title: 'General thread, thread formatting, PuTTY look, transfers, disconnect', items: [

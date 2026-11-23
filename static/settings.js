@@ -10,17 +10,25 @@ const Settings = {
   },
 
   async render() {
-    const [lock, master, backups] = await Promise.all([
+    const [lock, master, backups, inst] = await Promise.all([
       fetch('/api/lock').then(r => r.json()).catch(() => ({})),
       api('GET', '/api/master').catch(() => ({})),
       api('GET', '/api/backups').catch(() => ({})),
+      api('GET', '/api/install').catch(() => ({})),
     ]);
+    this.inst = inst;
     const row = (title, desc, ctl) => `<div class="set-row"><div class="set-txt"><b>${title}</b>${desc ? `<div class="muted tiny">${desc}</div>` : ''}</div><div class="set-ctl">${ctl}</div></div>`;
     const btn = (act, label, cls = '') => `<button type="button" class="${cls}" data-set="${act}">${label}</button>`;
     const sw = (act, on) => `<label class="switch small"><input type="checkbox" data-set="${act}" ${on ? 'checked' : ''}><span></span></label>`;
     const sel = (act, val, opts) => `<select data-set="${act}">${opts.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
     const latest = backups.backups?.[0];
     $('#settingsBody').innerHTML = `
+      ${inst.supported ? `<h4>This PC</h4>
+      ${inst.installed
+        ? row('📌 Installed for easy access', `In <code class="set-path">${esc(inst.target)}</code>${inst.start_menu ? ' · in the Start menu (type “WorkHub” in Start; right-click → Pin to taskbar)' : ''}`, '')
+        : row('📌 Install for easy access', `Running from <code class="set-path">${esc(inst.exe)}</code>. Install copies WorkHub to your own programs folder (safe from Downloads clean-ups), adds it to the Start menu and restarts it from there. Your data stays where it is.`, btn('install', 'Install', 'primary'))}
+      ${row('Desktop shortcut', '', sw('inst-desktop', inst.desktop))}
+      ${row('Start with Windows', 'Opens when you sign in' + (window.WH_DESKTOP ? ' (with the tray, it waits there)' : ''), sw('inst-startup', inst.startup))}` : ''}
       <h4>Appearance</h4>
       ${row('Theme', '', sel('theme', Theme.pref(), [['auto', 'Follow Windows'], ['light', 'Light'], ['dark', 'Dark']]))}
       ${row('Menu position', 'The pages menu on the left, or across the top', sel('menu', document.body.classList.contains('side-top') ? 'top' : 'left', [['left', 'Left'], ['top', 'Top']]))}
@@ -54,8 +62,23 @@ $('#settingsBody').addEventListener('click', async e => {
     case 'slogopen': SessionLogs.open(); break;
     case 'import': $('#settingsDlg').close(); click('#importBtn'); break;
     case 'ext': click('#extBtn'); break;
+    case 'install': Settings.install(); break;
   }
 });
+Settings.install = async () => {
+  const removeOld = !!Settings.inst && !Settings.inst.installed;
+  const desktop = $('[data-set="inst-desktop"]')?.checked, startup = $('[data-set="inst-startup"]')?.checked;
+  if (removeOld && !confirm(`Install WorkHub for easy access?\n\n• Copies it to ${Settings.inst.target}\n• Adds WorkHub to the Start menu${desktop ? ' and the Desktop' : ''}${startup ? '\n• Starts it when you sign in to Windows' : ''}\n• Restarts WorkHub from there and deletes the copy in\n  ${Settings.inst.exe}\n\nOpen sessions (SSH, FTP, SQL) close. Your data is not moved.`)) return Settings.render();
+  try {
+    const r = await api('POST', '/api/install', { desktop, startup, removeold: removeOld });
+    if (r.moved) {
+      $('#settingsBody').innerHTML = '<p>✅ Installed. WorkHub is restarting from its new place — a new window opens in a few seconds; you can close this one.</p><p class="muted tiny">Next time, start it from the Start menu: type “WorkHub”. To pin it: right-click it there → Pin to taskbar.</p>';
+      return;
+    }
+    toast('Shortcuts updated');
+  } catch (err) { toast(err.message, true); }
+  Settings.render();
+};
 $('#settingsBody').addEventListener('change', async e => {
   const t = e.target.closest('[data-set]'); if (!t) return;
   switch (t.dataset.set) {
@@ -63,6 +86,7 @@ $('#settingsBody').addEventListener('change', async e => {
     case 'menu': if ((t.value === 'top') !== document.body.classList.contains('side-top')) $('#sideFlip').click(); break;
     case 'slog': await saveSettings({ session_log: t.checked }); toast(t.checked ? 'SSH sessions you open from now on are saved' : 'SSH sessions are no longer saved'); break;
     case 'tray': Tray.set(t.checked); break;
+    case 'inst-desktop': case 'inst-startup': if (Settings.inst?.installed) Settings.install(); break; // not installed yet: used by Install
   }
 });
 $('#settingsClose').onclick = () => $('#settingsDlg').close();

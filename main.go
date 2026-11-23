@@ -133,6 +133,7 @@ func main() {
 			go app.jiraKeepAlive()
 			go app.tunnelKeeper()
 			go app.backupWatcher()
+			removeOldCopy() // after "Install for easy access"
 			go func() { time.Sleep(15 * time.Second); cleanOldExe(); app.pruneSessionLogs() }()
 			sw.set(app.routes())
 		})
@@ -601,6 +602,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/update", a.handleUpdateCheck)
 	mux.HandleFunc("POST /api/update", a.handleUpdateApply)
 	mux.HandleFunc("POST /api/update/restart", a.handleUpdateRestart)
+	mux.HandleFunc("GET /api/install", a.handleInstallGet)
+	mux.HandleFunc("POST /api/install", a.handleInstall)
 	mux.HandleFunc("GET /api/master", a.handleMasterGet)
 	mux.HandleFunc("POST /api/master", a.handleMasterSet)
 	mux.HandleFunc("POST /api/master/remove", a.handleMasterRemove)

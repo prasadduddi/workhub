@@ -59,6 +59,10 @@ const HELP_TOPICS = [
     'Right-click a connection of that user (in a tree, or ⋯ on its card) → 🔑 Change … password everywhere. Or ☰ → Change a password everywhere and pick the user.',
     'Type the new password. Every connection that logs in as that user is listed and ticked — untick any that keep the old one.',
     'Change password saves it (the old one stays in history) and, with the box ticked, tests them all.'] },
+  { t: 'Install WorkHub for easy access', k: 'install start menu pin taskbar shortcut desktop startup start with windows where keep location downloads deleted', v: '', s: [
+    '☰ → ⚙ Settings → This PC → Install (tick Desktop shortcut / Start with Windows first if you want them).',
+    'WorkHub is copied to %LOCALAPPDATA%\\Programs\\WorkHub, added to the Start menu and restarted from there; the copy you ran (e.g. in Downloads) is deleted. Your data is not moved.',
+    'Then type “WorkHub” in Start — right-click it → Pin to taskbar. The Desktop / Start with Windows switches can be changed any time in the same place.'] },
   { t: 'WorkHub in the tray (Desktop version)', k: 'tray close window minimise running background quit exit notification area icon clock', v: '', s: [
     'Closing the WorkHub window (✕) hides it to the tray, next to the clock — it keeps capturing, tunnels stay open, transfers finish.',
     'Click the WorkHub icon in the tray (or press Ctrl+Alt+W) to open it again.',
