@@ -4,7 +4,8 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
-  { v: '1.9.5', title: 'Attachments download', items: [
+  { v: '1.9.5', title: 'Attachments download, data folder shown, more login lists', items: [
+    ['📁', 'Where your data is', '☰ shows your data folder — click to open it in Explorer, or copy its path. Data location… shows the current folder before you change it.', ''],
     ['⬇', 'Click an attachment to download it', 'In task threads, clicking a 📎 file saves it to your Downloads folder instead of opening a browser tab (older posts too).', 'work'],
     ['👥', 'More login lists understood', 'A server followed by user/password lines (no spaces around the slash), even with blank lines between them, now makes one connection per user.', 'terminal'],
     ['📎', 'Attachments kept as normal files', 'Files you drop into threads or Properties are saved as they are in the attachments folder of your data (no longer encrypted). Files added before stay readable.', 'work'],

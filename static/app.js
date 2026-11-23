@@ -439,7 +439,7 @@ async function refreshAll() {
 async function poll() {
   try {
     const { v, data_dir, app_version } = await api('GET', '/api/version');
-    $('#dataDir').textContent = 'Data: ' + data_dir;
+    $('#dataDir').textContent = 'Data: ' + data_dir; S.dataDir = data_dir;
     $('#appVersion').textContent = 'Version ' + app_version;
     $('#appVersion').title = 'Data: ' + data_dir + ' — change it from ☰ › Data location…';
     if (v !== S.version) { S.version = v; await refreshAll(); }
@@ -480,6 +480,7 @@ $('#importBtn').onclick = async () => {
   } catch (err) { toast(err.message, true); }
 };
 $('#dataLocBtn').onclick = async () => {
+  if (S.dataDir && !confirm(`Your WorkHub data is in:\n${S.dataDir}\n\nChoose a different folder?`)) return;
   toast('Choose a folder in the window that opened (it may be behind the browser)');
   try {
     const r = await api('POST', '/api/datadir/pick');
@@ -496,6 +497,11 @@ $('#dataLocBtn').onclick = async () => {
     await api('POST', '/api/datadir/set', { path: r.path, mode });
     document.body.innerHTML = '<div class="empty">Restarting WorkHub… a new tab opens in a few seconds. You can close this one.</div>';
   } catch (err) { toast(err.message, true); }
+};
+// ☰ → where the data is: open it in Explorer, or copy the path.
+const DataDir = {
+  short: p => { const parts = (p || '').split(/[\\/]/).filter(Boolean); return parts.length > 3 ? '…' + (p.includes('\\') ? '\\' : '/') + parts.slice(-3).join(p.includes('\\') ? '\\' : '/') : p; },
+  open: () => api('POST', '/api/datadir/open').catch(err => toast(err.message, true)),
 };
 $('#quitBtn').onclick = async () => {
   if (!confirm('Quit WorkHub? Open terminals and transfers will stop.')) return;

@@ -114,6 +114,7 @@ $('#mainMenuBtn').onclick = () => {
     [`🌓 Theme: ${{ auto: 'follow Windows', light: 'light', dark: 'dark' }[Theme.pref()]} — switch to ${{ auto: 'light', light: 'dark', dark: 'follow Windows' }[Theme.pref()]}`, () => Theme.set({ auto: 'light', light: 'dark', dark: 'auto' }[Theme.pref()])], '-',
     ['👤 Your profile', click('#profileBtn')], ['🔑 Change a password everywhere…', () => PwAll.open()], ['🔒 Lock (Ctrl+L)', click('#lockBtn')], ['🔐 Master password…', () => Master.open()], '-',
     ['↗ Programs for “Open in”…', click('#extBtn')], ['🛟 Backups…', click('#backupBtn')], ['Import data…', click('#importBtn')], ['Data location…', click('#dataLocBtn')], '-',
+    ...(S.dataDir ? [[`📁 Data: ${DataDir.short(S.dataDir)} — open`, DataDir.open], ['📋 Copy data folder path', () => copyText(S.dataDir, 'Data folder path copied')], '-'] : []),
     ['Quit WorkHub', click('#quitBtn')]]));
 };
 $('#updNow').onclick = () => Update.ready() ? Update.restartNow() : Update.asking ? Update.apply(false) : Update.confirm();

@@ -480,6 +480,10 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/import", a.handleImport)
 	mux.HandleFunc("POST /api/datadir/pick", a.handleDataDirPick)
 	mux.HandleFunc("POST /api/datadir/set", a.handleDataDirSet)
+	mux.HandleFunc("POST /api/datadir/open", func(w http.ResponseWriter, r *http.Request) {
+		openPath(a.dataDir) // Explorer at the data folder
+		writeJSON(w, map[string]string{"path": a.dataDir})
+	})
 	mux.HandleFunc("POST /api/quit", a.handleQuit)
 	mux.HandleFunc("GET /api/settings", a.handleGetSettings)
 	mux.HandleFunc("PUT /api/settings", a.handlePutSettings)
