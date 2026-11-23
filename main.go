@@ -130,6 +130,7 @@ func main() {
 			}
 			go app.watchClipboard()
 			go app.watchScreenshots()
+			go app.watchUpdates()
 			go app.syncBrowserBookmarks()
 			go app.mailWatcher()
 			go app.jiraWatcher()

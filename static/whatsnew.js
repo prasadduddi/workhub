@@ -4,6 +4,10 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.10.3', title: 'Updates download quietly, install when you say', items: [
+    ['⬇', 'Background download', 'WorkHub checks for a new version after it starts and every hour and downloads it quietly. Nothing is installed: the ⬆ pill in the sidebar says “downloaded — install”, and installing is then a quick restart (now or next start). No more pop-up on start.', 'dashboard'],
+    ['⚙', 'Your choice', 'Settings → Download updates in the background switches it off.', 'dashboard'],
+  ] },
   { v: '1.10.2', title: 'Tree with + / − boxes', items: [
     ['⊞', '[+] / [−] to open and close', 'Folders, environments, groups and servers open and close with Windows-style [+] / [−] boxes, like a tree view. The ⊟ Fold button is gone.', 'terminal'],
   ] },

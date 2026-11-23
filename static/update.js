@@ -1,6 +1,6 @@
 'use strict';
-// "A new version is available": checked a few seconds after start-up and from
-// ⟳ Check for updates. Updating replaces WorkHub's exe; you choose to restart
+// "A new version is available": checked quietly after start-up (WorkHub also
+// downloads it in the background, without installing) and from ⟳ Check for updates. Updating replaces WorkHub's exe; you choose to restart
 // now or let the new version start next time. Your data folder is not touched.
 
 const Update = {
@@ -12,9 +12,17 @@ const Update = {
     this.info = r;
     if (r.error) { if (manual) this.show(); return; }
     $('#updPill').hidden = !r.newer; // stays visible even after "Later" / "Skip"
-    if (r.newer) $('#updPillText').textContent = this.ready() ? `WorkHub ${r.latest} — restart to finish` : `WorkHub ${r.latest} — install`;
-    if (r.newer && (manual || this.skipped() !== r.latest)) this.show();
-    else if (manual) this.show();
+    if (r.newer) $('#updPillText').textContent = this.ready() ? `WorkHub ${r.latest} — restart to finish` : r.downloaded === r.latest ? `WorkHub ${r.latest} downloaded — install` : `WorkHub ${r.latest} — install`;
+    if (manual) return this.show();
+    // Checking by itself is silent: no pop-up, just the pill — and one note when
+    // a new version has been downloaded in the background (not installed).
+    if (r.newer && r.downloaded === r.latest && !this.ready() && this.skipped() !== r.latest) {
+      let told = ''; try { told = localStorage.getItem('updTold') || ''; } catch { /* ignore */ }
+      if (told !== r.latest) {
+        toast(`WorkHub ${r.latest} is downloaded — click ⬆ in the sidebar to install it when it suits you`);
+        try { localStorage.setItem('updTold', r.latest); } catch { /* ignore */ }
+      }
+    }
   },
 
   // the latest version is already installed and starts next time
@@ -40,12 +48,13 @@ const Update = {
     } else if (!r.newer) {
       html = `<p>✅ You have the latest version${r.current === 'dev' ? ' (a development build)' : ''}.</p><p class="muted tiny">This version: ${esc(r.current)} · latest release: ${esc(r.latest || '?')}</p>`;
     } else {
-      html = `<p><b>WorkHub ${esc(r.latest)}</b> is available — you have ${esc(r.current)}.</p>
+      html = `<p><b>WorkHub ${esc(r.latest)}</b> is ${r.downloaded === r.latest ? 'downloaded and ready to install' : 'available'} — you have ${esc(r.current)}.</p>
         <p class="muted tiny">Released ${esc(new Date(r.published).toLocaleString())}${r.size ? ` · ${(r.size / 1048576).toFixed(1)} MB` : ''}. Your data and settings stay as they are.</p>
         ${r.notes ? `<details><summary>What's in it</summary><pre class="upd-notes">${esc(r.notes)}</pre></details>` : ''}`;
     }
     $('#updBody').innerHTML = html;
     $('#updNow').hidden = !(r.newer && r.can_apply);
+    $('#updNow').textContent = r.downloaded === r.latest ? 'Install' : 'Update now';
     $('#updSkip').hidden = !r.newer;
     $('#updPage').hidden = !(r.newer || r.error);
     $('#updLater').textContent = r.newer ? 'Later' : 'Close';
@@ -75,7 +84,7 @@ const Update = {
   async apply(later) {
     this.asking = false;
     $('#updNow').disabled = $('#updNext').disabled = true;
-    $('#updBody').innerHTML = `<p>⬇ Downloading the new version…</p><p class="muted tiny">${later ? 'WorkHub keeps running; the new version starts next time.' : 'WorkHub restarts by itself when it is ready.'}</p>`;
+    $('#updBody').innerHTML = `<p>${this.info?.downloaded === this.info?.latest ? '⬆ Installing' : '⬇ Downloading'} the new version…</p><p class="muted tiny">${later ? 'WorkHub keeps running; the new version starts next time.' : 'WorkHub restarts by itself when it is ready.'}</p>`;
     try {
       const r = await api('POST', '/api/update' + (later ? '?later=1' : ''));
       if (!later) return this.restarting(r.version);
@@ -123,6 +132,7 @@ $('#updLater').onclick = () => { Update.asking = false; $('#updDlg').close(); };
 $('#updSkip').onclick = () => { try { localStorage.setItem('skipUpdate', Update.info?.latest || ''); } catch { /* ignore */ } $('#updDlg').close(); toast('You won\'t be asked about this version again (⟳ Check for updates still shows it)'); };
 $('#updPage').onclick = () => openExternal(Update.info?.page || 'https://github.com/prasadduddi/workhub/releases/latest');
 setTimeout(() => { if (!Lock.shown) Update.check(false); }, 8000);
+setInterval(() => { if (!Lock.shown) Update.check(false); }, 15 * 60000); // picks up a background download
 
 // Desktop version: the window's ✕ hides WorkHub to the tray (clipboard capture,
 // tunnels and transfers carry on) unless this is switched off.

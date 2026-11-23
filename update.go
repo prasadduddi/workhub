@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -51,7 +52,7 @@ var updClient = &http.Client{Timeout: 60 * time.Second, Transport: &http.Transpo
 func latestRelease(force bool) (*releaseInfo, error) {
 	updMu.Lock()
 	defer updMu.Unlock()
-	if !force && updCache != nil && time.Since(updChecked) < 6*time.Hour {
+	if !force && updCache != nil && time.Since(updChecked) < 50*time.Minute { // checked hourly
 		return updCache, nil
 	}
 	req, _ := http.NewRequest("GET", updateURL, nil)
@@ -130,7 +131,7 @@ func (a *App) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	out := map[string]any{"current": version, "latest": rel.Tag, "name": rel.Name, "notes": rel.Notes,
 		"published": rel.Published, "page": orDefault(rel.URL, releasesPage), "newer": isNewer(rel.Tag, rel.Published, version),
-		"can_apply": runtime.GOOS == "windows", "pending": updPending}
+		"can_apply": runtime.GOOS == "windows", "pending": updPending, "downloaded": stagedTag(rel.Tag)}
 	for _, as := range rel.Assets {
 		if strings.EqualFold(as.Name, exeName()) {
 			out["size"] = as.Size
@@ -173,7 +174,9 @@ func (a *App) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newPath, oldPath := exe+".new", exe+".old"
-	if err := download(dl, newPath); err != nil {
+	if stagedTag(rel.Tag) != "" && os.Rename(exe+".next", newPath) == nil { // downloaded in the background already
+		_ = os.Remove(exe + ".next.ver")
+	} else if err := download(dl, newPath); err != nil {
 		os.Remove(newPath)
 		writeErr(w, 502, fmt.Errorf("download failed (%v) — get it from the releases page instead", err))
 		return
@@ -271,5 +274,92 @@ func download(url, path string) error {
 func cleanOldExe() {
 	if exe, err := os.Executable(); err == nil {
 		_ = os.Remove(exe + ".old")
+	}
+}
+
+// ---- background download ----
+
+var canSelfUpdate = runtime.GOOS == "windows" // tests switch it on
+//
+// A newer release is downloaded quietly next to the running exe
+// (WorkHub-Desktop.exe.next, with its version in .next.ver) but not
+// installed: nothing changes until you choose Install, which then only has to
+// swap the files. Switched off with Settings → "Download updates in the background".
+
+func stagedPaths() (bin, ver string) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", ""
+	}
+	if e, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = e
+	}
+	return exe + ".next", exe + ".next.ver"
+}
+
+// stagedTag returns tag when that version is downloaded and waiting.
+func stagedTag(tag string) string {
+	bin, ver := stagedPaths()
+	if bin == "" || tag == "" {
+		return ""
+	}
+	b, err := os.ReadFile(ver)
+	if err != nil || strings.TrimSpace(string(b)) != tag {
+		return ""
+	}
+	if st, err := os.Stat(bin); err != nil || st.Size() < 1<<20 {
+		return ""
+	}
+	return tag
+}
+
+// fetchUpdate downloads the latest release if it is newer and not there yet.
+func (a *App) fetchUpdate() {
+	if !canSelfUpdate || a.store.Settings().NoUpdateFetch {
+		return
+	}
+	rel, err := latestRelease(false)
+	if err != nil || !isNewer(rel.Tag, rel.Published, version) || rel.Tag == updPending || stagedTag(rel.Tag) != "" {
+		return
+	}
+	dl := ""
+	for _, as := range rel.Assets {
+		if strings.EqualFold(as.Name, exeName()) {
+			dl = as.URL
+		}
+	}
+	bin, ver := stagedPaths()
+	if dl == "" || bin == "" {
+		return
+	}
+	_ = os.Remove(ver) // the old .next is no longer valid while the new one downloads
+	part := bin + ".part"
+	if err := download(dl, part); err != nil {
+		os.Remove(part)
+		log.Println("update download:", err)
+		return
+	}
+	if err := os.Rename(part, bin); err != nil {
+		os.Remove(part)
+		return
+	}
+	_ = os.WriteFile(ver, []byte(rel.Tag), 0o644)
+	log.Println("update", rel.Tag, "downloaded; installs when you choose")
+}
+
+// watchUpdates checks shortly after start and then every hour. A
+// downloaded version that is not newer than this one (installed some other
+// way) is removed.
+func (a *App) watchUpdates() {
+	if bin, ver := stagedPaths(); bin != "" {
+		if b, err := os.ReadFile(ver); err != nil || !isNewer(strings.TrimSpace(string(b)), time.Now(), version) {
+			_ = os.Remove(bin)
+			_ = os.Remove(ver)
+		}
+	}
+	time.Sleep(45 * time.Second)
+	for {
+		a.fetchUpdate()
+		time.Sleep(time.Hour)
 	}
 }
