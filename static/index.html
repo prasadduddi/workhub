@@ -226,9 +226,10 @@
             <div id="sqlEditorHost" class="sql-editor"></div>
             <div class="hsplit" id="sqlSplit" title="Drag to resize"></div>
             <div class="sql-out">
-              <div class="tabs" id="sqlOutTabs"><div class="tab active" data-o="res">Results</div><div class="tab" data-o="out">Script output</div><div class="tab" data-o="hist">History</div>
+              <div class="tabs" id="sqlOutTabs"><div class="tab active" data-o="res">Results</div><div class="tab" data-o="out">Script output</div><div class="tab" data-o="hist">History</div><div class="tab" data-o="snip" title="Saved queries — click one to put it in the editor">📌 Snippets</div>
                 <span class="spacer"></span><span id="sqlStatus" class="muted tiny"></span><button id="sqlCopy" class="icon" title="Copy results as tab-separated text (paste into Excel)">Copy</button><button id="sqlCsv" class="icon">Export CSV</button></div>
-              <div id="sqlRes" class="sql-pane"></div><pre id="sqlOut" class="sql-pane" hidden></pre><div id="sqlHist" class="sql-pane" hidden></div>
+              <div id="sqlRes" class="sql-pane"></div><pre id="sqlOut" class="sql-pane" hidden></pre><div id="sqlHistWrap" class="sql-pane" hidden><input id="sqlHistFilter" type="search" class="pane-filter" placeholder="Search history…"><div id="sqlHist"></div></div>
+              <div id="sqlSnipWrap" class="sql-pane" hidden><div class="pane-filter-row"><input id="sqlSnipFilter" type="search" class="pane-filter" placeholder="Search snippets…"><button id="sqlSnipSave" class="primary" title="Save the selection, or the statement at the cursor, as a snippet">＋ Save current statement</button></div><div id="sqlSnip"></div></div>
             </div>
           </div>
           <div class="sql-objects" id="sqlObjects"><input id="sqlObjFilter" type="search" placeholder="Filter tables… (Enter searches all schemas)"><div id="sqlObjList"></div></div>
@@ -620,6 +621,7 @@
 <script src="work.js"></script>
 <script src="jira.js"></script>
 <script src="reffiles.js"></script>
+<script src="logview.js"></script>
 <script src="whatsnew.js"></script>
 <script src="help.js"></script>
 <script src="lock.js"></script>

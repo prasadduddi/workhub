@@ -322,3 +322,51 @@ func TestSlackThreadEngine(t *testing.T) {
 		t.Fatalf("screenshot: %v %+v", err, gen)
 	}
 }
+
+// Move takes a message, its replies and its pictures to another thread;
+// copy leaves the original. Deleting the first thread keeps the moved picture.
+func TestMoveCopyPost(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	a := s.SaveWorkItem(WorkItem{Title: "PAY-1"})
+	b := s.SaveWorkItem(WorkItem{Title: "PAY-2"})
+	if err := s.AddWorkFile(a.ID, Attachment{ID: "abc123", Name: "shot.png"}); err != nil {
+		t.Fatal(err)
+	}
+	top, _ := s.AddPost(a.ID, Post{Kind: "note", HTML: `<p>see <img src="/api/props/files/abc123"></p>`})
+	reply, _ := s.AddPost(a.ID, Post{Kind: "note", HTML: "<p>ok</p>", Parent: top.ID})
+	other, _ := s.AddPost(a.ID, Post{Kind: "note", HTML: "<p>stays</p>"})
+
+	c, err := s.MovePost(a.ID, top.ID, b.ID, true)
+	if err != nil || c.ID == top.ID || !strings.Contains(c.Via, "Copied from “PAY-1”") {
+		t.Fatalf("copy: %+v %v", c, err)
+	}
+	if n := len(s.workItem(a.ID).Posts); n != 3 {
+		t.Fatalf("copy must leave the original: %d posts", n)
+	}
+	m, err := s.MovePost(a.ID, top.ID, b.ID, false)
+	if err != nil || m.ID != top.ID || !strings.Contains(m.Via, "Moved from") {
+		t.Fatalf("move: %+v %v", m, err)
+	}
+	src, dst := s.workItem(a.ID), s.workItem(b.ID)
+	if len(src.Posts) != 1 || src.Posts[0].ID != other.ID {
+		t.Fatalf("source after move: %+v", src.Posts)
+	}
+	if len(dst.Posts) != 4 { // copy + its reply, moved + its reply
+		t.Fatalf("target has %d posts", len(dst.Posts))
+	}
+	for _, p := range dst.Posts {
+		if p.ID == reply.ID && p.Parent != top.ID {
+			t.Fatal("the moved reply must stay under its message")
+		}
+	}
+	if !hasFile(dst.Files, "abc123") {
+		t.Fatal("the picture must go along")
+	}
+	s.DeleteWorkItem(a.ID)
+	if s.workAttachment("abc123") == nil {
+		t.Fatal("the moved picture must survive deleting the old thread")
+	}
+	if _, err := s.MovePost(b.ID, m.ID, b.ID, false); err == nil {
+		t.Fatal("moving into the same thread should be refused")
+	}
+}

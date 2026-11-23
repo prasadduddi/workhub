@@ -1,9 +1,15 @@
 'use strict';
 // "What's new & tips": opens by itself once when a new version is first
 // started, and from ✨ (top of the sidebar) or the ☰ menu any time. Add a release at the
-// top of RELEASES for every new version.
+// top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.11.0', title: 'SQL snippets, a live log viewer, move messages', items: [
+    ['➡', 'Move or copy a message', 'A message’s ⋯ (or right-click) → ➡ Move to another thread… or ⧉ Copy to another thread…. Its replies and pictures go with it; it lands at the end of that thread marked “↪ Moved from …”. Undo is on the notice.', 'tasks'],
+    ['📌', 'SQL snippets', 'SQL page → 📌 Snippets (next to History): ＋ Save current statement keeps the selection or the query at the cursor under a name, for this connection or all. Click one to put it in the editor (selected, so Run runs just it); double-click to put it in and run. ⋯ renames, updates, shares or deletes.', 'sql'],
+    ['🔎', 'Search your SQL history', 'The History tab has a search box: every word must match.', 'sql'],
+    ['📜', 'Tail a log', 'Right-click an SSH server → 📜 Tail a log…: type a path or Find logs changed in the last 3 days, then follow it live in a window you can move and resize while you work. Filter lines (-word leaves out), highlight words (ERROR, WARN, ORA-…), pause, copy, and 📌 send the selected lines (or the last 20) to the capture thread. Only tail and find run on the server.', 'terminal'],
+  ] },
   { v: '1.10.3', title: 'Updates download quietly, install when you say', items: [
     ['⬇', 'Background download', 'WorkHub checks for a new version after it starts and every hour and downloads it quietly. Nothing is installed: the ⬆ pill in the sidebar says “downloaded — install”, and installing is then a quick restart (now or next start). No more pop-up on start.', 'dashboard'],
     ['⚙', 'Your choice', 'Settings → Download updates in the background switches it off.', 'dashboard'],
@@ -196,7 +202,7 @@ const WhatsNew = {
       ${r.items.map(([icon, t, d, view]) => `<div class="wn-item"><span class="wn-ic">${icon}</span><div><b>${esc(t)}</b><div class="muted">${esc(d)}</div></div>
         ${view ? `<button class="icon" data-wngo="${view}">Show me</button>` : ''}</div>`).join('')}</details>`;
     return `<div class="wn-tabs"><button data-wntab="new" class="active">✨ What's new</button><button data-wntab="tips">💡 Tips</button></div>
-      <div data-wnpane="new">${RELEASES.map((r, i) => rel(r, i === 0)).join('')}</div>
+      <div data-wnpane="new">${RELEASES.slice(0, 5).map((r, i) => rel(r, i === 0)).join('')}</div>
       <div data-wnpane="tips" hidden>${TIPS.map(([k, t]) => `<div class="wn-item"><kbd>${esc(k)}</kbd><div>${esc(t)}</div></div>`).join('')}</div>`;
   },
 

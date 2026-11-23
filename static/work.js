@@ -312,9 +312,9 @@ const Work = {
   msgHTML(p, prev, rs = [], inPanel = false) {
     const at = new Date(p.at), time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const [name, icon] = p.kind === 'note' && (p.from === 'Outlook' || p.from === 'Email') ? ['Email', '✉'] : SENDERS[p.kind] || SENDERS.note;
-    const cont = prev && prev.kind === p.kind && !p.pinned && at - new Date(prev.at) < 5 * 60e3 && (p.kind !== 'capture' || prev.from === p.from);
+    const cont = prev && prev.kind === p.kind && !p.pinned && !p.via && at - new Date(prev.at) < 5 * 60e3 && (p.kind !== 'capture' || prev.from === p.from);
     const remind = p.remind_at ? `<span class="tflag" title="Reminder ${esc(new Date(p.remind_at).toLocaleString())}">⏰</span>` : '';
-    const head = cont ? '' : `<div class="thdr"><b class="tname">${name}</b><span class="ttime" title="${esc(at.toLocaleString())}">${time}</span>${p.from ? `<span class="tfrom" title="Copied from">from ${esc(p.from)}</span>` : ''}${p.edited ? '<span class="muted tiny">(edited)</span>' : ''}${p.pinned ? '<span class="tflag" title="Pinned">📌</span>' : ''}${p.saved ? '<span class="tflag" title="Saved for later">🔖</span>' : ''}${remind}</div>`;
+    const head = cont ? '' : `<div class="thdr"><b class="tname">${name}</b><span class="ttime" title="${esc(at.toLocaleString())}">${time}</span>${p.from ? `<span class="tfrom" title="Copied from">from ${esc(p.from)}</span>` : ''}${p.via ? `<span class="tfrom" title="${esc(p.via)}">↪ ${esc(p.via.split(' · ')[0])}</span>` : ''}${p.edited ? '<span class="muted tiny">(edited)</span>' : ''}${p.pinned ? '<span class="tflag" title="Pinned">📌</span>' : ''}${p.saved ? '<span class="tflag" title="Saved for later">🔖</span>' : ''}${remind}</div>`;
     const reacts = p.reactions?.length ? `<div class="treact">${p.reactions.map(e => `<button class="rchip" data-pact="react" data-emoji="${esc(e)}" title="Remove ${esc(e)}">${esc(e)}</button>`).join('')}<button class="rchip add" data-pact="emoji" title="Add a reaction">😀＋</button></div>` : '';
     const last = rs.length ? new Date(rs[rs.length - 1].at) : null;
     const thread = !inPanel && rs.length ? `<a href="#" class="tthread" data-pact="thread">💬 ${rs.length} repl${rs.length > 1 ? 'ies' : 'y'} <span class="muted">Last reply ${esc(last.toDateString() === new Date().toDateString() ? last.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : last.toLocaleDateString())}</span></a>` : '';
@@ -442,12 +442,42 @@ const Work = {
   },
 
   // Pick a thread (recent first) for "Add to task thread…".
-  pick(ev, then) {
+  // A menu of threads to choose from (most recent first); "Other thread…"
+  // finds any by name. except: a thread to leave out (the one you are in).
+  pick(ev, then, except) {
     const r = ev.target?.getBoundingClientRect?.() || { left: ev.clientX, bottom: ev.clientY };
-    const open = [...this.list].filter(w => w.status !== 'done').slice(0, 12);
+    const all = this.list.filter(w => w.id !== except && !w.archived);
+    const open = all.filter(w => w.status !== 'done').slice(0, 12);
+    const other = async () => {
+      const q = prompt('Which thread? Type part of its name:'); if (!q?.trim()) return;
+      const hits = this.list.filter(w => w.id !== except && w.title.toLowerCase().includes(q.trim().toLowerCase()));
+      if (!hits.length) return toast(`No thread called “${q.trim()}”`, true);
+      if (hits.length === 1) return then(hits[0].id, hits[0].title);
+      setTimeout(() => Tree.showMenu({ clientX: r.left, clientY: r.bottom }, hits.slice(0, 20).map(w => [`${w.archived ? '🗄 ' : ''}${w.title}`, () => then(w.id, w.title)])));
+    };
     setTimeout(() => Tree.showMenu({ clientX: r.left, clientY: r.bottom }, [
       ...open.map(w => [`${w.id === this.active() ? '● ' : ''}${w.title}`, () => then(w.id, w.title)]),
-      ...(open.length ? ['-'] : []), ['+ New thread…', async () => { const w = await this.create(); if (w) then(w.id, w.title); }]]));
+      ...(open.length ? ['-'] : []),
+      ...(all.length > open.length ? [['🔎 Other thread…', other]] : []),
+      ['+ New thread…', async () => { const w = await this.create(); if (w) then(w.id, w.title); }]]));
+  },
+  // ➡ Move / ⧉ Copy a message (with its replies) to another thread.
+  async movePost(p, copy, at) {
+    const w = this.current; if (!w) return;
+    if (!this.list.length) await this.loadList();
+    this.pick(at, async (to, title) => {
+      try {
+        const moved = await api('POST', `/api/work/${w.id}/posts/${p.id}/move`, { to, copy });
+        if (!copy) {
+          w.posts = w.posts.filter(x => x.id !== p.id && x.parent !== p.id);
+          if (this.panel === p.id) this.panel = '';
+          this.render();
+        }
+        this.loadList();
+        toast(`${copy ? 'Copied' : 'Moved'} to “${title}”`, false, copy ? async () => { await api('DELETE', `/api/work/${to}/posts/${moved.id}`); this.loadList(); toast('Copy removed'); }
+          : async () => { await api('POST', `/api/work/${to}/posts/${moved.id}/move`, { to: w.id }); if (this.current?.id === w.id) this.open(w.id); toast('Moved back'); });
+      } catch (err) { toast(err.message, true); }
+    }, w.id);
   },
   async addEntry(e, ev) {
     if (!this.list.length) await this.loadList();
@@ -656,6 +686,8 @@ function postMenu(p, postEl, r) {
     '-',
     ['🔗 Copy link to this message', () => copyText(Work.postLink(p), 'Link copied — paste it in another thread or note to jump here')],
     ['Copy text', () => copyText(p.text || postEl.querySelector('.tbody').innerText)],
+    ['➡ Move to another thread…', () => Work.movePost(p, false, { clientX: r.left - 160, clientY: r.bottom })],
+    ['⧉ Copy to another thread…', () => Work.movePost(p, true, { clientX: r.left - 160, clientY: r.bottom })],
     ...(p.kind === 'note' ? [['✎ Edit', () => Work.editPost(p.id)]] : []),
     [kids.length ? `Delete message and its ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'}` : 'Delete message', async () => {
       await api('DELETE', `/api/work/${w.id}/posts/${p.id}`);

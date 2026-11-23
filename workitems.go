@@ -138,15 +138,19 @@ func (s *Store) DeleteWorkItem(id string) {
 	defer s.mu.Unlock()
 	for i, w := range s.st.WorkItems {
 		if w.ID == id {
+			s.st.WorkItems = append(s.st.WorkItems[:i], s.st.WorkItems[i+1:]...)
+			// Its files go too — unless a message moved or copied to another
+			// thread still shows them.
 			for _, b := range w.Blocks {
-				if b.File != nil {
+				if b.File != nil && s.workAttachment(b.File.ID) == nil {
 					_ = removeFile(s.attachDir(), b.File.ID)
 				}
 			}
 			for _, f := range w.Files {
-				_ = removeFile(s.attachDir(), f.ID)
+				if s.workAttachment(f.ID) == nil {
+					_ = removeFile(s.attachDir(), f.ID)
+				}
 			}
-			s.st.WorkItems = append(s.st.WorkItems[:i], s.st.WorkItems[i+1:]...)
 			s.changed()
 			return
 		}

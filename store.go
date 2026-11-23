@@ -153,6 +153,7 @@ type State struct {
 	Jira       JiraConfig   `json:"jira"`
 	JiraIssues []*JiraIssue `json:"jira_issues,omitempty"`
 	Events     []*Event     `json:"events,omitempty"` // Calendar
+	Snippets   []*Snippet   `json:"sql_snippets,omitempty"`
 	Settings   Settings     `json:"settings"`
 }
 

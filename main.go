@@ -514,6 +514,10 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/clips", a.handleListClips)
 	mux.HandleFunc("DELETE /api/clips/{id}", a.handleDeleteClip)
 
+	mux.HandleFunc("GET /api/snippets", a.handleSnippets)
+	mux.HandleFunc("POST /api/snippets", a.handleSaveSnippet)
+	mux.HandleFunc("POST /api/snippets/{id}/used", a.handleUseSnippet)
+	mux.HandleFunc("DELETE /api/snippets/{id}", a.handleDeleteSnippet)
 	mux.HandleFunc("GET /api/notes", a.handleListNotes)
 	mux.HandleFunc("POST /api/notes", a.handleSaveNote)
 	mux.HandleFunc("DELETE /api/notes/{id}", a.handleDeleteNote)
@@ -523,6 +527,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/recent", a.handleRecent)
 
 	mux.HandleFunc("GET /ws/term", a.handleTerm)
+	mux.HandleFunc("GET /ws/tail", a.handleTail)
+	mux.HandleFunc("POST /api/logs/find", a.handleFindLogs)
+	mux.HandleFunc("POST /api/capture/text", a.handleCaptureText)
 	mux.HandleFunc("GET /ws/local", a.handleLocalTerm)
 	mux.HandleFunc("GET /api/local/shells", a.handleLocalShells)
 	mux.HandleFunc("GET /api/git/info", a.handleGitInfo)
@@ -597,6 +604,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/work/{id}/posts", a.handlePostAdd)
 	mux.HandleFunc("PUT /api/work/{id}/posts/{pid}", a.handlePostEdit)
 	mux.HandleFunc("DELETE /api/work/{id}/posts/{pid}", a.handlePostDelete)
+	mux.HandleFunc("POST /api/work/{id}/posts/{pid}/move", a.handlePostMove)
 	mux.HandleFunc("GET /api/backups", a.handleBackupsList)
 	mux.HandleFunc("POST /api/backups", a.handleBackupNow)
 	mux.HandleFunc("POST /api/backups/reveal", a.handleBackupReveal)

@@ -1112,3 +1112,43 @@ body.side-collapsed:not(.side-top) .side { width: 84px; padding-right: 4px; }
 /* Tree expanders: [+] / [−] boxes like a Windows tree view */
 .tnode .tw .pm { display: inline-flex; align-items: center; justify-content: center; width: 9px; height: 9px; border: 1px solid var(--muted); border-radius: 2px; font: 700 9px/1 "Segoe UI", system-ui, sans-serif; font-style: normal; color: var(--text); background: var(--panel); cursor: pointer; }
 .tnode .tw .pm:hover { border-color: var(--accent); color: var(--accent); }
+
+/* SQL history search and 📌 snippets */
+#sqlHistWrap, #sqlSnipWrap { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+#sqlHistWrap[hidden], #sqlSnipWrap[hidden] { display: none; }
+#sqlHist, #sqlSnip { flex: 1; overflow: auto; }
+.pane-filter-row { display: flex; gap: 6px; align-items: center; margin: 6px; }
+.pane-filter-row .pane-filter { flex: 1; margin: 0; }
+.pane-filter { margin: 6px; }
+.snip-sec { padding: 6px 10px 2px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.snip-item { border-bottom: 1px solid var(--border); padding: 5px 10px; cursor: pointer; }
+.snip-item:hover { background: var(--panel2); }
+.snip-head { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.snip-item pre { margin: 2px 0 0; font: 12px var(--mono); white-space: pre-wrap; max-height: 72px; overflow: hidden; color: var(--muted); }
+
+/* 📜 Log viewer: floating, movable, resizable */
+.logpanel { position: fixed; right: 16px; bottom: 16px; width: min(900px, 70vw); height: min(560px, 62vh); min-width: 420px; min-height: 220px; resize: both; overflow: hidden;
+  z-index: 15; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 36px rgba(0,0,0,.28); }
+.logpanel[hidden] { display: none; }
+.lp-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--panel2); cursor: move; user-select: none; }
+.lp-head .lp-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: 13px; }
+.lp-head button { padding: 2px 8px; font-size: 12px; }
+.lp-wrap { font-size: 12px; display: flex; align-items: center; gap: 3px; cursor: pointer; }
+.lp-pick { padding: 6px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; max-height: 45%; overflow: auto; }
+.lp-row { display: flex; gap: 6px; align-items: center; }
+.lp-row .lp-path { flex: 1; font-family: var(--mono); }
+.lp-row .lp-dir { flex: 1; font-family: var(--mono); }
+.lp-file { display: flex; gap: 8px; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.lp-file:hover { background: var(--panel2); }
+.lp-tools { display: flex; gap: 6px; padding: 6px 8px; }
+.lp-tools .lp-filter { flex: 2; } .lp-tools .lp-hl { flex: 1; }
+.lp-body { flex: 1; overflow: auto; font: 12px/1.45 var(--mono); padding: 4px 0; background: var(--bg); }
+.lp-line { padding: 0 10px; white-space: pre-wrap; word-break: break-all; border-left: 3px solid transparent; }
+.logpanel.nowrap .lp-line { white-space: pre; word-break: normal; }
+.lp-line.lv-err { border-left-color: var(--danger); }
+.lp-line.lv-warn { border-left-color: #b8860b; }
+.lp-line.lv-trace { color: var(--muted); }
+.lp-line mark { background: color-mix(in srgb, #f2c94c 55%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+.lp-foot { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-top: 1px solid var(--border); }
+.lp-foot .err { color: var(--danger); }
+.lp-new { padding: 1px 8px; font-size: 11px; }

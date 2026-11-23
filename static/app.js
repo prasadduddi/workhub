@@ -2567,7 +2567,7 @@ const Tree = {
         if (t) items.push(['Reconnect', () => SQL.reconnect(t)], ['⏏ Disconnect', () => SQL.close(t)]);
         else items.push(['Connect and show tables', () => SQL.toggleConn(e)]);
       }
-      if (canSSH(e)) items.push(['Open SSH terminal', () => Term.open(e)]);
+      if (canSSH(e)) items.push(['Open SSH terminal', () => Term.open(e)], ['📜 Tail a log…', () => LogView.open(e)]);
       const tabs = Term.tabs.filter(t => t.entry?.id === e.id && !t.local && !t.closed);
       if (canSSH(e) || tabs.length) items.push([`⏏ Disconnect SSH${tabs.length > 1 ? ` (${tabs.length} terminals)` : ''}`, tabs.length ? () => tabs.forEach(t => Term.close(t)) : null]);
       if (canFiles(e)) items.push([`Open in FTP (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
@@ -3424,7 +3424,8 @@ const SQL = {
 
   showOut(which) {
     $$('#sqlOutTabs .tab').forEach(x => x.classList.toggle('active', x.dataset.o === which));
-    $('#sqlRes').hidden = which !== 'res'; $('#sqlOut').hidden = which !== 'out'; $('#sqlHist').hidden = which !== 'hist';
+    $('#sqlRes').hidden = which !== 'res'; $('#sqlOut').hidden = which !== 'out'; $('#sqlHistWrap').hidden = which !== 'hist'; $('#sqlSnipWrap').hidden = which !== 'snip';
+    if (which === 'snip') Snippets.load();
   },
 
   renderResult() {
@@ -3464,7 +3465,8 @@ const SQL = {
   renderHist() {
     let h = [];
     try { h = JSON.parse(localStorage.getItem('sqlhist.' + this.active.entry.id)) || []; } catch { /* ignore */ }
-    $('#sqlHist').innerHTML = h.map((x, i) => `<div class="hist-item" data-h="${i}" title="Click to put back in the editor"><small>${new Date(x.at).toLocaleString()}</small>${esc(x.sql)}</div>`).join('') || '<div class="empty">No history yet.</div>';
+    const q = ($('#sqlHistFilter')?.value || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    $('#sqlHist').innerHTML = h.map((x, i) => [x, i]).filter(([x]) => q.every(w => x.sql.toLowerCase().includes(w))).map(([x, i]) => `<div class="hist-item" data-h="${i}" title="Click to put back in the editor"><small>${new Date(x.at).toLocaleString()}</small>${esc(x.sql)}</div>`).join('') || `<div class="empty">${h.length ? 'No match.' : 'No history yet.'}</div>`;
     this.histList = h;
   },
 
@@ -3643,6 +3645,71 @@ $('#sqlTabs').addEventListener('click', e => {
   const tab = e.target.closest('[data-st]');
   if (tab) SQL.activate(SQL.tabs.find(t => t.sid === tab.dataset.st));
 });
+// ---------- 📌 SQL snippets: named queries, for this connection or all ----------
+const Snippets = {
+  list: [],
+  async load() { this.list = await api('GET', '/api/snippets').catch(() => []); this.render(); },
+  forActive() { const id = SQL.active?.entry.id; return this.list.filter(x => !x.conn || x.conn === id); },
+  render() {
+    const el = $('#sqlSnip'); if (!el) return;
+    const id = SQL.active?.entry.id, q = $('#sqlSnipFilter').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const hit = x => q.every(w => `${x.name} ${x.sql}`.toLowerCase().includes(w));
+    const mine = this.list.filter(x => x.conn && x.conn === id && hit(x)), all = this.list.filter(x => !x.conn && hit(x));
+    const item = x => `<div class="snip-item" data-snip="${x.id}" title="Click: put it in the editor · Double-click: put it in and run it"><div class="snip-head"><b>${esc(x.name)}</b><span class="spacer"></span><button class="icon more" data-snipmore="${x.id}" title="Rename, share, update, delete">⋯</button></div><pre>${esc(x.sql.length > 400 ? x.sql.slice(0, 400) + '…' : x.sql)}</pre></div>`;
+    const sec = (t, xs) => xs.length ? `<div class="snip-sec">${t} <span class="n">${xs.length}</span></div>${xs.map(item).join('')}` : '';
+    el.innerHTML = sec(`This connection${SQL.active ? ' — ' + esc(dbLabel(SQL.active.entry).replace(/<[^>]*>/g, '')) : ''}`, mine) + sec('All connections', all)
+      || `<div class="empty">${this.list.length ? 'No match.' : 'No snippets yet.<br>Write a query, then press <b>＋ Save current statement</b>.'}</div>`;
+  },
+  // The selection, or the statement at the cursor.
+  current() {
+    if (!SQL.active) return '';
+    const sel = SQL.cm.getSelection().trim();
+    if (sel) return sel;
+    const p = SQL.pick(false)[0];
+    return p ? (p.sql || SQL.cm.getValue().slice(p.from, p.to)).trim() : '';
+  },
+  async save() {
+    const sql = this.current();
+    if (!sql) return toast('Write or select a query first', true);
+    const first = sql.split('\n')[0].replace(/\s+/g, ' ').slice(0, 60);
+    const name = prompt('Name for this snippet:', first);
+    if (!name?.trim()) return;
+    const shared = confirm('Use it on every connection?\n\nOK = all connections · Cancel = only this one');
+    await api('POST', '/api/snippets', { name: name.trim(), sql, conn: shared ? '' : SQL.active.entry.id }).catch(err => toast(err.message, true));
+    toast('Snippet saved'); this.load();
+  },
+  put(x, run) {
+    if (!SQL.active) return toast('Connect to a database first', true);
+    // Added at the end and selected, so Run runs just this snippet.
+    const cm = SQL.cm, v = cm.getValue(), gap = !v ? '' : /\n\n$/.test(v) ? '' : /\n$/.test(v) ? '\n' : '\n\n';
+    cm.replaceRange(gap + x.sql + '\n', cm.posFromIndex(v.length));
+    const start = v.length + gap.length;
+    cm.setSelection(cm.posFromIndex(start), cm.posFromIndex(start + x.sql.length)); cm.scrollIntoView(null, 60); cm.focus();
+    api('POST', `/api/snippets/${x.id}/used`).catch(() => {});
+    if (run) SQL.run(false); // runs the selection: just this snippet
+  },
+  menu(x, ev) {
+    Tree.showMenu(ev, [
+      ['Put in the editor', () => this.put(x)], ['Put in and run', () => this.put(x, true)], ['Copy SQL', () => copyText(x.sql, 'SQL copied')], '-',
+      ['Rename…', async () => { const n = prompt('Snippet name', x.name); if (n?.trim()) { await api('POST', '/api/snippets', { ...x, name: n.trim() }); this.load(); } }],
+      ['Replace with the current statement', async () => { const sql = this.current(); if (!sql) return toast('Select or write the new SQL first', true); await api('POST', '/api/snippets', { ...x, sql }); toast('Snippet updated'); this.load(); }],
+      x.conn ? ['Use on all connections', async () => { await api('POST', '/api/snippets', { ...x, conn: '' }); this.load(); }]
+        : SQL.active && ['Only for this connection', async () => { await api('POST', '/api/snippets', { ...x, conn: SQL.active.entry.id }); this.load(); }],
+      '-', ['Delete', async () => { if (confirm(`Delete the snippet “${x.name}”?`)) { await api('DELETE', `/api/snippets/${x.id}`); this.load(); } }],
+    ].filter(Boolean));
+  },
+};
+$('#sqlSnipFilter').addEventListener('input', () => Snippets.render());
+$('#sqlSnipSave').onclick = () => Snippets.save();
+$('#sqlHistFilter').addEventListener('input', () => SQL.active && SQL.renderHist());
+$('#sqlSnip').addEventListener('click', e => {
+  const m = e.target.closest('[data-snipmore]');
+  if (m) { const r = m.getBoundingClientRect(); return setTimeout(() => Snippets.menu(Snippets.list.find(x => x.id === m.dataset.snipmore), { clientX: r.left - 150, clientY: r.bottom })); }
+  const it = e.target.closest('[data-snip]'); if (it && e.detail === 1) Snippets.put(Snippets.list.find(x => x.id === it.dataset.snip));
+});
+$('#sqlSnip').addEventListener('dblclick', e => { const it = e.target.closest('[data-snip]'); if (it) { SQL.cm.undo(); Snippets.put(Snippets.list.find(x => x.id === it.dataset.snip), true); } });
+$('#sqlSnip').addEventListener('contextmenu', e => { const it = e.target.closest('[data-snip]'); if (!it) return; e.preventDefault(); Snippets.menu(Snippets.list.find(x => x.id === it.dataset.snip), e); });
+
 $('#sqlOutTabs').addEventListener('click', e => { const tab = e.target.closest('[data-o]'); if (tab) SQL.showOut(tab.dataset.o); });
 $('#sqlHist').addEventListener('click', e => {
   const it = e.target.closest('[data-h]');

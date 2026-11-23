@@ -33,6 +33,7 @@ type Post struct {
 	Saved     bool      `json:"saved,omitempty"`     // 🔖 "Save for later"
 	RemindAt  time.Time `json:"remind_at,omitzero"`  // ⏰ "Remind me about this"
 	From      string    `json:"from,omitempty"`      // capture: the app/window it was copied from
+	Via       string    `json:"via,omitempty"`       // "Moved from …" / "Copied from …" another thread
 }
 
 // PostPatch changes parts of a post; nil fields stay as they are.
@@ -232,6 +233,110 @@ func (s *Store) DeletePost(id, pid string) error {
 	w.Posts = keep
 	s.changed()
 	return nil
+}
+
+var reAttachRef = regexp.MustCompile(`/api/props/files/([0-9a-f]+)`)
+
+// MovePost moves (or, with copy, copies) a message and its replies to another
+// thread. It lands at the end of that thread with "Moved from …" on it; files
+// and pictures in it go along, so they still show there.
+func (s *Store) MovePost(fromID, pid, toID string, copy bool) (Post, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	src, dst := s.workItem(fromID), s.workItem(toID)
+	if src == nil || dst == nil {
+		return Post{}, errors.New("thread not found")
+	}
+	if src == dst {
+		return Post{}, errors.New("that is the same thread")
+	}
+	var group []*Post
+	for _, p := range src.Posts {
+		if p.ID == pid || (p.Parent == pid && pid != "") {
+			group = append(group, p)
+		}
+	}
+	found := false
+	for _, p := range group {
+		found = found || p.ID == pid
+	}
+	if !found {
+		return Post{}, errors.New("message not found")
+	}
+	now := time.Now()
+	verb := "Moved"
+	if copy {
+		verb = "Copied"
+	}
+	ids := map[string]string{}
+	var main Post
+	for i, p := range group {
+		c := *p
+		if copy {
+			c.ID = randomHex(8)
+			c.Saved, c.RemindAt, c.Pinned = false, time.Time{}, false
+		}
+		ids[p.ID] = c.ID
+		if p.ID == pid {
+			c.Parent = "" // a reply becomes a message of its own there
+			c.Via = fmt.Sprintf("%s from “%s” · first posted %s", verb, src.Title, p.At.Local().Format("2 Jan 15:04"))
+		} else if np, ok := ids[p.Parent]; ok {
+			c.Parent = np
+		}
+		c.At = now.Add(time.Duration(i) * time.Millisecond) // keeps their order, at the end
+		for _, m := range reAttachRef.FindAllStringSubmatch(c.HTML, -1) {
+			if !hasFile(dst.Files, m[1]) {
+				if a := s.workAttachment(m[1]); a != nil {
+					dst.Files = append(dst.Files, *a)
+				}
+			}
+		}
+		dst.Posts = append(dst.Posts, &c)
+		if p.ID == pid {
+			main = c
+		}
+	}
+	dst.Updated = now
+	if !copy {
+		keep := src.Posts[:0]
+		for _, p := range src.Posts {
+			if _, moved := ids[p.ID]; !moved {
+				keep = append(keep, p)
+			}
+		}
+		for i := len(keep); i < len(src.Posts); i++ {
+			src.Posts[i] = nil
+		}
+		src.Posts = keep
+	}
+	s.changed()
+	return main, nil
+}
+
+func hasFile(files []Attachment, id string) bool {
+	for _, f := range files {
+		if f.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) handlePostMove(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		To   string `json:"to"`
+		Copy bool   `json:"copy"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	p, err := a.store.MovePost(r.PathValue("id"), r.PathValue("pid"), in.To, in.Copy)
+	if err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	writeJSON(w, p)
 }
 
 // captureToThread adds copied text to the thread chosen with "Capture here"
