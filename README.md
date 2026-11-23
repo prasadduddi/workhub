@@ -37,6 +37,17 @@ closing it stops WorkHub. "Windows protected your PC" → **More info → Run an
 - First run imports old `workhub-data` folders it finds; **Import data…** and **Data location…**
   in the sidebar handle other cases. If data can't be opened, a recovery page lets you pick another folder.
 
+## Passwords that protect WorkHub
+- **Master password** (☰ → 🔐 Master password…): when it is on, WorkHub asks for it every time it
+  starts, and the key to your data is sealed with it, so a copied data folder can't be opened
+  without it. You get a one-time recovery code when you set it; typing that code instead of the
+  password lets you choose a new one. Each person sets their own.
+- **PIN** (☰ → 🔒 Lock): locks the open app after some idle minutes.
+- **Team access password** (optional, per build): a copy of WorkHub asks for it once per PC before
+  it can be used. Set it with `go run ./tools/accesshash` (writes only a salted hash to `access.go`;
+  `-off` removes it), then build or tag a release. The code is public, so this keeps casual users
+  out of a downloaded copy, not someone who builds their own.
+
 ## Separate workspaces (one per client)
 Each laptop keeps its own data. For a second client on the same laptop, make a shortcut to
 `WorkHub-web.exe -workspace ClientB`: it gets its own data, key, port and session.

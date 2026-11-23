@@ -927,3 +927,8 @@ body.side-collapsed:not(.side-top) .navhead:not(:first-child)::after { content: 
 .pwall-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 13px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); cursor: pointer; }
 .pwall-row .mono { font-family: var(--mono); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #pwAllDlg { width: min(620px, 94vw); }
+
+#masterDlg { width: min(480px, 94vw); }
+#masterDlg label { display: block; margin-top: 8px; }
+#masterDlg input { width: 100%; box-sizing: border-box; }
+.rec-code { display: block; font-size: 18px; letter-spacing: .08em; text-align: center; padding: 10px; background: var(--panel2); border: 1px dashed var(--border); border-radius: 8px; }

@@ -98,56 +98,69 @@ func main() {
 	}
 	url := fmt.Sprintf("http://%s/?t=%s", app.addr, app.token)
 
-	store, err := OpenStore(dir)
-	if err != nil {
-		// Don't just exit (the console window would vanish): show a page
-		// where the user can pick another data folder.
-		fmt.Println("WorkHub cannot open its data:", err)
-		fmt.Println("  Open:  ", url, " to choose another data folder.")
-		app.recoveryErr = err.Error()
-		srv := &http.Server{Handler: app.recoveryRoutes()}
-		if isDesktop {
-			go srv.Serve(ln)
-			if runDesktop(url, func(u string, _ bool) { openBrowser(u) }) {
-				os.Exit(1)
-			}
-		}
-		if !*noBrowser {
-			openBrowser(url)
-		}
-		fatal("%v", srv.Serve(ln))
-	}
-	app.store = store
-	if firstRun {
-		name := ws
-		if name == "" {
-			name, _ = os.Hostname()
-		}
-		st := store.Settings()
-		st.Workspace = name
-		store.SetSettings(st)
-		// Old-version folders only ever belong to the default workspace; named
-		// workspaces start empty so clients' data never mixes.
-		if *dataDir == "" && ws == "" && dir == defaultDataDir() {
-			importOldFolders(store, dir)
-		}
-	}
 	_ = os.WriteFile(filepath.Join(dir, "session.token"), []byte(app.token), 0o600)
 	if *dataDir != "" {
 		app.lockPath = filepath.Join(dir, "pin-lock.json")
 	}
-	if _, ok := app.lockConf(); ok {
-		app.setLocked(true) // a PIN is set: start locked
+	sw := &switchHandler{}
+
+	// boot runs once the data is open (straight away, or after the gate).
+	var bootOnce sync.Once
+	boot := func(store *Store) {
+		bootOnce.Do(func() {
+			app.store = store
+			if firstRun {
+				name := ws
+				if name == "" {
+					name, _ = os.Hostname()
+				}
+				st := store.Settings()
+				st.Workspace = name
+				store.SetSettings(st)
+				// Old-version folders only ever belong to the default workspace; named
+				// workspaces start empty so clients' data never mixes.
+				if *dataDir == "" && ws == "" && dir == defaultDataDir() {
+					importOldFolders(store, dir)
+				}
+			}
+			if _, ok := app.lockConf(); ok && !hasMaster(dir) {
+				app.setLocked(true) // a PIN is set: start locked (the master password already asked)
+			}
+			go app.watchClipboard()
+			go app.syncBrowserBookmarks()
+			go app.mailWatcher()
+			go app.jiraWatcher()
+			go app.jiraKeepAlive()
+			go app.tunnelKeeper()
+			go app.backupWatcher()
+			go func() { time.Sleep(15 * time.Second); cleanOldExe() }()
+			sw.set(app.routes())
+		})
+	}
+	// Don't just exit when the data can't be opened (the console window would
+	// vanish): show a page where the user can pick another data folder.
+	showRecovery := func(err error) {
+		fmt.Println("WorkHub cannot open its data:", err)
+		fmt.Println("  Open:  ", url, " to choose another data folder.")
+		app.recoveryErr = err.Error()
+		sw.set(app.recoveryRoutes())
 	}
 
-	go app.watchClipboard()
-	go app.syncBrowserBookmarks()
-	go app.mailWatcher()
-	go app.jiraWatcher()
-	go app.jiraKeepAlive()
-	go app.tunnelKeeper()
-	go app.backupWatcher()
-	go func() { time.Sleep(15 * time.Second); cleanOldExe() }()
+	if !app.accessOK() || hasMaster(dir) {
+		fmt.Println("WorkHub is waiting for its password in the window.")
+		sw.set(app.gateRoutes(func(key []byte) error {
+			store, err := OpenStoreKey(dir, key)
+			if err != nil {
+				return err
+			}
+			boot(store)
+			return nil
+		}))
+	} else if store, err := OpenStore(dir); err != nil {
+		showRecovery(err)
+	} else {
+		boot(store)
+	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -160,7 +173,7 @@ func main() {
 	fmt.Println("  Open:  ", url)
 	fmt.Println("  Data:  ", dir)
 	fmt.Println("Close this window (or use Quit in the app) to stop.")
-	srv := &http.Server{Handler: app.routes()}
+	srv := &http.Server{Handler: sw}
 	if isDesktop {
 		// Desktop version: own window; closing it stops WorkHub. Without
 		// WebView2 it carries on in the browser like the web version.
@@ -324,7 +337,9 @@ func copyDir(src, dst string) error {
 }
 
 func (a *App) shutdown() {
-	a.store.Flush()
+	if a.store != nil { // nil while the password page or the recovery page is shown
+		a.store.Flush()
+	}
 	_ = os.Remove(filepath.Join(a.dataDir, "session.token"))
 	os.Exit(0)
 }
@@ -555,6 +570,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/update", a.handleUpdateCheck)
 	mux.HandleFunc("POST /api/update", a.handleUpdateApply)
 	mux.HandleFunc("POST /api/update/restart", a.handleUpdateRestart)
+	mux.HandleFunc("GET /api/master", a.handleMasterGet)
+	mux.HandleFunc("POST /api/master", a.handleMasterSet)
+	mux.HandleFunc("POST /api/master/remove", a.handleMasterRemove)
 	mux.HandleFunc("GET /api/profile", a.handleProfileGet)
 	mux.HandleFunc("PUT /api/profile", a.handleProfilePut)
 	mux.HandleFunc("GET /api/lock", a.handleLockStatus)

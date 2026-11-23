@@ -46,6 +46,15 @@ const HELP_TOPICS = [
     'Copy any text with hosts, users, passwords or links (an email, Teams message, wiki page) — WorkHub files what it recognises.',
     'Click “Saving to …” under the switch to choose the project new captures go to.',
     'Everything captured is listed on the Captured page; copying the same text twice is ignored.'] },
+  { t: 'Protect WorkHub with a master password', k: 'master password protect encrypt data start startup secure copy stolen laptop access recovery code forgot', v: '', s: [
+    '☰ → 🔐 Master password… → type a password (8+ characters) twice → Turn on.',
+    'Write down the recovery code it shows — it is the only way in if you forget the password.',
+    'From then on WorkHub asks for the password every time it starts; your data can\'t be opened without it, even from a copy of the data folder.',
+    'Forgot it? On the start screen type the recovery code instead, then choose a new password (you get a new code).',
+    'Change it or turn it off in the same place (needs the current password). The PIN (🔒 Lock) still locks the open app when you are away.'] },
+  { t: 'Team access password', k: 'access password team download first start copy who gave', v: '', s: [
+    'A copy of WorkHub may ask for a team access password the first time it starts on a PC.',
+    'Ask the person who gave you WorkHub for it. It is asked only once per PC.'] },
   { t: 'Change a password on every server', k: 'change update new password rotate expired everywhere all servers user same', v: 'terminal', s: [
     'Right-click a connection of that user (in a tree, or ⋯ on its card) → 🔑 Change … password everywhere. Or ☰ → Change a password everywhere and pick the user.',
     'Type the new password. Every connection that logs in as that user is listed and ticked — untick any that keep the old one.',

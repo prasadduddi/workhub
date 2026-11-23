@@ -168,7 +168,11 @@ type Store struct {
 	dirty   bool
 }
 
-func OpenStore(dir string) (*Store, error) {
+func OpenStore(dir string) (*Store, error) { return OpenStoreKey(dir, nil) }
+
+// OpenStoreKey opens the data with a key unlocked by the master password;
+// with key nil it uses key.bin (and refuses if a master password is set).
+func OpenStoreKey(dir string, key []byte) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
@@ -179,6 +183,10 @@ func OpenStore(dir string) (*Store, error) {
 	keyPath := filepath.Join(dir, "key.bin")
 	raw, err := os.ReadFile(keyPath)
 	switch {
+	case key != nil:
+		s.key = key
+	case hasMaster(dir):
+		return nil, errMasterNeeded
 	case err == nil:
 		s.key, err = unprotectKey(raw)
 		if err != nil {

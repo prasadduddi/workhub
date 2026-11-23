@@ -466,6 +466,18 @@
   <label>Notes<textarea id="pfNotes" rows="3"></textarea></label>
   <div class="row end" style="margin-top:10px"><button id="pfCopy" title="Copy your details to paste into emails or forms">Copy my details</button><span class="spacer"></span><button id="pfCancel">Close</button><button id="pfSave" class="primary">Save</button></div>
 </dialog>
+<dialog id="masterDlg">
+  <h3>🔐 Master password</h3>
+  <div id="masterState" class="muted tiny"></div>
+  <div id="masterForm">
+    <label id="masterCurL">Current master password<input id="masterCur" type="password" autocomplete="current-password"></label>
+    <label id="masterNewL">New master password (at least 8 characters)<input id="masterNew" type="password" autocomplete="new-password"></label>
+    <label id="masterNew2L">Type it again<input id="masterNew2" type="password" autocomplete="new-password"></label>
+    <div id="masterMsg" class="tiny" style="color:var(--danger);min-height:1em"></div>
+  </div>
+  <div id="masterRec" hidden><p>Your recovery code — <b>write it down and keep it somewhere safe</b>. If you forget the master password it is the only way in; it is shown only now.</p><code id="masterCode" class="rec-code"></code></div>
+  <div class="row end" style="margin-top:10px"><button id="masterOff" class="danger" hidden>Turn off</button><span class="spacer"></span><button id="masterClose">Cancel</button><button id="masterSave" class="primary">Turn on</button></div>
+</dialog>
 <dialog id="pinDlg">
   <h3>🔒 PIN lock</h3>
   <div id="pinIntro" class="muted tiny"></div>

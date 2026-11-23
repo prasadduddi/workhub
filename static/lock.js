@@ -180,3 +180,54 @@ $('#pfSave').onclick = () => Profile.save();
 $('#pfCancel').onclick = () => $('#profileDlg').close();
 $('#pfCopy').onclick = () => copyText(Profile.text(), 'Your details copied');
 Profile.load();
+
+// 🔐 Master password: when on, WorkHub asks for it every time it starts and
+// the data can't be opened without it (see master.go). Separate from the PIN,
+// which locks the open app after some idle minutes.
+const Master = {
+  on: false,
+  async open() {
+    const r = await api('GET', '/api/master').catch(() => ({}));
+    this.on = !!r.on;
+    $('#masterState').textContent = this.on
+      ? 'On — WorkHub asks for it every time it starts, and your data can\'t be opened without it (not even by copying the data folder). Change it here, or turn it off.'
+      : 'Off. Turn it on and WorkHub asks for it every time it starts; your saved connections and passwords can\'t be opened without it, even from a copy of the data folder. If you forget it, only the recovery code you get now can open your data.';
+    $('#masterCurL').hidden = !this.on;
+    $('#masterOff').hidden = !this.on;
+    $('#masterSave').textContent = this.on ? 'Change password' : 'Turn on';
+    $('#masterForm').hidden = false; $('#masterRec').hidden = true; $('#masterSave').hidden = false;
+    $('#masterClose').textContent = 'Cancel';
+    for (const id of ['#masterCur', '#masterNew', '#masterNew2']) $(id).value = '';
+    $('#masterMsg').textContent = '';
+    $('#masterDlg').showModal();
+    (this.on ? $('#masterCur') : $('#masterNew')).focus();
+  },
+  async save() {
+    const pw = $('#masterNew').value;
+    if (pw.length < 8) return this.msg('At least 8 characters, please', '#masterNew');
+    if (pw !== $('#masterNew2').value) return this.msg('The two new passwords are different', '#masterNew2');
+    $('#masterSave').disabled = true;
+    try {
+      const r = await api('POST', '/api/master', { current: $('#masterCur').value, password: pw });
+      $('#masterForm').hidden = true; $('#masterSave').hidden = true; $('#masterOff').hidden = true;
+      $('#masterRec').hidden = false; $('#masterCode').textContent = r.recovery;
+      $('#masterState').textContent = this.on ? '✅ Master password changed. The old recovery code no longer works.' : '✅ Master password is on. WorkHub will ask for it next time it starts.';
+      $('#masterClose').textContent = 'I have saved the code';
+      this.on = true;
+    } catch (err) { this.msg(err.message, this.on ? '#masterCur' : '#masterNew'); } finally { $('#masterSave').disabled = false; }
+  },
+  async off() {
+    if (!$('#masterCur').value) return this.msg('Type the current master password to turn it off', '#masterCur');
+    if (!confirm('Turn off the master password? WorkHub will open your data without asking (only your Windows login protects it).')) return;
+    try {
+      await api('POST', '/api/master/remove', { current: $('#masterCur').value });
+      $('#masterDlg').close(); this.on = false;
+      toast('Master password turned off');
+    } catch (err) { this.msg(err.message, '#masterCur'); }
+  },
+  msg(t, focus) { $('#masterMsg').textContent = t; if (focus) { $(focus).select(); $(focus).focus(); } },
+};
+$('#masterSave').onclick = () => Master.save();
+$('#masterOff').onclick = () => Master.off();
+$('#masterClose').onclick = () => $('#masterDlg').close();
+for (const id of ['#masterCur', '#masterNew', '#masterNew2']) $(id).addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); Master.save(); } });
