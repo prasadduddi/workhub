@@ -4,7 +4,9 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
-  { v: '1.9.6', title: 'Disconnect', items: [
+  { v: '1.9.6', title: 'Disconnect, bookmarks table', items: [
+    ['☰', 'Bookmarks as a table', 'Bookmarks → ☰ Table shows every link in full: name, app, URL, user, environment, folder, how often and when you last opened it. Drag a column edge to resize, click a heading to sort, click a row to open. ▦ Tiles switches back.', ''],
+    ['▭', 'Wider bookmark tiles', 'In ▦ Tiles view, drag the ▭ slider to make the tiles wider and see more of each name.', ''],
     ['⏏', 'Disconnect SSH, FTP and SQL', 'Right-click a connected server (green ●) → ⏏ Disconnect SSH / FTP. FTP has a ⏏ Disconnect button next to the server name, SSH a ⏏ Disconnect all on the tab bar, and ☰ → Disconnect all closes every session (command prompts on this PC stay).', 'terminal'],
   ] },
   { v: '1.9.5', title: 'Attachments download, data folder shown, more login lists', items: [

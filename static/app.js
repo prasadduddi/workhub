@@ -2581,8 +2581,13 @@ function avatar(text) {
   return `<span class="av" style="background:hsl(${h} 55% 45%)">${esc((text.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</span>`;
 }
 
+// Bookmarks table: [heading, sort key, default width]
+const BM_COLS = [['Name', 'name', 240], ['App', 'app', 130], ['URL', 'url', 340], ['User', 'user', 110], ['Env', 'env', 70], ['Folder', 'folder', 170], ['Opened', 'opened', 80], ['Last opened', 'last', 120], ['', '', 120]];
+
 const Bookmarks = {
   mode: localStorage.getItem('bmGroup') || 'smart',
+  view: lsGet('bmView') || 'tiles',
+  sort: (() => { try { return JSON.parse(localStorage.getItem('bmSort')) || null; } catch { return null; } })(), // {key, dir} in Table view
 
   internalOnly: (() => { try { return localStorage.getItem('bmInternalOnly') === '1'; } catch { return false; } })(),
 
@@ -2616,12 +2621,41 @@ const Bookmarks = {
         <div class="bm-sub">${sub ? `<span class="ulabel"${ruleStyle(e.url || e.host)}>${esc(sub)}</span>` : ''}${esc(e.host)}${e.username ? ' · ' + esc(e.username) : ''}</div>
         ${e.folder && this.mode !== 'folder' ? `<div class="bm-sub" title="${esc(e.folder)}">📁 ${esc(e.folder.split(' › ').slice(1).join(' › ') || e.folder)}</div>` : ''}</div>
       <div class="bm-meta">${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="n">${when}</span>
-        <span class="bm-tools"><button class="icon" data-bmcopy="${e.id}" title="Copy URL">URL</button>${e.password ? `<button class="icon" data-bmpw="${e.id}" title="Copy password">pw</button>` : ''}<button class="icon" data-bmedit="${e.id}" title="Edit">✎</button>${e.hidden ? `<button class="icon" data-bmrestore="${e.id}" title="Show this bookmark again">↺ Restore</button>` : `<button class="icon danger" data-bmdel="${e.id}" title="Remove from WorkHub (your browser is not changed)">🗑</button>`}</span></div>
+        <span class="bm-tools">${this.tools(e)}</span></div>
     </div>`;
   },
 
+  tools(e) {
+    return `<button class="icon" data-bmcopy="${e.id}" title="Copy URL">URL</button>${e.password ? `<button class="icon" data-bmpw="${e.id}" title="Copy password">pw</button>` : ''}<button class="icon" data-bmedit="${e.id}" title="Edit">✎</button>${e.hidden ? `<button class="icon" data-bmrestore="${e.id}" title="Show this bookmark again">↺ Restore</button>` : `<button class="icon danger" data-bmdel="${e.id}" title="Remove from WorkHub (your browser is not changed)">🗑</button>`}`;
+  },
+
+  sortVal(e, k) {
+    return { name: (e.name || '').toLowerCase(), app: urlLabel(e.url).toLowerCase(), url: (e.url || '').toLowerCase(), user: (e.username || '').toLowerCase(),
+      env: ENV_ORDER[e.env] ?? 9, folder: (e.folder || '').toLowerCase(), opened: e.open_count || 0, last: Date.parse(e.last_used) || 0 }[k];
+  },
+
+  // Table view: every field in full (text wraps), columns resizable and sortable.
+  table(items) {
+    if (this.sort) {
+      const { key, dir } = this.sort;
+      items = [...items].sort((a, b) => { const x = this.sortVal(a, key), y = this.sortVal(b, key); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+    }
+    const head = BM_COLS.map(([h, k], i) => `<th ${k ? `data-bmsort="${k}" title="Sort by ${h.toLowerCase()}"` : ''}>${h}${this.sort?.key === k && k ? (this.sort.dir > 0 ? ' ▲' : ' ▼') : ''}<span class="colgrip" data-bmcol="${i}" title="Drag to resize · double-click to reset"></span></th>`).join('');
+    return `<div class="tblwrap"><table class="tbl bm-tbl"><colgroup>${BM_COLS.map(([, , w], i) => `<col style="width:var(--b${i}, ${w}px)">`).join('')}</colgroup><thead><tr>${head}</tr></thead><tbody>`
+      + items.map(e => `<tr class="env-${esc(e.env || '')}" data-bm="${e.id}" title="Click to open">
+        <td class="bm-tname">${dot(e)} ${esc(e.name || e.host)}</td>
+        <td>${urlLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(urlLabel(e.url))}</span>` : ''}</td>
+        <td class="mono">${esc(e.url)}</td>
+        <td>${esc(e.username || '')}</td>
+        <td>${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}</td>
+        <td>${esc(e.folder ? e.folder.split(' › ').slice(1).join(' › ') || e.folder : '')}</td>
+        <td>${e.open_count ? e.open_count + '×' : ''}</td>
+        <td>${e.last_used ? esc(fmtTime(e.last_used)) : ''}</td>
+        <td class="bm-ttools">${this.tools(e)}</td></tr>`).join('') + '</tbody></table></div>';
+  },
+
   section(title, items) {
-    return items.length ? `<div class="group"><div class="group-head"><h3>${esc(title)}</h3><span class="n">${items.length}</span></div><div class="bm-grid">${items.map(e => this.tile(e)).join('')}</div></div>` : '';
+    return items.length ? `<div class="group"><div class="group-head"><h3>${esc(title)}</h3><span class="n">${items.length}</span></div>${this.view === 'table' ? this.table(items) : `<div class="bm-grid">${items.map(e => this.tile(e)).join('')}</div>`}</div>` : '';
   },
 
   render() {
@@ -2658,9 +2692,12 @@ const Bookmarks = {
     Object.keys(groups).sort(order)
       .forEach(g => { html += this.section(g, groups[g].sort(this.sortItems)); });
     if (external.length) {
-      html += `<details class="group ext-group" ${this.extOpen ? 'open' : ''}><summary class="group-head"><h3>External sites</h3><span class="n">${external.length}</span><span class="muted tiny">public websites — click to show</span></summary><div class="bm-grid">${external.sort(this.sortItems).map(e => this.tile(e)).join('')}</div></details>`;
+      const ext = external.sort(this.sortItems);
+      html += `<details class="group ext-group" ${this.extOpen ? 'open' : ''}><summary class="group-head"><h3>External sites</h3><span class="n">${external.length}</span><span class="muted tiny">public websites — click to show</span></summary>${this.view === 'table' ? this.table(ext) : `<div class="bm-grid">${ext.map(e => this.tile(e)).join('')}</div>`}</details>`;
     }
     $('#bmBoard').innerHTML = html;
+    $('#bmBoard').classList.toggle('bm-table-view', this.view === 'table');
+    $('#bmWidthL').hidden = this.view === 'table';
   },
 };
 $('#bmSearch').addEventListener('input', () => Bookmarks.render());
@@ -2671,6 +2708,51 @@ $('#bmGroup').addEventListener('click', ev => {
   $$('#bmGroup button').forEach(x => x.classList.toggle('active', x === b));
   Bookmarks.render();
 });
+// Tiles / Table, tile width, and the table's columns (width and sort remembered)
+{
+  const board = $('#bmBoard'), seg = $('#bmViewSeg');
+  const mark = () => $$('button', seg).forEach(b => b.classList.toggle('active', b.dataset.v === Bookmarks.view));
+  mark();
+  seg.addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    Bookmarks.view = b.dataset.v; try { localStorage.setItem('bmView', b.dataset.v); } catch { /* private mode */ }
+    mark(); Bookmarks.render();
+  });
+  const setW = w => { board.style.setProperty('--bm-w', w + 'px'); $('#bmWidth').value = w; };
+  setW(+lsGet('bmTileW') || 300);
+  $('#bmWidth').addEventListener('input', ev => { setW(+ev.target.value); try { localStorage.setItem('bmTileW', ev.target.value); } catch { /* private mode */ } });
+  let widths = {}; try { widths = JSON.parse(localStorage.getItem('bmColW')) || {}; } catch { /* none */ }
+  for (const [i, w] of Object.entries(widths)) board.style.setProperty('--b' + i, w + 'px');
+  const saveW = () => { try { localStorage.setItem('bmColW', JSON.stringify(widths)); } catch { /* private mode */ } };
+  board.addEventListener('pointerdown', e => {
+    const grip = e.target.closest('[data-bmcol]'); if (!grip) return;
+    e.preventDefault(); e.stopPropagation();
+    const i = grip.dataset.bmcol, x0 = e.clientX, w0 = grip.parentElement.getBoundingClientRect().width;
+    grip.setPointerCapture(e.pointerId);
+    document.body.classList.add('dragging');
+    const move = ev => board.style.setProperty('--b' + i, clamp(w0 + ev.clientX - x0, 50, 1200) + 'px');
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', () => {
+      grip.removeEventListener('pointermove', move);
+      document.body.classList.remove('dragging');
+      widths[i] = parseInt(board.style.getPropertyValue('--b' + i)); saveW();
+    }, { once: true });
+  });
+  board.addEventListener('dblclick', e => {
+    const grip = e.target.closest('[data-bmcol]'); if (!grip) return;
+    board.style.removeProperty('--b' + grip.dataset.bmcol); delete widths[grip.dataset.bmcol]; saveW();
+  });
+  board.addEventListener('click', ev => {
+    const th = ev.target.closest('th[data-bmsort]');
+    if (!th || ev.target.closest('[data-bmcol]')) return;
+    ev.stopPropagation();
+    const k = th.dataset.bmsort, cur = Bookmarks.sort;
+    // first click: A→Z (most opened / most recent first for counts and dates); third click: back to the usual order
+    Bookmarks.sort = cur?.key !== k ? { key: k, dir: ['opened', 'last'].includes(k) ? -1 : 1 } : cur.dir === (['opened', 'last'].includes(k) ? -1 : 1) ? { key: k, dir: -cur.dir } : null;
+    try { localStorage.setItem('bmSort', JSON.stringify(Bookmarks.sort)); } catch { /* private mode */ }
+    Bookmarks.render();
+  }, true);
+}
 $('#bmBoard').addEventListener('toggle', ev => { if (ev.target.classList?.contains('ext-group')) Bookmarks.extOpen = ev.target.open; }, true);
 $('#bmBoard').addEventListener('click', async ev => {
   const t = ev.target.closest('button');

@@ -100,6 +100,10 @@
       <div class="seg" id="bmGroup">
         <button data-g="smart" class="active" title="Most used, recent, then by application">Smart</button><button data-g="folder" title="Your Edge/Chrome folders">Folders</button><button data-g="app">App</button><button data-g="site">Site</button><button data-g="env">Env</button>
       </div>
+      <div class="seg" id="bmViewSeg" title="Show bookmarks as tiles or as a table">
+        <button data-v="tiles">▦ Tiles</button><button data-v="table">☰ Table</button>
+      </div>
+      <label class="cardw muted tiny" id="bmWidthL" title="Tile width — drag to make tiles wider and see more of each name">▭ <input type="range" id="bmWidth" min="240" max="900" step="10"></label>
       <button id="bmAdd">+ Add</button>
       <label class="switch small" title="Read Edge and Chrome bookmarks on this PC each time this page opens"><input type="checkbox" id="bmSync"><span></span> Sync Edge/Chrome</label>
       <button id="bmSyncNow" title="Re-read browser bookmarks now">↻</button>

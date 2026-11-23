@@ -140,7 +140,8 @@ table.tbl { width: 100%; border-collapse: collapse; background: var(--panel); bo
 /* workspace + bookmarks */
 .ws { margin: -6px 6px 0; text-align: left; font-size: 12px; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border: none; border-radius: 6px; padding: 4px 8px; overflow: hidden; text-overflow: ellipsis; }
 .ws::before { content: "Workspace: "; color: var(--muted); font-weight: 400; }
-#bmBoard { columns: 300px; column-gap: 16px; }
+#bmBoard { columns: var(--bm-w, 300px); column-gap: 16px; }
+#bmBoard.bm-table-view { columns: auto; }
 #bmBoard .group { break-inside: avoid; }
 .bm-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
 .bm { display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: var(--radius); padding: 8px 10px; cursor: pointer; min-width: 0; }
@@ -935,3 +936,15 @@ body.side-collapsed:not(.side-top) .navhead:not(:first-child)::after { content: 
 
 .tabs .tabs-end { margin-left: auto; align-self: center; }
 #sftpDisconnect { margin-left: 8px; }
+
+/* Bookmarks table: full text (wraps), click a row to open */
+.bm-tbl td { overflow: visible; white-space: normal; overflow-wrap: anywhere; font-family: "Segoe UI", system-ui, sans-serif; font-size: 13px; }
+.bm-tbl td.mono { font-family: var(--mono); font-size: 12px; }
+.bm-tbl tbody tr { cursor: pointer; }
+.bm-tbl tbody tr:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.bm-tbl tr.env-PROD td:first-child { box-shadow: inset 3px 0 0 var(--prod); }
+.bm-tbl th[data-bmsort] { cursor: pointer; user-select: none; }
+.bm-tbl th { position: relative; }
+.bm-tbl .bm-tname { font-weight: 600; }
+.bm-ttools { white-space: nowrap; }
+@media (hover: hover) { .bm-tbl tr:not(:hover) .bm-ttools button { visibility: hidden; } }
