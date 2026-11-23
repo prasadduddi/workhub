@@ -39,6 +39,7 @@ const Settings = {
       <h4>Data</h4>
       ${row('📁 Data folder', `<code class="set-path">${esc(S.dataDir || '')}</code>`, btn('dataopen', 'Open') + btn('datacopy', 'Copy path') + btn('dataloc', 'Change…'))}
       ${row('🛟 Backups', `${latest ? 'Latest ' + esc(fmtDateTime(latest.when)) : 'None yet'}${backups.copy_to ? ` · also copied to <code class="set-path">${esc(backups.copy_to)}</code>` : ''}`, btn('backups', 'Manage…'))}
+      ${row('📸 Capture screenshots', 'Pictures you copy (Win+Shift+S, PrtScn) go into the capture thread — General, a thread with 📥 Capture here, or the one for a Jira key', sw('shots', !S.settings.no_shots))}
       ${row('📝 Save SSH session text', 'Keep what each terminal shows, per server and day, searchable', sw('slog', !!S.settings.session_log) + btn('slogopen', 'Logs…'))}
       ${row('Import data', 'From an older WorkHub data folder or a file', btn('import', 'Import…'))}
       <h4>Programs</h4>
@@ -86,6 +87,7 @@ $('#settingsBody').addEventListener('change', async e => {
     case 'menu': if ((t.value === 'top') !== document.body.classList.contains('side-top')) $('#sideFlip').click(); break;
     case 'slog': await saveSettings({ session_log: t.checked }); toast(t.checked ? 'SSH sessions you open from now on are saved' : 'SSH sessions are no longer saved'); break;
     case 'tray': Tray.set(t.checked); break;
+    case 'shots': await saveSettings({ no_shots: !t.checked }); toast(t.checked ? 'Copied screenshots go into the capture thread' : 'Screenshots are no longer captured'); break;
     case 'inst-desktop': case 'inst-startup': if (Settings.inst?.installed) Settings.install(); break; // not installed yet: used by Install
   }
 });

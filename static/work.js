@@ -262,7 +262,7 @@ const Work = {
           <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
           <div class="tcompose">
             <div class="tcol">${FMT_BAR}
-              <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Message ${esc(w.title)} — *bold* _italic_ \`code\` :emoji: · paste screenshots or drop files · Enter posts · ↑ edits your last post"></div>
+              <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Message ${esc(w.title)} — *bold* _italic_ \`code\` :emoji: · paste screenshots, drop files or Outlook emails · Enter posts · ↑ edits your last post"></div>
             </div>
             <button id="tsend" class="primary" title="Post (Enter)">Post</button>
           </div>
@@ -311,7 +311,7 @@ const Work = {
   // One message. prev: the message just above (to run on from the same sender).
   msgHTML(p, prev, rs = [], inPanel = false) {
     const at = new Date(p.at), time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const [name, icon] = SENDERS[p.kind] || SENDERS.note;
+    const [name, icon] = p.kind === 'note' && (p.from === 'Outlook' || p.from === 'Email') ? ['Email', '✉'] : SENDERS[p.kind] || SENDERS.note;
     const cont = prev && prev.kind === p.kind && !p.pinned && at - new Date(prev.at) < 5 * 60e3 && (p.kind !== 'capture' || prev.from === p.from);
     const remind = p.remind_at ? `<span class="tflag" title="Reminder ${esc(new Date(p.remind_at).toLocaleString())}">⏰</span>` : '';
     const head = cont ? '' : `<div class="thdr"><b class="tname">${name}</b><span class="ttime" title="${esc(at.toLocaleString())}">${time}</span>${p.from ? `<span class="tfrom" title="Copied from">from ${esc(p.from)}</span>` : ''}${p.edited ? '<span class="muted tiny">(edited)</span>' : ''}${p.pinned ? '<span class="tflag" title="Pinned">📌</span>' : ''}${p.saved ? '<span class="tflag" title="Saved for later">🔖</span>' : ''}${remind}</div>`;
@@ -715,8 +715,16 @@ page.addEventListener('dragleave', e => { if (e.target === page) page.classList.
 page.addEventListener('drop', async e => {
   if (!e.dataTransfer.files.length || !Work.current) return;
   e.preventDefault(); page.classList.remove('dragover');
-  toast(`Adding ${e.dataTransfer.files.length} file(s)…`);
-  insertAtCaret(await Work.storeFiles([...e.dataTransfer.files]));
+  const all = [...e.dataTransfer.files], mails = all.filter(f => /\.(msg|eml)$/i.test(f.name)), rest = all.filter(f => !mails.includes(f));
+  if (mails.length) { // emails dragged from Outlook: one message each (subject, sender, text, attachments)
+    const fd = new FormData(); mails.forEach(f => fd.append('file', f, f.name));
+    toast(`Adding ${mails.length} email(s)…`);
+    const r = await fetch(`/api/work/${Work.current.id}/email`, { method: 'POST', body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) toast(d.error || 'Couldn\'t read the email', true);
+    else { Work.current = await api('GET', '/api/work/' + Work.current.id); Work.render(true); Work.loadList(); toast(`✉ Added ${d.length} email${d.length > 1 ? 's' : ''}`); }
+  }
+  if (rest.length) { toast(`Adding ${rest.length} file(s)…`); insertAtCaret(await Work.storeFiles(rest)); }
 });
 
 // ---- Ctrl+K on the Tasks page: jump to a thread (Slack's quick switcher) ----
@@ -789,3 +797,32 @@ setInterval(() => Work.refresh(), 15 * 1000);
 function followTaskLink() { const m = location.hash.match(/^#tasks\/([0-9a-f]+)(?:\/([0-9a-f]+))?/); if (m) Work.loadList().then(() => Work.openLink(m[1], m[2])); }
 window.addEventListener('hashchange', followTaskLink);
 setTimeout(followTaskLink, 900);
+
+// ---- Ctrl+Alt+N: quick note to a thread, from anywhere (Desktop) ----
+const QuickNote = {
+  async open() {
+    if (!Work.list.length) await Work.loadList();
+    $('#quickNoteDlg')?.remove();
+    const d = document.createElement('dialog'); d.id = 'quickNoteDlg'; d.className = 'quicknote';
+    const def = Work.active() || Work.current?.id || Work.list[0]?.id;
+    const opts = [...Work.list].filter(w => !w.archived).sort((a, b) => (b.id === def) - (a.id === def) || b.starred - a.starred || new Date(b.updated) - new Date(a.updated));
+    d.innerHTML = `<div class="row"><b>📝 Quick note to</b><select>${opts.map(w => `<option value="${w.id}">${w.starred ? '★ ' : ''}${esc(w.title)}</option>`).join('')}</select></div>
+      <div class="tbox qbox" contenteditable="true" data-placeholder="Type the note… *bold* _italic_ \`code\` · Enter posts · Shift+Enter new line · Esc closes"></div>
+      <div class="row end"><button value="cancel">Cancel</button><button class="primary" value="post">Post</button></div>`;
+    document.body.append(d); d.showModal();
+    const box = $('.qbox', d), sel = $('select', d);
+    const post = async () => {
+      if (!box.textContent.trim() && !box.querySelector('img')) return;
+      const id = sel.value, html = slackBlocks(sanitizeHTML(box.innerHTML));
+      d.close();
+      try { await Work.post('note', { html }, id); toast(`📝 Posted to “${Work.list.find(w => w.id === id)?.title}”`); } catch (err) { toast(err.message, true); }
+    };
+    box.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); post(); } });
+    box.addEventListener('input', e => { if (e.inputType === 'insertText' && e.data && /[*_~`:]/.test(e.data.slice(-1))) slackType(box, e.data.slice(-1)); });
+    d.addEventListener('click', e => { const b = e.target.closest('button[value]'); if (b) b.value === 'post' ? post() : d.close(); });
+    d.addEventListener('close', () => d.remove());
+    box.focus();
+  },
+};
+window.whQuickNote = () => QuickNote.open();
+window.addEventListener('keydown', e => { if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'n') { e.preventDefault(); QuickNote.open(); } });

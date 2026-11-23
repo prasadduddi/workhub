@@ -115,6 +115,7 @@ type Settings struct {
 	ActiveThread  string       `json:"active_thread,omitempty"` // the task thread captures are added to: "" = General, "off" = none
 	SessionLog    bool         `json:"session_log,omitempty"`   // save the text of SSH sessions (sessionlog.go)
 	BackupCopy    string       `json:"backup_copy,omitempty"`   // second folder for backups, e.g. in OneDrive
+	NoShots       bool         `json:"no_shots,omitempty"`      // don't capture copied screenshots
 }
 
 // SavedQuery is a search kept in the sidebar, e.g. "PROD Batch" = env:prod app:batch.

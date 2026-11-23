@@ -579,6 +579,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/work/{id}/archive", a.handleWorkArchive)
 	mux.HandleFunc("POST /api/work/{id}/read", a.handleWorkRead)
 	mux.HandleFunc("POST /api/work/{id}/star", a.handleWorkStar)
+	mux.HandleFunc("POST /api/work/{id}/email", a.handleWorkEmail)
 	mux.HandleFunc("GET /api/work/saved", a.handleMarked(false))
 	mux.HandleFunc("GET /api/work/reminders", a.handleMarked(true))
 	mux.HandleFunc("POST /api/work/{id}/blocks", a.handleWorkAdd)

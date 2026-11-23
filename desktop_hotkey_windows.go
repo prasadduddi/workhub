@@ -3,7 +3,8 @@
 package main
 
 // Ctrl+Alt+W anywhere in Windows brings the WorkHub window to the front with
-// the search box ready (a system-wide hotkey, like a launcher).
+// the search box ready (a system-wide hotkey, like a launcher); Ctrl+Alt+N
+// opens a quick note for a thread.
 
 import (
 	"log"
@@ -20,6 +21,18 @@ var (
 	mainProcCallback = syscall.NewCallback(func(hwnd, msg, wp, lp uintptr) uintptr {
 		if r, ok := trayProc(hwnd, msg, wp, lp); ok { // close to the tray (desktop_tray_windows.go)
 			return r
+		}
+		if msg == 0x0312 && wp == 2 { // WM_HOTKEY Ctrl+Alt+N: quick note
+			if ic, _, _ := pIsIconic.Call(hwnd); ic != 0 {
+				pShowWindow.Call(hwnd, 9)
+			} else {
+				pShowWindow.Call(hwnd, 5)
+			}
+			pSetForegroundWin.Call(hwnd)
+			if mainHotkeyTarget != nil {
+				mainHotkeyTarget.Eval("window.whQuickNote && window.whQuickNote()")
+			}
+			return 0
 		}
 		if msg == 0x0312 && wp == 1 { // WM_HOTKEY
 			if ic, _, _ := pIsIconic.Call(hwnd); ic != 0 {
@@ -44,5 +57,8 @@ func registerHotkey(w webview2.WebView, hwnd uintptr) {
 	const modAlt, modControl, modNoRepeat = 0x1, 0x2, 0x4000
 	if ok, _, err := pRegisterHotKey.Call(hwnd, 1, modControl|modAlt|modNoRepeat, 'W'); ok == 0 {
 		log.Println("hotkey Ctrl+Alt+W not available (another program uses it):", err)
+	}
+	if ok, _, err := pRegisterHotKey.Call(hwnd, 2, modControl|modAlt|modNoRepeat, 'N'); ok == 0 {
+		log.Println("hotkey Ctrl+Alt+N not available (another program uses it):", err)
 	}
 }

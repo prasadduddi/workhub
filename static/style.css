@@ -1070,3 +1070,6 @@ body.side-collapsed:not(.side-top) .side { width: 84px; padding-right: 4px; }
   body.side-collapsed:not(.side-top) .navhead { padding-top: 6px; }
   body.side-collapsed:not(.side-top) .side { gap: 8px; }
 }
+.quicknote { width: min(560px, 92vw); }
+.quicknote select { flex: 1; min-width: 0; }
+.quicknote .qbox { min-height: 90px; margin: 8px 0; }
