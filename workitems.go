@@ -31,6 +31,8 @@ type WorkItem struct {
 	// "Show archived" is on).
 	Archived bool      `json:"archived,omitempty"`
 	General  bool      `json:"general,omitempty"` // the default thread for captures
+	Starred  bool      `json:"starred,omitempty"`
+	ReadAt   time.Time `json:"read_at,omitzero"` // posts after this are unread
 	Created  time.Time `json:"created"`
 	Updated  time.Time `json:"updated"`
 }
@@ -95,7 +97,7 @@ func (s *Store) SaveWorkItem(in WorkItem) WorkItem {
 		return *w
 	}
 	w := &WorkItem{ID: randomHex(8), Title: orDefault(strings.TrimSpace(in.Title), "New work item"), Status: orDefault(in.Status, "todo"),
-		Tags: in.Tags, Jira: jiraKeyOf(in.Jira), Blocks: []*Block{}, Created: now, Updated: now}
+		Tags: in.Tags, Jira: jiraKeyOf(in.Jira), Blocks: []*Block{}, Created: now, Updated: now, ReadAt: now}
 	s.st.WorkItems = append(s.st.WorkItems, w)
 	s.changed()
 	return *w
@@ -290,7 +292,7 @@ func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 				sb.WriteString(" " + strings.ToLower(b.File.Name))
 			}
 		}
-		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated, "archived": wi.Archived, "general": wi.General,
+		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated, "archived": wi.Archived, "general": wi.General, "starred": wi.Starred, "unread": wi.unread(),
 			"notes": n["text"], "links": n["link"], "images": n["image"], "files": n["file"], "posts": n["post"], "search": sb.String()})
 	}
 	writeJSON(w, out)

@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -25,6 +28,20 @@ type Post struct {
 	Parent string    `json:"parent,omitempty"` // a reply: the post it answers (one level)
 	Pinned bool      `json:"pinned,omitempty"` // shown at the top of the thread
 	Edited time.Time `json:"edited,omitzero"`
+	// Slack-style extras
+	Reactions []string  `json:"reactions,omitempty"` // emoji added to the post (✅ 👀 …)
+	Saved     bool      `json:"saved,omitempty"`     // 🔖 "Save for later"
+	RemindAt  time.Time `json:"remind_at,omitzero"`  // ⏰ "Remind me about this"
+	From      string    `json:"from,omitempty"`      // capture: the app/window it was copied from
+}
+
+// PostPatch changes parts of a post; nil fields stay as they are.
+type PostPatch struct {
+	HTML      *string    `json:"html"`
+	Pinned    *bool      `json:"pinned"`
+	Reactions *[]string  `json:"reactions"`
+	Saved     *bool      `json:"saved"`
+	RemindAt  *time.Time `json:"remind_at"` // zero time clears it
 }
 
 // migrateThreads turns each work item's document (or its older blocks) into
@@ -33,6 +50,9 @@ func (s *Store) migrateThreads() {
 	for _, w := range s.st.WorkItems {
 		if w.Jira == "" {
 			w.Jira = jiraKeyOf(w.Title) // "PAY-123 refunds" is linked to PAY-123
+		}
+		if w.ReadAt.IsZero() { // threads from before unread counts: all read
+			w.ReadAt = time.Now()
 		}
 		if len(w.Posts) > 0 {
 			continue
@@ -100,6 +120,10 @@ func (s *Store) AddPost(id string, p Post) (Post, error) {
 
 // EditPost changes a note's text (h != nil) and/or its pin (pin != nil).
 func (s *Store) EditPost(id, pid string, h *string, pin *bool) error {
+	return s.PatchPost(id, pid, PostPatch{HTML: h, Pinned: pin})
+}
+
+func (s *Store) PatchPost(id, pid string, in PostPatch) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	w := s.workItem(id)
@@ -108,17 +132,81 @@ func (s *Store) EditPost(id, pid string, h *string, pin *bool) error {
 	}
 	for _, p := range w.Posts {
 		if p.ID == pid {
-			if h != nil {
-				p.HTML, p.Edited = *h, time.Now()
+			if in.HTML != nil {
+				p.HTML, p.Edited = *in.HTML, time.Now()
 			}
-			if pin != nil {
-				p.Pinned = *pin
+			if in.Pinned != nil {
+				p.Pinned = *in.Pinned
+			}
+			if in.Reactions != nil {
+				p.Reactions = *in.Reactions
+			}
+			if in.Saved != nil {
+				p.Saved = *in.Saved
+			}
+			if in.RemindAt != nil {
+				p.RemindAt = *in.RemindAt
 			}
 			s.changed()
 			return nil
 		}
 	}
 	return errors.New("post not found")
+}
+
+// MarkRead: everything in the thread up to now has been seen.
+func (s *Store) MarkRead(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if w := s.workItem(id); w != nil {
+		w.ReadAt = time.Now()
+		s.changed()
+	}
+}
+
+func (s *Store) StarWork(id string, on bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w := s.workItem(id)
+	if w == nil {
+		return errors.New("thread not found")
+	}
+	w.Starred = on
+	s.changed()
+	return nil
+}
+
+// unread counts posts that arrived after the thread was last looked at.
+func (w *WorkItem) unread() int {
+	n := 0
+	for _, p := range w.Posts {
+		if p.At.After(w.ReadAt) {
+			n++
+		}
+	}
+	return n
+}
+
+// postRef is a post with its thread, for the Saved list and reminders.
+type postRef struct {
+	Thread string `json:"thread"`
+	Title  string `json:"title"`
+	Post   Post   `json:"post"`
+}
+
+// MarkedPosts lists saved posts, or posts with a reminder.
+func (s *Store) MarkedPosts(reminders bool) []postRef {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []postRef{}
+	for _, w := range s.st.WorkItems {
+		for _, p := range w.Posts {
+			if reminders && !p.RemindAt.IsZero() || !reminders && p.Saved {
+				out = append(out, postRef{w.ID, w.Title, *p})
+			}
+		}
+	}
+	return out
 }
 
 func (s *Store) DeletePost(id, pid string) error {
@@ -149,23 +237,68 @@ func (s *Store) DeletePost(id, pid string) error {
 // captureToThread adds copied text to the thread chosen with "Capture here"
 // or, when none is chosen, to the General thread; "off" means no thread
 // (called from Ingest, with s.mu held).
-func (s *Store) captureToThread(text, clipID string, now time.Time) {
+func (s *Store) captureToThread(text, clipID, from string, now time.Time) {
+	w := s.captureTarget(text, now)
+	if w == nil {
+		return
+	}
+	w.Posts = append(w.Posts, &Post{ID: randomHex(8), At: now, Kind: "capture", Text: text, Ref: clipID, From: from})
+	w.Updated = now
+}
+
+// captureTarget is the thread a capture goes to: the one with "Capture here";
+// else the thread linked to a Jira key mentioned in the text (PAY-123 →
+// the PAY-123 thread); else General. nil = none (off, or archived).
+func (s *Store) captureTarget(text string, now time.Time) *WorkItem {
 	var w *WorkItem
 	switch id := s.st.Settings.ActiveThread; id {
 	case "off":
-		return
+		return nil
 	case "":
-		w = s.generalThread(now)
 	default:
-		if w = s.workItem(id); w == nil { // that thread was deleted
-			w = s.generalThread(now)
+		w = s.workItem(id) // nil if that thread was deleted
+	}
+	if w == nil {
+		for _, k := range jiraKeysIn(text) {
+			for _, t := range s.st.WorkItems {
+				if t.Jira == k && !t.Archived {
+					return t
+				}
+			}
 		}
+		w = s.generalThread(now)
 	}
 	if w == nil || w.Archived {
-		return
+		return nil
 	}
-	w.Posts = append(w.Posts, &Post{ID: randomHex(8), At: now, Kind: "capture", Text: text, Ref: clipID})
+	return w
+}
+
+var reJiraKeyAll = regexp.MustCompile(`\b[A-Z][A-Z0-9_]+-\d+\b`)
+
+func jiraKeysIn(text string) []string { return reJiraKeyAll.FindAllString(text, 20) }
+
+// CaptureImage posts a copied picture (a screenshot) to the capture thread.
+func (s *Store) CaptureImage(png []byte, from string) (*WorkItem, error) {
+	name := "screenshot-" + time.Now().Format("2006-01-02-15-04-05") + ".png"
+	at, err := s.storeAttachment(name, png)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	w := s.captureTarget("", now)
+	if w == nil {
+		_ = os.Remove(filepath.Join(s.attachDir(), at.ID))
+		return nil, nil
+	}
+	w.Files = append(w.Files, at)
+	w.Posts = append(w.Posts, &Post{ID: randomHex(8), At: now, Kind: "capture", From: from,
+		HTML: fmt.Sprintf(`<p><img src="/api/props/files/%s" alt="%s"></p>`, at.ID, html.EscapeString(at.Name))})
 	w.Updated = now
+	s.changed()
+	return w, nil
 }
 
 // threadHTML is the thread as one document, for the Word copy: each post
@@ -255,20 +388,42 @@ func (a *App) handlePostAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handlePostEdit(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		HTML   *string `json:"html"`
-		Pinned *bool   `json:"pinned"`
-	}
+	var in PostPatch
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, 400, err)
 		return
 	}
-	if err := a.store.EditPost(r.PathValue("id"), r.PathValue("pid"), in.HTML, in.Pinned); err != nil {
+	if err := a.store.PatchPost(r.PathValue("id"), r.PathValue("pid"), in); err != nil {
 		writeErr(w, 404, err)
 		return
 	}
-	_, _ = a.store.writeWorkDocx(r.PathValue("id"))
+	if in.HTML != nil || in.Pinned != nil { // what the Word copy shows
+		_, _ = a.store.writeWorkDocx(r.PathValue("id"))
+	}
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (a *App) handleWorkRead(w http.ResponseWriter, r *http.Request) {
+	a.store.MarkRead(r.PathValue("id"))
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (a *App) handleWorkStar(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Starred bool }
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	if err := a.store.StarWork(r.PathValue("id"), in.Starred); err != nil {
+		writeErr(w, 404, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// handleMarked: GET /api/work/saved and /api/work/reminders.
+func (a *App) handleMarked(reminders bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.store.MarkedPosts(reminders)) }
 }
 
 func (a *App) handlePostDelete(w http.ResponseWriter, r *http.Request) {
@@ -288,7 +443,7 @@ func (s *Store) generalThread(now time.Time) *WorkItem {
 			return w
 		}
 	}
-	w := &WorkItem{ID: randomHex(8), Title: "General", Status: "doing", General: true, Blocks: []*Block{}, Created: now, Updated: now}
+	w := &WorkItem{ID: randomHex(8), Title: "General", Status: "doing", General: true, Blocks: []*Block{}, Created: now, Updated: now, ReadAt: now}
 	s.st.WorkItems = append(s.st.WorkItems, w)
 	s.changed()
 	return w

@@ -80,6 +80,7 @@ type Clip struct {
 	ID       string    `json:"id"`
 	Text     string    `json:"text"`
 	Source   string    `json:"source"`
+	From     string    `json:"from,omitempty"` // the app/window it was copied from
 	Project  string    `json:"project"`
 	Created  time.Time `json:"created"`
 	EntryIDs []string  `json:"entry_ids,omitempty"`
@@ -862,6 +863,11 @@ var selfLink = regexp.MustCompile(`(?i)(https?://(?:127\.0\.0\.1|localhost):\d+/
 var selfAddr = regexp.MustCompile(`(?i)^https?://(?:127\.0\.0\.1|localhost):\d+/?[^\s]*[?&]t=`)
 
 func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
+	return s.IngestFrom(text, source, "", project)
+}
+
+// IngestFrom is Ingest with where the text was copied from (app and window).
+func (s *Store) IngestFrom(text, source, from, project string) (*Clip, []EntryView) {
 	if selfLink.MatchString(text) {
 		if strings.TrimSpace(selfLink.ReplaceAllString(text, "")) == "" || strings.TrimSpace(selfLink.ReplaceAllString(text, "")) == "#tasks" {
 			return nil, nil // just WorkHub's own link
@@ -893,7 +899,7 @@ func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 		source = "outlook"
 	}
 	now := time.Now()
-	clip := &Clip{ID: randomHex(8), Text: text, Source: source, Project: project, Created: now}
+	clip := &Clip{ID: randomHex(8), Text: text, Source: source, From: from, Project: project, Created: now}
 
 	index := map[string]*Entry{}
 	for _, e := range s.st.Entries {
@@ -918,7 +924,7 @@ func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 	s.applyNameRules()
 	s.st.Clips = append(s.st.Clips, clip)
 	if source == "clipboard" || source == "paste" {
-		s.captureToThread(text, clip.ID, now)
+		s.captureToThread(text, clip.ID, from, now)
 	}
 	if len(s.st.Clips) > maxClips {
 		s.st.Clips = s.st.Clips[len(s.st.Clips)-maxClips:]

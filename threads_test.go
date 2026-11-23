@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"strings"
+	"time"
 	"testing"
 )
 
@@ -278,5 +279,46 @@ func TestGeneralThreadByDefault(t *testing.T) {
 	s.Ingest("ssh ops@srv-04.example.com", "clipboard", "")
 	if len(gen.Posts) != 1 {
 		t.Fatal("archived General still captured")
+	}
+}
+
+func TestSlackThreadEngine(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	w := s.SaveWorkItem(WorkItem{Title: "PAY-123 refund limits", Jira: "PAY-123"})
+	p, _ := s.AddPost(w.ID, Post{Kind: "note", HTML: "<p>first</p>"})
+	if got, _ := s.GetWorkItem(w.ID); got.unread() != 1 {
+		t.Fatalf("unread = %d, want 1", got.unread())
+	}
+	s.MarkRead(w.ID)
+	if got, _ := s.GetWorkItem(w.ID); got.unread() != 0 {
+		t.Fatal("still unread after reading")
+	}
+	r := []string{"✅", "👀"}
+	saved, when := true, time.Now().Add(time.Hour)
+	if err := s.PatchPost(w.ID, p.ID, PostPatch{Reactions: &r, Saved: &saved, RemindAt: &when}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.MarkedPosts(false); len(got) != 1 || got[0].Title != w.Title || len(got[0].Post.Reactions) != 2 {
+		t.Fatalf("saved: %+v", got)
+	}
+	if got := s.MarkedPosts(true); len(got) != 1 {
+		t.Fatalf("reminders: %+v", got)
+	}
+	_ = s.StarWork(w.ID, true)
+	if got, _ := s.GetWorkItem(w.ID); !got.Starred {
+		t.Fatal("not starred")
+	}
+	// a capture mentioning PAY-123 goes to its thread, not General
+	s.IngestFrom("deploy for PAY-123 on srv-09.example.com", "clipboard", "Outlook — RE: release", "")
+	got, _ := s.GetWorkItem(w.ID)
+	last := got.Posts[len(got.Posts)-1]
+	if last.Kind != "capture" || last.From != "Outlook — RE: release" {
+		t.Fatalf("routed capture: %+v", last)
+	}
+	// a screenshot goes to the capture thread as a picture
+	png := []byte("\x89PNG\r\n\x1a\n0000")
+	gen, err := s.CaptureImage(png, "Snipping Tool")
+	if err != nil || gen == nil || !gen.General || !strings.Contains(gen.Posts[len(gen.Posts)-1].HTML, "<img") {
+		t.Fatalf("screenshot: %v %+v", err, gen)
 	}
 }
