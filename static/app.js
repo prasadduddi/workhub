@@ -760,19 +760,20 @@ function dot(e) {
 function renderStats(list) {
   const today = new Date().toDateString();
   const capturedToday = S.clips.filter(c => new Date(c.created).toDateString() === today).length;
-  const stats = [
-    ['Hosts', new Set(list.map(e => (e.host || '').toLowerCase()).filter(Boolean)).size],
-    ['Entries', list.length],
-    ['Credentials', list.filter(e => e.username || e.has_password).length],
+  // Tiles only for what you can act on; the counts go in one line underneath.
+  const counts = [
+    ['hosts', new Set(list.map(e => (e.host || '').toLowerCase()).filter(Boolean)).size],
+    ['entries', list.length],
+    ['logins', list.filter(e => e.username || e.has_password).length],
     ['URLs', list.filter(e => e.url).length],
-    ['PROD', list.filter(e => e.env === 'PROD').length],
-    ['Captured today', capturedToday],
+    ['PROD', list.filter(e => e.env === 'PROD').length, 'env:PROD'],
   ];
   const fix = S.entries.filter(e => problems(e).length).length;
-  $('#stats').innerHTML = stats.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('')
-    + `<button class="stat act" id="retestBtn" title="Try every connection shown (SSH, SFTP/FTP, databases) with its saved login and update ✓ / ✗"><b>↻</b><span>Re-test ${list.filter(isConn).length} connections</span></button>`
+  $('#stats').innerHTML = (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing (user, password, environment, service name) or a failed login — click to list them"><b>⚠ ${fix}</b><span>Need attention</span></button>` : '')
     + ((n => n ? `<button class="stat inbox" data-find="is:unsorted" title="New captures you haven't looked at yet — each with a suggested folder"><b>📥 ${n}</b><span>New to sort</span></button>` : '')(S.entries.filter(e => e.unsorted).length))
-    + (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing (user, password, environment, service name) or a failed login — click to list them"><b>⚠ ${fix}</b><span>Need attention</span></button>` : '');
+    + `<button class="stat" data-view-go="inbox" title="Open Captured"><b>${capturedToday}</b><span>Captured today</span></button>`
+    + `<button class="stat act" id="retestBtn" title="Try every connection shown (SSH, SFTP/FTP, databases) with its saved login and update ✓ / ✗"><b>↻</b><span>Re-test ${list.filter(isConn).length} connections</span></button>`
+    + `<div class="stat-line">${counts.map(([k, v, f]) => f ? `<a href="#" data-find="${f}">${v} ${k}</a>` : `<span>${v} ${k}</span>`).join(' · ')}</div>`;
   $('#inboxCount').textContent = capturedToday || '';
 }
 
@@ -954,9 +955,17 @@ function warnChip(e) {
   return p.length ? `<button class="warnchip" data-act="edit" data-id="${e.id}" title="${esc(p.map(x => '• ' + x[1]).join('\n'))}\nClick to fill in${p.some(x => x[0] === 'password') ? ' (or tick “Logs in with a key / SSO”)' : ''}">⚠ ${p.length === 1 ? esc(p[0][1]) : p.length + ' to fix'}</button>` : '';
 }
 
+// The name on a card without the host (the card's title) or the user (its own
+// row): "Batch – acme-bat-01…-ops" shows as "Batch", "host-ops" as nothing.
+function cardName(e) {
+  const n = e.name || '', h = (e.host || '').toLowerCase(), rl = ruleLabel(e.host || e.url);
+  if (!h || !n.toLowerCase().includes(h)) return n === e.host ? '' : ruleName(e);
+  return rl && n.startsWith(rl) ? ruleName({ ...e, name: rl }) : '';
+}
+
 function svcHTML(e) {
   const rows = [];
-  const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, e.name !== e.host ? ruleName(e) : '', warnChip(e),
+  const label = [dot(e), (e.protocol || dbKindOf(e)) && `<span class="proto">${esc(e.protocol || dbKindOf(e))}</span>`, e.port && `<span class="proto">:${e.port}</span>`, cardName(e), warnChip(e),
     staleDays(e) && `<span class="stalechip" title="Not used, tested or captured for ${staleDays(e)} days — still right? Test it or delete it">💤 ${staleDays(e)} days</span>`].filter(Boolean).join(' ');
   if (label) rows.push(['', label]);
   if (e.unsorted) rows.push(['', unsortedRow(e)]);
@@ -970,15 +979,15 @@ function svcHTML(e) {
   Object.entries(e.extra || {}).filter(([k]) => k !== 'run_macros').forEach(([k, v]) => rows.push([esc(EXTRA_LABELS[k] || k) + (k === 'commands' ? (e.extra.run_macros === '1' ? ' ▶' : ' (off)') : ''), `<span class="copy" data-copy="${esc(v)}" style="white-space:pre-wrap">${esc(v)}</span>`]));
   if (e.tags?.length) rows.push(['Tags', `<span class="tag">${e.tags.map(esc).join(', ')}</span>`]);
   if (e.notes) rows.push(['Notes', `<span class="muted">${esc(e.notes)}</span>`]);
-  if (captureText(e)) rows.push(['Captured', `<span class="muted tiny">${esc(captureText(e))}</span>`]);
+  // where it was captured from is in Details (click the card)
   const acts = [
     canSSH(e) && `<button class="icon" data-act="ssh" data-id="${e.id}">SSH</button>`,
     canFiles(e) && `<button class="icon" data-act="sftp" data-id="${e.id}">${isFTP(e) ? 'FTP' : 'SFTP'}</button>`,
     canDB(e) && `<button class="icon" data-act="sql" data-id="${e.id}">SQL</button>`,
     e.url && `<button class="icon" data-act="open" data-id="${e.id}">Open</button>`,
-    External.items(e).length && `<button class="icon" data-act="ext" data-id="${e.id}" title="Open in the real PuTTY / SQL Developer / DBeaver">Open in ↗</button>`,
-    `<button class="icon" data-act="details" data-id="${e.id}">Details</button>`,
-    `<button class="icon" data-act="edit" data-id="${e.id}">Edit</button>`,
+    External.items(e).length && `<button class="icon sec" data-act="ext" data-id="${e.id}" title="Open in the real PuTTY / SQL Developer / DBeaver">Open in ↗</button>`,
+    `<button class="icon sec" data-act="details" data-id="${e.id}">Details</button>`,
+    `<button class="icon sec" data-act="edit" data-id="${e.id}">Edit</button>`,
     `<button class="icon more" data-act="more" data-id="${e.id}" title="More: copy, duplicate, move, delete…">⋯</button>`,
   ].filter(Boolean).join('');
   return `<div class="svc" data-detail="${e.id}" title="Click for full details">${rows.map(([k, v]) => k ? `<span class="k">${k}</span><span class="v">${v}</span>` : `<div class="svc-line">${v}</div>`).join('')}<div class="svc-actions">${acts}</div></div>`;
@@ -1154,7 +1163,11 @@ $('#detailClose').onclick = () => $('#detailDlg').close();
   if (s === '#search' && !$('#view-dashboard').classList.contains('active')) show('dashboard'); // results are on the dashboard
   S.kbSel = 0; renderBoard();
 }));
-$('#stats').addEventListener('click', ev => { const b = ev.target.closest('[data-find]'); if (b) { $('#search').value = b.dataset.find; S.kbSel = 0; renderBoard(); } });
+$('#stats').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-find]');
+  if (b) { ev.preventDefault(); $('#search').value = b.dataset.find; S.kbSel = 0; renderBoard(); }
+  if (ev.target.closest('[data-view-go]')) show(ev.target.closest('[data-view-go]').dataset.viewGo);
+});
 // Keyboard: ↑/↓ choose a result, Enter connects or opens it, Shift+Enter shows
 // its details, Alt+P / U / H / J copy password, user, host, JDBC or URL.
 $('#search').addEventListener('keydown', ev => {
@@ -1923,7 +1936,7 @@ const Tree = {
     const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
     const dbOpen = isDb && SQL.expanded.has(e.id);
     out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
-      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${label || ruleName(e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
+      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${dot(e)} ${canDB(e) ? '🛢' : '🖥'} <span class="nm">${label || ruleName(e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) || e.name !== e.host ? `<small>${esc(target)}</small>` : e.username ? `<small>${esc(e.username)}</small>` : ''}${live ? '<span class="live">●</span>' : ''}</div>`;
     if (dbOpen) {
       const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
       if (dbt) out += SQL.treeHTML(dbt, depth + 1);
@@ -3540,7 +3553,7 @@ $$('.with-tree').forEach(wt => {
     store.set(key + '.hidden', hidden);
     fitActiveTerm();
   };
-  setW(store.get(key + '.w', 270));
+  if (store.get(key + '.w', 0)) setW(store.get(key + '.w', 0)); // else the CSS default, which grows with the screen
   if (store.get(key + '.hidden', false)) { wt.classList.add('tree-hidden'); knob.textContent = '›'; }
   dragBar(bar, {
     start: () => wt.classList.contains('tree-hidden') ? 0 : $('.tree-host', wt).getBoundingClientRect().width,

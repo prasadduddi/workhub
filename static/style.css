@@ -49,7 +49,7 @@ body.side-collapsed #sideSplit { display: none; }
 
 /* resize bars */
 .vsplit { width: 8px; flex: none; cursor: col-resize; position: relative; border-radius: 4px; touch-action: none; }
-.vsplit::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; border-radius: 1px; background: transparent; }
+.vsplit::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; border-radius: 1px; background: color-mix(in srgb, var(--border) 70%, transparent); } /* a faint line shows it can be dragged */
 .vsplit:hover::after, .vsplit.drag::after { background: var(--accent); }
 .vsplit .knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 16px; height: 40px; padding: 0; font-size: 12px; line-height: 1; border-radius: 8px; z-index: 2; opacity: 0; transition: opacity .15s; }
 .vsplit:hover .knob, .tree-hidden .vsplit .knob { opacity: 1; }
@@ -88,9 +88,12 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .seg button:first-child { border-radius: 6px 0 0 6px; } .seg button:last-child { border-radius: 0 6px 6px 0; }
 .seg button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
-.stat b { display: block; font-size: 22px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 220px)); gap: 10px; margin-bottom: 14px; }
+.stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; text-align: left; font: inherit; color: inherit; }
+button.stat { cursor: pointer; }
+.stat b { display: block; font-size: 20px; }
+.stat-line { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.stat-line a { color: inherit; text-decoration: underline dotted; }
 .stat span { color: var(--muted); font-size: 12px; }
 
 .group { margin-bottom: 18px; }
@@ -119,6 +122,8 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .copy { cursor: pointer; border-bottom: 1px dotted var(--muted); }
 .copy:hover { color: var(--accent); }
 .svc-actions { grid-column: 1 / -1; display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+/* Open in / Details / Edit appear when the pointer is over the connection (always on touch screens) */
+@media (hover: hover) { .svc:not(:hover):not(:focus-within):not(.kbsel) .svc-actions .sec { display: none; } }
 .star { cursor: pointer; color: var(--muted); } .star.on { color: #e0a800; }
 .ulabel { font-family: "Segoe UI", system-ui, sans-serif; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--text); background: var(--panel2); border-radius: 4px; padding: 1px 6px; margin-right: 6px; }
 .rname { font-weight: 600; } .rname::before, .ulabel::before, .tnode .rlabel::before, .appgrid .rlabel::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--lc, var(--muted)); margin-right: 5px; vertical-align: 1px; } /* app colour as a dot */
@@ -435,7 +440,7 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .termhost.active { display: block; }
 
 /* connection tree */
-.with-tree { display: grid; grid-template-columns: var(--tree-w, 310px) 8px minmax(0, 1fr); gap: 2px; flex: 1; min-height: 0; }
+.with-tree { display: grid; grid-template-columns: var(--tree-w, clamp(310px, 26vw, 440px)) 8px minmax(0, 1fr); gap: 2px; flex: 1; min-height: 0; }
 .with-tree.tree-hidden { grid-template-columns: 0 8px minmax(0, 1fr); }
 .with-tree.tree-hidden .tree-host { display: none; }
 .tree-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }

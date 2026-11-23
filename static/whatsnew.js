@@ -6,6 +6,7 @@
 const RELEASES = [
   { v: '1.9.4', title: 'Logins grouped by server', items: [
     ['🗂', 'One server, its users underneath', 'In the SSH and FTP trees, a server with several logins shows once (with 👤 and the number of users); its users are listed under it. Double-click a user to connect as them; right-click the server to add another login.', 'terminal'],
+    ['🧹', 'Tidier dashboard and trees', 'The dashboard shows only tiles you can act on (Need attention, New to sort, Captured today, Re-test) with the counts in one line. Cards are about half the height: the host isn’t repeated, Open in / Details / Edit appear when you point at a connection, and where it was captured from is in Details. The server tree is wider on big screens (drag its edge to resize) and users under a server take one line.', ''],
     ['↻', 'Restart now or at next start', 'Update now tells you WorkHub will restart and asks: ↻ Restart now, or Update at next start — the new version is installed and starts the next time you open WorkHub, so you can finish what you are doing.', ''],
   ] },
   { v: '1.9.3', title: 'Several users on one server', items: [
