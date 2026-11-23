@@ -1653,13 +1653,15 @@ const Term = {
   renderTabs() {
     $('#termTabs').innerHTML = this.tabs.map(t => `<div class="tab ${t === this.active ? 'active' : ''} ${!t.local && t.entry.env === 'PROD' ? 'prod' : ''}" data-t="${t.id}" ${!t.local && t.entry.env === 'PROD' ? 'title="PRODUCTION server"' : ''}>
       <span style="color:${t.closed ? 'var(--muted)' : 'var(--ok)'}">●</span>${!t.local && t.entry.env === 'PROD' ? '<span class="badge PROD">PROD</span>' : ''}${typeof Groups !== 'undefined' ? Groups.chip(t.local ? t.local.label + ' ' + t.local.dir : Groups.entryText(t.entry)) : ''}${t.local ? '⌨ ' + esc(t.local.label) : esc((t.creds.username || t.entry.username || '') + '@' + t.entry.host)}
-      <span class="x" data-x="${t.id}">✕</span></div>`).join('');
+      <span class="x" data-x="${t.id}">✕</span></div>`).join('')
+      + (this.tabs.filter(t => !t.local && !t.closed).length > 1 ? '<button class="icon tabs-end" data-xall title="Close every SSH terminal (command prompts on this PC stay)">⏏ Disconnect all</button>' : '');
     $('#termCount').textContent = this.tabs.filter(t => !t.closed).length || '';
   },
 };
 function fitActiveTerm() { if (Term.active) requestAnimationFrame(() => Term.active.fit.fit()); }
 window.addEventListener('resize', fitActiveTerm);
 $('#termTabs').addEventListener('click', e => {
+  if (e.target.closest('[data-xall]')) return Term.tabs.filter(t => !t.local && !t.closed).forEach(t => Term.close(t));
   const x = e.target.closest('[data-x]');
   if (x) return Term.close(Term.tabs.find(t => t.id === x.dataset.x));
   const tab = e.target.closest('[data-t]');
@@ -1793,6 +1795,7 @@ Remote.connect = async e => {
     Remote.entry = e;
     $$('#remotePane [data-needs-conn]').forEach(b => { b.disabled = false; b.title = ''; });
     $('#sftpLabel').textContent = `${r.protocol.toUpperCase()}  ${creds.username || e.username || 'anonymous'}@${e.host}`;
+    $('#sftpDisconnect').hidden = false;
     Tree.render();
     toast('Connected to ' + e.host);
     Remote.load(r.home);
@@ -1801,6 +1804,36 @@ Remote.connect = async e => {
     toast(err.message, true);
   }
 };
+
+// ⏏ Disconnect: close the FTP/SFTP session; the pane goes back to "Not connected".
+Remote.disconnect = () => {
+  if (!Remote.sid) return;
+  const host = Remote.entry?.host || '';
+  api('POST', '/api/sftp/close', { sid: Remote.sid }).catch(() => {});
+  Object.assign(Remote, { sid: null, entry: null, items: [], path: '', parent: '' });
+  Remote.sel.clear();
+  $('#sftpLabel').textContent = 'Not connected';
+  $('#sftpDisconnect').hidden = true;
+  $$('#remotePane [data-needs-conn]').forEach(b => { b.disabled = true; b.title = 'Connect to a server first'; });
+  $('.path', Remote.root).value = '';
+  $('.listing', Remote.root).innerHTML = '<div class="empty">Double-click a server in the tree to connect.<br>Drop files here to upload.</div>';
+  xferHint(); Tree.render();
+  toast('Disconnected' + (host ? ' from ' + host : ''));
+};
+$('#sftpDisconnect').onclick = () => Remote.disconnect();
+
+// ☰ → Disconnect all: every SSH terminal, FTP session and database (command
+// prompts on this PC stay open).
+function openSessions() {
+  return { ssh: Term.tabs.filter(t => !t.local && !t.closed), ftp: Remote.sid ? 1 : 0, sql: SQL.tabs.length };
+}
+function disconnectAll() {
+  const o = openSessions();
+  o.ssh.forEach(t => Term.close(t));
+  if (o.ftp) Remote.disconnect();
+  [...SQL.tabs].forEach(t => SQL.close(t));
+  toast(`Disconnected ${[o.ssh.length && `${o.ssh.length} SSH`, o.ftp && 'FTP', o.sql && `${o.sql} database${o.sql > 1 ? 's' : ''}`].filter(Boolean).join(', ')}`);
+}
 
 $('#remotePane').addEventListener('click', e => {
   const m = e.target.closest('[data-ftpmore]'); if (!m) return;
@@ -2165,11 +2198,14 @@ const Tree = {
       if (canDB(e)) {
         const t = SQL.tabs.find(x => x.entry.id === e.id);
         items.push(['Open in SQL', () => SQL.open(e)]);
-        if (t) items.push(['Reconnect', () => SQL.reconnect(t)], ['Disconnect', () => SQL.close(t)]);
+        if (t) items.push(['Reconnect', () => SQL.reconnect(t)], ['⏏ Disconnect', () => SQL.close(t)]);
         else items.push(['Connect and show tables', () => SQL.toggleConn(e)]);
       }
       if (canSSH(e)) items.push(['Open SSH terminal', () => Term.open(e)]);
+      const tabs = Term.tabs.filter(t => t.entry?.id === e.id && !t.local && !t.closed);
+      if (tabs.length) items.push([`⏏ Disconnect SSH${tabs.length > 1 ? ` (${tabs.length} terminals)` : ''}`, () => tabs.forEach(t => Term.close(t))]);
       if (canFiles(e)) items.push([`Open in FTP (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
+      if (Remote.sid && Remote.entry?.id === e.id) items.push(['⏏ Disconnect FTP', () => Remote.disconnect()]);
       if (External.items(e).length) items.push('-', ...External.items(e));
       if (canSSH(e) && e.extra?.tunnels) {
         const off = e.extra.tunnels_off === '1', auto = e.extra.tunnels_auto === '1';

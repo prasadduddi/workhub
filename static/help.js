@@ -59,6 +59,10 @@ const HELP_TOPICS = [
     'Right-click a connection of that user (in a tree, or ⋯ on its card) → 🔑 Change … password everywhere. Or ☰ → Change a password everywhere and pick the user.',
     'Type the new password. Every connection that logs in as that user is listed and ticked — untick any that keep the old one.',
     'Change password saves it (the old one stays in history) and, with the box ticked, tests them all.'] },
+  { t: 'Disconnect from a server', k: 'disconnect close end logout session stop ssh ftp sftp sql all', v: 'terminal', s: [
+    'Right-click the connected server (green ● in the tree) → ⏏ Disconnect SSH, ⏏ Disconnect FTP or ⏏ Disconnect (databases).',
+    'Or: ✕ on an SSH tab / ⏏ Disconnect all on the SSH tab bar; ⏏ Disconnect next to the server name on the FTP page; ⏏ Disconnect in the SQL window.',
+    '☰ → Disconnect all closes every SSH, FTP and database session at once.'] },
   { t: 'Use the server tree with the keyboard', k: 'keyboard keys arrow tree navigate move enter connect fold open', v: 'terminal', s: [
     'Click in the SSH, FTP or SQL tree (or Tab to it).',
     '↑ ↓ move, Home / End jump to the top / bottom.',

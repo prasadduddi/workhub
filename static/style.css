@@ -932,3 +932,6 @@ body.side-collapsed:not(.side-top) .navhead:not(:first-child)::after { content: 
 #masterDlg label { display: block; margin-top: 8px; }
 #masterDlg input { width: 100%; box-sizing: border-box; }
 .rec-code { display: block; font-size: 18px; letter-spacing: .08em; text-align: center; padding: 10px; background: var(--panel2); border: 1px dashed var(--border); border-radius: 8px; }
+
+.tabs .tabs-end { margin-left: auto; align-self: center; }
+#sftpDisconnect { margin-left: 8px; }

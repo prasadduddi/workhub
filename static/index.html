@@ -178,7 +178,7 @@
       </div>
       <div class="pane" id="remotePane">
         <div class="pane-head">
-          <b id="sftpLabel">Not connected</b>
+          <b id="sftpLabel">Not connected</b><button id="sftpDisconnect" hidden title="Close the connection to this server">⏏ Disconnect</button>
           <span class="spacer"></span><button data-act="mkdir" data-needs-conn disabled title="Connect to a server first">New folder</button><button data-ftpmore data-needs-conn disabled title="Rename or delete the selected files (connect to a server first)">⋯</button><span hidden><button data-act="rename" data-needs-conn disabled>Rename</button><button data-act="delete" data-needs-conn disabled>Delete</button></span><button data-act="refresh">↻</button>
         </div>
         <div class="pathbar"><button data-act="up">↑</button><input class="path"></div>

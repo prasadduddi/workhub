@@ -4,6 +4,9 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.9.6', title: 'Disconnect', items: [
+    ['⏏', 'Disconnect SSH, FTP and SQL', 'Right-click a connected server (green ●) → ⏏ Disconnect SSH / FTP. FTP has a ⏏ Disconnect button next to the server name, SSH a ⏏ Disconnect all on the tab bar, and ☰ → Disconnect all closes every session (command prompts on this PC stay).', 'terminal'],
+  ] },
   { v: '1.9.5', title: 'Attachments download, data folder shown, more login lists', items: [
     ['📁', 'Where your data is', '☰ shows your data folder — click to open it in Explorer, or copy its path. Data location… shows the current folder before you change it.', ''],
     ['⬇', 'Click an attachment to download it', 'In task threads, clicking a 📎 file saves it to your Downloads folder instead of opening a browser tab (older posts too).', 'work'],
