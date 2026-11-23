@@ -463,6 +463,8 @@ func (s *Store) Bulk(ids []string, op, value string) (int, error) {
 			e.Project = orDefault(strings.TrimSpace(value), "General")
 		case "env":
 			e.Env = strings.ToUpper(strings.TrimSpace(value))
+		case "type": // e.g. a pasted host that is really an Oracle database
+			e.Protocol = strings.ToLower(strings.TrimSpace(value))
 		case "password": // a changed password, set on every login of that user
 			if value == e.Password {
 				continue

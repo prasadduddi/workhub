@@ -890,8 +890,8 @@ function renderBoard() {
     board.innerHTML = `<div class="empty">Nothing collected yet.<br><br>Turn on <b>Watch clipboard</b> and copy text that contains hosts, URLs or logins,<br>or paste it on the <b>Captured</b> page.</div>`;
     return;
   }
-  const jira = jiraMatches($('#search').value), threads = threadMatches($('#search').value);
-  if (!list.length && !jira.length && !threads.length) { board.innerHTML = '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); Saved.render(); return; }
+  const jira = jiraMatches($('#search').value), threads = threadMatches($('#search').value), more = Everything.count($('#search').value);
+  if (!list.length && !jira.length && !threads.length && !more) { board.innerHTML = '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); Saved.render(); return; }
   const keyOf = {
     env: e => e.env || 'No environment', protocol: e => e.protocol || 'other', status: e => ({ ok: 'Working', fail: 'Failed' }[e.status] || 'Not tried'),
     host: e => e.host || e.url || e.name, none: () => 'All', project: e => e.project || 'General',
@@ -903,14 +903,15 @@ function renderBoard() {
   const fixNote = S.fixes ? `<div class="fuzzy-note">No exact match — showing ${Object.entries(S.fixes).map(([a, b]) => `<b>${esc(b)}</b> for “${esc(a)}”`).join(', ')}. <a href="#" data-usefix>Use this spelling</a></div>` : '';
   const inbox = list.filter(e => e.unsorted), sortable = inbox.filter(suggestPlace).length;
   const inboxNote = /\bis:(unsorted|new)\b/.test($('#search').value) && inbox.length ? `<div class="fuzzy-note">📥 ${inbox.length} new capture(s) to sort. ${sortable ? `<button class="primary" data-acceptall>✓ Move all ${sortable} to their suggested folders</button>` : ''} <button data-keepall>Keep all where they are</button></div>` : '';
-  if (S.layout === 'grid') { board.innerHTML = fixNote + inboxNote + gridHTML(list) + threadResultsHTML(threads) + jiraResultsHTML(jira); markKbSel(); Bulk.bar(); return; }
+  const rest = threadResultsHTML(threads) + Everything.html($('#search').value) + jiraResultsHTML(jira), recent = RecentCaps.html();
+  if (S.layout === 'grid') { board.innerHTML = recent + fixNote + inboxNote + gridHTML(list) + rest; markKbSel(); Bulk.bar(); return; }
   // Searching: the group holding the best match comes first (Object keys keep list order).
-  board.innerHTML = fixNote + inboxNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
+  board.innerHTML = recent + fixNote + inboxNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
     const items = groups[g];
     const body = S.layout === 'table' ? tableHTML(items) : cardsHTML(items);
     return `<div class="group"><div class="group-head"><h3>${esc(g)}</h3><span class="n">${items.length}</span>
       ${S.groupBy === 'project' ? `<button class="icon ghost" data-act="rename-project" data-project="${esc(g)}" title="Rename project">✎</button>` : ''}</div>${body}</div>`;
-  }).join('') + threadResultsHTML(threads) + jiraResultsHTML(jira);
+  }).join('') + rest;
   markKbSel();
   Bulk.bar();
 }
@@ -953,6 +954,71 @@ function threadResultsHTML(list) {
     `<div class="card tcard" data-thread="${w.id}" title="Open the thread"><div class="card-head">${st(w)} <b>${esc(w.title)}</b><span class="spacer"></span><span class="muted tiny">${fmtTime(w.updated)} · ${w.posts || 0} posts</span></div>
       ${snippet(w) ? `<div class="muted tiny tsnip">${maskedText(snippet(w))}</div>` : ''}</div>`).join('')}</div></div>`;
 }
+
+// The rest of "search everything": notes, Folders files and captured text.
+// Notes and files come from the server, so they arrive a moment later and the
+// board is drawn again.
+const Everything = {
+  key: null, notes: [], files: [], timer: null,
+  words(q) { const { words, filters } = parseQuery(q.trim().toLowerCase()); return filters.length ? [] : words.filter(w => !w.neg).map(w => w.v); },
+  refresh(q) {
+    const ws = this.words(q), key = ws.join(' ');
+    if (key === this.key) return;
+    this.key = key; clearTimeout(this.timer);
+    this.notes = []; this.files = [];
+    if (!ws.length) return;
+    this.timer = setTimeout(async () => {
+      const [notes, files] = await Promise.all([api('GET', '/api/notes').catch(() => []), api('GET', '/api/ref/search?full=1&q=' + encodeURIComponent(key)).catch(() => [])]);
+      if (this.key !== key) return; // typed on meanwhile
+      this.notes = (notes || []).filter(n => ws.every(w => `${n.title || ''} ${n.body || ''}`.toLowerCase().includes(w)));
+      this.files = files || [];
+      if ((this.notes.length || this.files.length) && $('#view-dashboard').classList.contains('active')) renderBoard();
+    }, 200);
+  },
+  clips(q) {
+    const ws = this.words(q);
+    return ws.length ? S.clips.filter(c => ws.every(w => (c.text || '').toLowerCase().includes(w))).slice(0, 12) : [];
+  },
+  count(q) { this.refresh(q); return this.notes.length + this.files.length + this.clips(q).length; },
+  // A few words around the first match, passwords dotted out.
+  snip(text, ws) {
+    const t = (text || '').replace(/\s+/g, ' '), low = t.toLowerCase(), i = Math.max(0, ...ws.map(w => low.indexOf(w)).filter(i => i >= 0).slice(0, 1));
+    return (i > 50 ? '…' : '') + t.slice(Math.max(0, i - 50), i + 130) + (i + 130 < t.length ? '…' : '');
+  },
+  html(q) {
+    const ws = this.words(q), clips = this.clips(q);
+    const group = (icon, title, items) => items.length ? `<div class="group"><div class="group-head"><h3>${icon} ${title}</h3><span class="n">${items.length}</span></div><div class="cards">${items.join('')}</div></div>` : '';
+    return group('📝', 'Notes', this.notes.map(n => `<div class="card tcard" data-gonote="${esc(n.id)}" title="Open the note"><div class="card-head"><b>${esc(n.title || 'Untitled')}</b><span class="spacer"></span><span class="muted tiny">${fmtTime(n.updated)}</span></div>
+        <div class="muted tiny tsnip">${maskedText(this.snip(n.body, ws))}</div></div>`))
+      + group('📁', 'Folders', this.files.map(f => `<div class="card tcard" data-goref="${esc(f.path)}" title="Show in Folders"><div class="card-head"><b>${esc(f.path.split('/').pop())}</b><span class="spacer"></span><span class="muted tiny">${esc(f.path.split('/').slice(0, -1).join(' / '))}</span></div>
+        ${f.snip ? `<div class="muted tiny tsnip">${maskedText(f.snip)}</div>` : ''}</div>`))
+      + group('📋', 'Captured text', clips.map(c => `<div class="card tcard" data-goclip="${esc(c.id)}" title="Show on the Captured page"><div class="card-head"><b>${esc(fmtTime(c.created))}</b>${c.from ? `<span class="muted tiny">from ${esc(c.from)}</span>` : ''}<span class="spacer"></span><span class="muted tiny">${(c.entry_ids || []).length} item(s)</span></div>
+        <div class="muted tiny tsnip">${maskedText(this.snip(c.text, ws))}</div></div>`));
+  },
+};
+
+// The last few captures on the dashboard, with what each one became — a
+// paste that wasn't read as expected shows straight away and can be fixed.
+const RecentCaps = {
+  open: (() => { try { return localStorage.getItem('recentOpen') !== '0'; } catch { return true; } })(),
+  // Hosts saved without any type: offer the likely ones.
+  untyped: e => !!e.host && !e.protocol && !dbKindOf(e) && !e.url,
+  html() {
+    if ($('#search').value.trim()) return '';
+    const clips = S.clips.filter(c => Date.now() - new Date(c.created) < 7 * 864e5).slice(0, 5);
+    if (!clips.length) return '';
+    const kind = e => this.untyped(e) ? 'no type yet' : canDB(e) ? `SQL · ${dbKindOf(e)}` : canSSH(e) && e.protocol ? 'SSH' : canFiles(e) ? 'Files' : /^https?:/i.test(e.url || '') ? 'Link' : e.host ? 'Host (no type)' : 'Login';
+    const rows = clips.map(c => {
+      const es = (c.entry_ids || []).map(byId).filter(Boolean);
+      const first = (c.text || '').trim().split('\n')[0];
+      const chips = es.map(e => `<span class="rc-item"><span class="chip" data-recent="${e.id}" title="Show details">${dot(e)} ${esc(ruleName(e).replace(/<[^>]*>/g, '') || e.host || e.url || e.username)} <span class="muted tiny">${esc(kind(e))}</span></span>${this.untyped(e)
+        ? `<span class="muted tiny">Is it</span>${[['oracle', 'Oracle'], ['postgres', 'Postgres'], ['ssh', 'SSH']].map(([v, t]) => `<button class="icon ghost" data-settype="${v}" data-id="${e.id}">${t}</button>`).join('')}<span class="muted tiny">?</span>` : ''}</span>`).join('');
+      return `<div class="rc-row"><span class="muted tiny rc-when">${esc(fmtTime(c.created))}</span><span class="rc-text" data-goclip="${esc(c.id)}" title="Show on the Captured page">${maskedText(first.length > 90 ? first.slice(0, 90) + '…' : first)}</span>
+        <span class="rc-chips">${chips || '<span class="muted tiny">nothing recognised</span>'}</span></div>`;
+    }).join('');
+    return `<details class="recentcap" ${this.open ? 'open' : ''}><summary>🕘 Recently captured <span class="muted tiny">last 7 days</span><span class="spacer"></span><a href="#" data-allclips class="tiny">All captures →</a></summary>${rows}</details>`;
+  },
+};
 
 function jiraResultsHTML(list) {
   if (!list.length) return '';
@@ -1060,6 +1126,9 @@ function tableHTML(items) {
     items.map(e => `<tr data-detail="${e.id}" class="${Bulk.picked.has(e.id) ? 'picked' : ''}" title="Click for full details"><td><input type="checkbox" data-pick="${e.id}" ${Bulk.picked.has(e.id) ? 'checked' : ''}></td>${cols.map(i => `<td>${cell[i](e)}</td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
 }
 
+$('#board').addEventListener('toggle', ev => {
+  if (ev.target.classList?.contains('recentcap')) { RecentCaps.open = ev.target.open; try { localStorage.setItem('recentOpen', RecentCaps.open ? '1' : '0'); } catch { /* ignore */ } }
+}, true);
 $('#board').addEventListener('contextmenu', ev => {
   const d = ev.target.closest('[data-detail]'); if (!d || ev.target.closest('a, input')) return;
   ev.preventDefault();
@@ -1068,6 +1137,19 @@ $('#board').addEventListener('contextmenu', ev => {
 $('#board').addEventListener('click', async ev => {
   const jo = ev.target.closest('[data-jopen]'); if (jo) return openExternal(jo.dataset.jopen);
   const th = !ev.target.closest('[data-eye]') && ev.target.closest('[data-thread]'); if (th) return Work.open(th.dataset.thread);
+  const gn = ev.target.closest('[data-gonote]'); if (gn) { show('notes'); return Notes.open('note:' + gn.dataset.gonote); }
+  const gr = ev.target.closest('[data-goref]');
+  if (gr) { const p = gr.dataset.goref; for (let x = Ref.parent(p); x; x = Ref.parent(x)) Ref.open.add(x); Ref.sel = p; Ref.persist(); return show('ref'); }
+  const gc = ev.target.closest('[data-goclip]');
+  if (gc) { show('inbox'); return setTimeout(() => { const el = $(`#clips [data-clip="${gc.dataset.goclip}"]`); if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); } }, 50); }
+  if (ev.target.closest('[data-allclips]')) { ev.preventDefault(); return show('inbox'); }
+  const st = ev.target.closest('[data-settype]');
+  if (st) {
+    try { await api('POST', '/api/entries/bulk', { ids: [st.dataset.id], op: 'type', value: st.dataset.settype }); toast(`Saved as ${st.textContent}` + (st.dataset.settype === 'ssh' ? '' : ' — it is now in SQL')); poll(); }
+    catch (err) { toast(err.message, true); }
+    return;
+  }
+  const rc = ev.target.closest('[data-recent]'); if (rc) return showDetails(byId(rc.dataset.recent));
   const jr = ev.target.closest('[data-jira]');
   if (jr) { show('jira'); Jira.sel = 'i:' + jr.dataset.jira; const j = Jira.issues.find(x => x.key === jr.dataset.jira); Jira.open.add(j?.done ? 'f:done' : 'f:open'); Jira.open.delete('-f:open'); return Jira.render(); }
   const c = ev.target.closest('[data-copy]');
@@ -1173,6 +1255,27 @@ function detailRows(e) {
   ].filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '');
   return rows;
 }
+// What gets pasted into other tools: [label, text shown, text copied].
+function readyStrings(e) {
+  const out = [], u = e.username || '', pw = e.password || '';
+  if (canDB(e)) {
+    const kind = dbKindOf(e), svc = dbService(e), port = e.port || (kind === 'oracle' ? 1521 : 5432), name = svc?.name || '';
+    out.push(['JDBC', jdbcURL(e), jdbcURL(e)]);
+    if (kind === 'oracle') {
+      const ez = svc?.sid ? `${e.host}:${port}:${name}` : `${e.host}:${port}/${name}`;
+      out.push(['Host:port/service', ez, ez]);
+      if (u && !svc?.sid) { const at = `@//${e.host}:${port}/${name}`; out.push(['sqlplus', `sqlplus ${u}${pw ? '/' + PW_MASK : ''}${at}`, `sqlplus ${u}${pw ? '/' + pw : ''}${at}`]); }
+    } else {
+      const t = `psql "host=${e.host} port=${port} dbname=${name || 'postgres'}${u ? ' user=' + u : ''}"`;
+      out.push(['psql', t, t]);
+    }
+  } else if (canSSH(e) && e.host) {
+    const p = e.port && e.port !== 22 ? e.port : 0, at = (u ? u + '@' : '') + e.host;
+    out.push(['ssh', `ssh ${p ? '-p ' + p + ' ' : ''}${at}`, `ssh ${p ? '-p ' + p + ' ' : ''}${at}`]);
+    out.push(['sftp', `sftp ${p ? '-P ' + p + ' ' : ''}${at}`, `sftp ${p ? '-P ' + p + ' ' : ''}${at}`]);
+  }
+  return out.filter(([, , c]) => c);
+}
 const detailsText = e => detailRows(e).map(([k, v]) => `${k}: ${v}`).join('\n');
 
 function showDetails(e) {
@@ -1182,6 +1285,9 @@ function showDetails(e) {
   $('#detailTitle').innerHTML = `${ruleName(e)} ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}`;
   const secret = k => /password/i.test(k);
   $('#detailBody').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span>${secret(k) ? `<span class="v pwbox"><span class="pwv" data-pw="${esc(v)}">${S.showPw ? esc(v) : PW_MASK}</span><button class="icon eye" data-eye title="Show / hide">👁</button></span>` : `<span class="v">${esc(v)}</span>`}<button class="icon copyic" data-copy="${esc(v)}" title="Copy ${esc(k)}" aria-label="Copy ${esc(k)}">${COPY_ICON}</button>`).join('');
+  const ready = readyStrings(e);
+  if (ready.length) $('#detailBody').insertAdjacentHTML('afterbegin', `<div class="ready"><div class="ready-h">Copy-ready</div>${ready.map(([k, v, c]) =>
+    `<span class="k">${esc(k)}</span><code class="v mono">${esc(S.showPw ? c : v)}</code><button class="icon copyic" data-copy="${esc(c)}" title="Copy ${esc(k)}" aria-label="Copy ${esc(k)}">${COPY_ICON}</button>`).join('')}</div>`);
   const clips = S.clips.filter(c => c.entry_ids?.includes(e.id)).slice(0, 3);
   if (clips.length) $('#detailBody').insertAdjacentHTML('beforeend', `<details class="clipsrc"><summary>Captured from — the text it was read from (${clips.length})</summary>${clips.map(c =>
     `<div class="muted tiny">${esc(new Date(c.created).toLocaleString())} · ${esc(sourceName({ source: c.source }))}</div><pre>${maskedText(c.text.length > 1500 ? c.text.slice(0, 1500) + '…' : c.text)}</pre>`).join('')}</details>`);

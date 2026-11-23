@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -570,25 +571,70 @@ func (a *App) handleRefOpen(w http.ResponseWriter, r *http.Request) {
 // handleRefSearch: files whose name or text content contains q (linked
 // folders included).
 func (a *App) handleRefSearch(w http.ResponseWriter, r *http.Request) {
-	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
-	out := []string{}
-	if q == "" {
-		writeJSON(w, out)
+	words := strings.Fields(strings.ToLower(r.URL.Query().Get("q")))
+	full := r.URL.Query().Get("full") == "1" // with a snippet, for the search across everything
+	type hit struct {
+		Path string `json:"path"`
+		Snip string `json:"snip,omitempty"`
+	}
+	hits := []hit{}
+	if len(words) > 0 {
+		for _, it := range a.refItems() {
+			name := strings.ToLower(path.Base(it.Path))
+			text := ""
+			if !it.Dir && !it.Missing && it.Size < 4<<20 {
+				if b, err := os.ReadFile(it.abs); err == nil && isTextContent(it.Path, b) {
+					text = string(b)
+				}
+			}
+			if h, ok := refMatch(name, text, words); ok {
+				hits = append(hits, hit{it.Path, h})
+			}
+		}
+	}
+	if full {
+		writeJSON(w, hits)
 		return
 	}
-	for _, it := range a.refItems() {
-		if strings.Contains(strings.ToLower(path.Base(it.Path)), q) {
-			out = append(out, it.Path)
-			continue
-		}
-		if it.Dir || it.Missing || it.Size >= 4<<20 {
-			continue
-		}
-		if b, err := os.ReadFile(it.abs); err == nil && isTextContent(it.Path, b) && strings.Contains(strings.ToLower(string(b)), q) {
-			out = append(out, it.Path)
-		}
+	out := []string{}
+	for _, h := range hits {
+		out = append(out, h.Path)
 	}
 	writeJSON(w, out)
+}
+
+// refMatch: every word must be in the file name or its text. The snippet is a
+// short piece of the text around the first word found there.
+func refMatch(name, text string, words []string) (string, bool) {
+	low := strings.ToLower(text)
+	first := -1
+	for _, w := range words {
+		i := strings.Index(low, w)
+		if i < 0 && !strings.Contains(name, w) {
+			return "", false
+		}
+		if i >= 0 && (first < 0 || i < first) {
+			first = i
+		}
+	}
+	if first < 0 || len(low) != len(text) { // name match only (or case folding changed lengths)
+		return "", true
+	}
+	start, end := max(0, first-60), min(len(text), first+140)
+	for start > 0 && !utf8.RuneStart(text[start]) {
+		start--
+	}
+	for end < len(text) && !utf8.RuneStart(text[end]) {
+		end++
+	}
+	snip := strings.Join(strings.Fields(text[start:end]), " ")
+	if start > 0 {
+		snip = "…" + snip
+	}
+	if end < len(text) {
+		snip += "…"
+	}
+	return snip, true
 }
 
 // handleRefHistory lists a file's older copies (newest first), or returns

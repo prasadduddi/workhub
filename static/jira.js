@@ -26,6 +26,8 @@ const Jira = {
     const list = this.issues.filter(j => !q || [j.key, j.summary, j.status, j.assignee, ...j.prs.map(p => p.name + ' ' + p.repo), ...j.children.map(c => c.key + ' ' + c.summary), ...(j.kids || []).map(c => c.key + ' ' + c.summary)].join(' ').toLowerCase().includes(q));
     const prefix = this.cfg?.child_prefix || 'CM-';
     const node = (cls, key, depth, html, title = '') => `<div class="tnode jn ${cls} ${this.sel === key ? 'sel' : ''}" data-jk="${esc(key)}" style="padding-left:${8 + depth * 16}px" title="${esc(title)}">${html}</div>`;
+    // Completed shows only stories and CMs: no sub-tasks or other work items.
+    const storyOrCM = j => /^story$/i.test(j.type || '') || j.key.toUpperCase().startsWith(prefix.toUpperCase());
     const issueHTML = j => {
       const k = j.key, open = this.open.has(k) || !!q;
       let h = node('issue', 'i:' + k, 1, `<span class="tw" data-jtog="${esc(k)}">${open ? '▾' : '▸'}</span><a class="jkey" href="${esc(j.url)}" data-jlink="${esc(j.url)}" title="Open ${esc(k)} in Jira">${esc(k)}</a> <span class="nm">${esc(j.summary || '')}</span>${j.status ? `<span class="jstat${j.done ? ' done' : ''}">${esc(j.status)}</span>` : ''}${j.error ? '<span class="dot fail" title="' + esc(j.error) + '"></span>' : ''}`, j.error || j.summary);
@@ -36,7 +38,7 @@ const Jira = {
         h += node('folder', 'c:' + k, 2, `<span class="tw" data-jtog="c:${esc(k)}">${j.children.length ? (cOpen ? '▾' : '▸') : ''}</span>☑ ${esc(prefix)} items <span class="n">${j.children.length}</span>`);
         if (cOpen) h += j.children.map((c, i) => node('child', `ch:${k}:${i}`, 3, `<a class="jkey" href="${esc(c.url)}" data-jlink="${esc(c.url)}" title="Open ${esc(c.key)} in Jira">${esc(c.key)}</a> <span class="nm">${esc(c.summary)}</span><span class="jstat">${esc(c.status)}</span>`, `${c.relation}: ${c.summary}`)).join('');
         // Child work items (all sub-tasks and children, any key): open unless closed by the user.
-        const kids = j.kids || [], kOpen = !this.open.has('-k:' + k);
+        const kids = j.done ? [] : j.kids || [], kOpen = !this.open.has('-k:' + k);
         if (kids.length) {
           h += node('folder', 'k:' + k, 2, `<span class="tw" data-jtog="-k:${esc(k)}">${kOpen ? '▾' : '▸'}</span>🧩 Child work items <span class="n">${kids.length}</span>`);
           if (kOpen) h += kids.map((c, i) => node('child', `kid:${k}:${i}`, 3, `<a class="jkey" href="${esc(c.url)}" data-jlink="${esc(c.url)}" title="Open ${esc(c.key)} in Jira">${esc(c.key)}</a> <span class="nm">${esc(c.summary)}</span>${c.type ? `<small>${esc(c.type)}</small>` : ''}<span class="jstat">${esc(c.status)}</span>`, `${c.relation}: ${c.summary}`)).join('');
@@ -45,12 +47,12 @@ const Jira = {
       return h;
     };
     // Two folders: what's in progress, and Completed (newest first) with the same hierarchy inside.
-    const active = list.filter(j => !j.done), done = list.filter(j => j.done).sort((a, b) => (b.resolved || '').localeCompare(a.resolved || ''));
+    const active = list.filter(j => !j.done), done = list.filter(j => j.done && storyOrCM(j)).sort((a, b) => (b.resolved || '').localeCompare(a.resolved || ''));
     const folder = (key, label, items, defOpen) => {
       const open = !!q || (defOpen ? !this.open.has('-' + key) : this.open.has(key));
       return node('folder top', key, 0, `<span class="tw" data-jtog="${defOpen ? '-' : ''}${key}">${open ? '▾' : '▸'}</span>${label} <span class="n">${items.length}</span>`) + (open ? items.map(issueHTML).join('') : '');
     };
-    $('#jiraTree').innerHTML = list.length
+    $('#jiraTree').innerHTML = active.length || done.length
       ? folder('f:open', '📂 In progress', active, true) + folder('f:done', '✅ Completed', done, false)
       : `<div class="empty">${this.issues.length ? 'No matches.' : 'No Jira issues yet.<br>Type a key (PAY-123) or paste an issue link above.'}</div>`;
     this.renderDetail();

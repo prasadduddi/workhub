@@ -36,6 +36,10 @@ var (
 	reKVPort = regexp.MustCompile(`(?i)\bport\s*(?:no\.?|number|#)?\s*[:=]?\s*(\d{1,5})\b`)
 	reKVUser = regexp.MustCompile(`(?i)\b(?:user\s?name|user\s?id|user|login\s?id|login|uid|account|usr)\s*[:=]\s*([^\s,;)("'<>]+)`)
 	reKVPass = regexp.MustCompile(`(?i)\b(?:pass\s?word|passwd|pass\s?phrase|pwd|pass|pw|secret)\s*[:=]\s*(\S+)`)
+	// "username/password: app" (same value for both) or "user/pwd: app/secret".
+	reKVUserPass = regexp.MustCompile(`(?i)\b(?:user\s?name|user\s?id|user|login)\s*/\s*(?:pass\s?word|passwd|pwd|pass)\s*[:=]\s*([^\s,;]+)`)
+	// Words that say a host is a database when no port or URL does.
+	reDBWord = regexp.MustCompile(`(?i)\b(oracle|ora|postgres(?:ql)?|psql|pg|db|database|service[_ ]?name|sid)\b`)
 	reKVDB   = regexp.MustCompile(`(?i)\b(service[_ ]?name|sid|database|db\s?name|schema)\s*[:=]\s*([^\s,;)("'<>]+)`)
 )
 
@@ -85,6 +89,27 @@ func dbKindByPort(port int) string {
 		return "postgres"
 	}
 	return ""
+}
+
+// dbKindByWords picks oracle or postgres from words in the text when it
+// mentions a database (or gave a database/service name). Oracle is the
+// default when the kind isn't named; the Type can be changed afterwards.
+func dbKindByWords(s string, hasDBName bool) string {
+	isDB := hasDBName
+	kind := ""
+	for _, w := range reDBWord.FindAllString(s, -1) {
+		switch strings.ToLower(w) {
+		case "postgres", "postgresql", "psql", "pg":
+			return "postgres"
+		case "oracle", "ora":
+			kind = "oracle"
+		}
+		isDB = true
+	}
+	if !isDB {
+		return ""
+	}
+	return orDefault(kind, "oracle")
 }
 
 func Parse(text string) []Finding {
@@ -244,8 +269,21 @@ func parseChunk(s string) []Finding {
 			masked = blank(masked, m[0], m[1])
 		}
 	}
-	take("pass", reKVPass, 1)
-	take("user", reKVUser, 1)
+	if m := reKVUserPass.FindStringSubmatchIndex(masked); m != nil {
+		v := strings.TrimRight(masked[m[2]:m[3]], ".,;")
+		u, p, ok := strings.Cut(v, "/")
+		if !ok {
+			p = u // one value given for both
+		}
+		kv["user"], kv["pass"] = u, p
+		masked = blank(masked, m[0], m[1])
+	}
+	if kv["pass"] == "" {
+		take("pass", reKVPass, 1)
+	}
+	if kv["user"] == "" {
+		take("user", reKVUser, 1)
+	}
 	take("host", reKVHost, 1)
 	take("port", reKVPort, 1)
 	for _, m := range reKVDB.FindAllStringSubmatchIndex(masked, -1) {
@@ -337,6 +375,12 @@ func parseChunk(s string) []Finding {
 		}
 		for k, v := range extra {
 			targets[0].Extra[k] = v
+		}
+	}
+	// "app DB: host, database: x" — no port or URL, but clearly a database.
+	if len(targets) > 0 && targets[0].Protocol == "" && targets[0].Port == 0 && targets[0].Host != "" {
+		if kind := dbKindByWords(s, len(extra) > 0); kind != "" {
+			targets[0].Protocol = kind
 		}
 	}
 	for i := range targets {

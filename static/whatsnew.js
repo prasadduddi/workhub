@@ -4,6 +4,13 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.9.9', title: 'Search everything, recent captures, copy-ready strings', items: [
+    ['🔎', 'One search for everything', 'The search at the top right now also finds 📝 Notes, 📁 Folders files (names and text, with a snippet) and 📋 Captured text, under connections, threads and Jira. Click a result to open it.', 'dashboard'],
+    ['🕘', 'Recently captured', 'The dashboard shows your last few captures (7 days) and what each became. A host saved without a type asks “Is it Oracle / Postgres / SSH?” — one click files it, e.g. into SQL.', 'dashboard'],
+    ['🗄', 'Pasted databases land in SQL', '“app DB: host, database: x, username/password: y” is now saved as a database (Oracle unless it says postgres/pg) with user and password both filled.', 'sql'],
+    ['📋', 'Copy-ready connection strings', 'A connection’s details start with Copy-ready lines: JDBC, host:port/service and sqlplus for Oracle, psql for PostgreSQL, ssh / sftp for servers.', 'dashboard'],
+    ['✅', 'Jira Completed: stories and CMs only', 'The ✅ Completed folder lists only stories and CM issues (with their CM items and PRs); sub-tasks and other work items are left out. In progress is unchanged.', 'jira'],
+  ] },
   { v: '1.9.8', title: 'Threads like Slack, smarter capture', items: [
     ['💬', 'Replies in a side panel', 'Hover a message → 💬 (or click “💬 3 replies”) to open the conversation on the right; the main thread stays tidy. Esc closes it.', 'tasks'],
     ['😀', 'Reactions, Save, Remind me', 'Hover a message for ✅ 👀 👍 and more reactions, 🔖 Save for later and ⋯ → ⏰ Remind me (20 min … next Monday). 🔖 Saved above the thread list shows both.', 'tasks'],

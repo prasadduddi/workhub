@@ -15,6 +15,8 @@ func TestParseSamples(t *testing.T) {
 		{"inventory", "192.0.2.5 user=root pass=abc123\n192.0.2.6:2222 user=deploy pass=xyz", []Finding{{Host: "192.0.2.5", Username: "root", Password: "abc123"}, {Host: "192.0.2.6", Port: 2222, Username: "deploy", Password: "xyz", Protocol: ""}}},
 		{"ssh cmd", "ssh -p 2201 oracle@dbsrv01", []Finding{{Host: "dbsrv01", Port: 2201, Username: "oracle", Protocol: "ssh"}}},
 		{"jdbc", "jdbc:oracle:thin:@//ora-dev.corp.com:1521/ORCLPDB", []Finding{{Host: "ora-dev.corp.com", Port: 1521, Protocol: "oracle", URL: "jdbc:oracle:thin:@//ora-dev.corp.com:1521/ORCLPDB", Extra: map[string]string{"service": "ORCLPDB"}}}},
+		{"db with database name", "app DB: db1-uat.corp.example.com, database: appdb1, username/password: app_user", []Finding{{Host: "db1-uat.corp.example.com", Protocol: "oracle", Username: "app_user", Password: "app_user", Extra: map[string]string{"database": "appdb1"}}}},
+		{"postgres word", "Postgres host: pg1.corp.example.com\nuser/pwd: rpt/S3cret", []Finding{{Host: "pg1.corp.example.com", Protocol: "postgres", Username: "rpt", Password: "S3cret"}}},
 		{"noise", "see config.yaml and README.md, e.g. run main.py", nil},
 		{"email address is not a server", "Hi, mail ann.lee@vendor.com or bob@corp.co.uk for access", nil},
 		{"email plus real host", "From: Ann <ann@vendor.com>\nServer: db01.vendor.local", []Finding{{Host: "db01.vendor.local"}}},
