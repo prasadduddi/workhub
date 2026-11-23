@@ -2206,6 +2206,8 @@ setTimeout(() => Tunnels.load(), 1500);
 // Connection trees (PuTTY, FileZilla, SQL) can be grouped like bookmarks:
 // by your folders, environment, application (from the server name),
 // domain / IP subnet, type, your Groups, or login user. One choice per tree.
+// Tree expanders: Windows-style [+] / [−] boxes.
+const pm = open => `<i class="pm">${open ? '−' : '+'}</i>`;
 const TREE_GROUPS = { folder: 'Folders', env: 'Env', app: 'App', domain: 'Domain / subnet', type: 'Type', group: 'My groups', user: 'User' };
 const ENV_WORD = /^(dev|devl?|uat|sit|qa|test|tst|stg|stage|staging|preprod|pre|pprd|prod|prd|live|dr|nonprod|np|int|perf|train|trn)\d*[a-z]?$/;
 const ROLE_WORD = /^(app|apps|web|db|dbs|srv|svr|server|node|host|vm|ap|ws|lx|lnx|linux|unix|ora|pg|sql|ftp|sftp|jump|bastion)\d*$/;
@@ -2234,8 +2236,6 @@ const LAST_GROUPS = new Set(['Other', 'No environment', 'Not in a group', 'No us
 
 const Tree = {
   collapsed: new Set(JSON.parse(localStorage.getItem('treeCollapsed') || '[]')),
-  // Per tree: the folders ⊟ Fold closed, so ⊞ Unfold can open exactly those again.
-  folded: (() => { try { return JSON.parse(localStorage.getItem('treeFolded') || '{}'); } catch { return {}; } })(),
   selected: null,
   groupMode(mode) { try { return localStorage.getItem('treeGroup_' + mode) || 'folder'; } catch { return 'folder'; } },
   setGroupMode(mode, g) { try { localStorage.setItem('treeGroup_' + mode, g); } catch { /* ignore */ } this.render(); },
@@ -2283,7 +2283,7 @@ const Tree = {
     let out = '';
     if (depth === 0 && node.top?.length) {
       const key = 'top:' + node.mode, open = !this.collapsed.has(key);
-      out += `<div class="tnode folder topused" style="padding-left:8px" data-key="${esc(key)}" data-gmode="top"><span class="tw">${open ? '▾' : '▸'}</span>★ <span class="nm">Most used</span><span class="n">${node.top.length}</span></div>`;
+      out += `<div class="tnode folder topused" style="padding-left:8px" data-key="${esc(key)}" data-gmode="top"><span class="tw">${pm(open)}</span>★ <span class="nm">Most used</span><span class="n">${node.top.length}</span></div>`;
       if (open) out += this.html({ kids: {}, items: node.top, flat: true }, 1, q);
     }
     const kids = Object.entries(node.kids).sort(([a, x], [b, y]) => (a[0] === '#') - (b[0] === '#') || LAST_GROUPS.has(a) - LAST_GROUPS.has(b)
@@ -2297,7 +2297,7 @@ const Tree = {
       // its own line instead of an extra level ("📁 Lab  UAT").
       const only = !k.env && !k.items.length && Object.values(k.kids).length === 1 && Object.values(k.kids)[0].env ? Object.values(k.kids)[0] : null;
       out += `<div class="tnode folder" style="padding-left:${8 + depth * 14}px" data-key="${esc(key)}" data-project="${esc(k.project)}" data-env="${esc(k.env || only?.env || '')}" data-gmode="${esc(k.gmode || 'folder')}">
-        <span class="tw">${open ? '▾' : '▸'}</span>${k.env ? `<span class="badge ${esc(k.env)}">${esc(k.env)}</span>` : (gc ? `<span class="gdot" style="background:${Groups.color(gc)}"></span>` : (icon[k.gmode] || '📁')) + ' <span class="nm">' + esc(k.name) + '</span>' + (only && !k.name.toUpperCase().includes(only.env) ? ` <span class="badge ${esc(only.env)}">${esc(only.env)}</span>` : '')}<span class="n">${this.count(k)}</span></div>`;
+        <span class="tw">${pm(open)}</span>${k.env ? `<span class="badge ${esc(k.env)}">${esc(k.env)}</span>` : (gc ? `<span class="gdot" style="background:${Groups.color(gc)}"></span>` : (icon[k.gmode] || '📁')) + ' <span class="nm">' + esc(k.name) + '</span>' + (only && !k.name.toUpperCase().includes(only.env) ? ` <span class="badge ${esc(only.env)}">${esc(only.env)}</span>` : '')}<span class="n">${this.count(k)}</span></div>`;
       if (open) out += this.html(only || k, depth + 1, q);
     }
     // Several logins on one server: one server row with the users under it.
@@ -2313,7 +2313,7 @@ const Tree = {
       const states = grp.map(connState), now = states.includes('live') ? 'live' : states.includes('dropped') ? 'dropped' : '';
       const okAt = grp.map(lastOKAt).filter(Boolean).sort().at(-1);
       out += `<div class="tnode folder srvnode" style="padding-left:${8 + depth * 14}px" data-key="${esc(key)}" data-gmode="server" data-srvhost="${esc(e.host)}" data-srvport="${e.port || ''}" title="${esc(e.host)} — ${grp.length} logins: ${esc(grp.map(x => x.username || '?').join(', '))}">
-        <span class="tw">${open ? '▾' : '▸'}</span>${STATE_DOT[now]} 🖥 <span class="nm">${ruleName({ ...e, name: (ruleLabel(e.host) ? ruleLabel(e.host) + ' – ' : '') + e.host })}</span><span class="n" title="logins">👤 ${grp.length}</span>${now === 'dropped' ? '<span class="droptag">disconnected</span>' : ''}${okAt ? lastSeen({ last_ok: okAt }) : ''}</div>`;
+        <span class="tw">${pm(open)}</span>${STATE_DOT[now]} 🖥 <span class="nm">${ruleName({ ...e, name: (ruleLabel(e.host) ? ruleLabel(e.host) + ' – ' : '') + e.host })}</span><span class="n" title="logins">👤 ${grp.length}</span>${now === 'dropped' ? '<span class="droptag">disconnected</span>' : ''}${okAt ? lastSeen({ last_ok: okAt }) : ''}</div>`;
       if (open) for (const x of grp) out += this.itemHTML(x, depth + 1, node, withCopyTag(`👤 ${esc(x.username || '(no user)')}`, x));
     }
     return out;
@@ -2329,7 +2329,7 @@ const Tree = {
     const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
     const dbOpen = isDb && SQL.expanded.has(e.id);
     out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
-      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? (dbOpen ? '▾' : '▸') : ''}</span>${STATE_DOT[connState(e)]} ${canDB(e) ? dbIcon(e) : ''}<span class="nm">${label || (canDB(e) ? dbLabel(e) : withCopyTag(cardName(e) || esc(e.host || e.name), e))}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) ? `<small class="dbaddr">${esc(dbKindOf(e) === 'oracle' ? jdbcURL(e) : e.host)}</small>` : cardName(e) ? `<small>${esc(target)}</small>` : e.username || port !== def ? `<small>${esc(e.username || '')}${port !== def ? ':' + port : ''}</small>` : ''}${connState(e) === 'dropped' ? '<span class="droptag">disconnected</span>' : ''}${lastSeen(e)}</div>`;
+      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? pm(dbOpen) : ''}</span>${STATE_DOT[connState(e)]} ${canDB(e) ? dbIcon(e) : ''}<span class="nm">${label || (canDB(e) ? dbLabel(e) : withCopyTag(cardName(e) || esc(e.host || e.name), e))}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) ? `<small class="dbaddr">${esc(dbKindOf(e) === 'oracle' ? jdbcURL(e) : e.host)}</small>` : cardName(e) ? `<small>${esc(target)}</small>` : e.username || port !== def ? `<small>${esc(e.username || '')}${port !== def ? ':' + port : ''}</small>` : ''}${connState(e) === 'dropped' ? '<span class="droptag">disconnected</span>' : ''}${lastSeen(e)}</div>`;
     if (dbOpen) {
       const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
       if (dbt) out += SQL.treeHTML(dbt, depth + 1);
@@ -2342,14 +2342,12 @@ const Tree = {
   render() {
     for (const host of $$('.tree-host')) {
       if (!host.firstChild) {
-        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷 Names</button><button data-tool="new" title="New connection">+ New</button><button data-tool="collapse" title="Collapse all folders">⊟ Fold</button></div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
+        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷 Names</button><button data-tool="new" title="New connection">+ New</button></div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
         this.wire(host);
       }
       $('select[data-tool=groupby]', host).value = this.groupMode(host.dataset.mode);
       const q = $('input', host).value.trim().toLowerCase();
       $('.tree', host).innerHTML = this.html(this.build(q, host.dataset.mode), 0, q) || '<div class="empty">No servers yet.<br>Copy or paste some details, or press + New.</div>';
-      const fb = $('button[data-tool=collapse]', host), isFolded = !!this.folded[host.dataset.mode];
-      if (fb) { fb.textContent = isFolded ? '⊞ Unfold' : '⊟ Fold'; fb.title = isFolded ? 'Open the folders again, as they were before folding' : 'Collapse all folders (press again to restore)'; }
       if (this.kbKey) $$('.tree > .tnode.folder', host).find(n => n.dataset.key === this.kbKey)?.classList.add('kbfocus');
     }
   },
@@ -2398,18 +2396,6 @@ const Tree = {
       const tool = ev.target.closest('button[data-tool]')?.dataset.tool;
       if (tool === 'new') return openEntryDialog(null);
       if (tool === 'rules') return openNameRules();
-      if (tool === 'collapse') { // ⊟ Fold / ⊞ Unfold: a toggle back to how it was
-        const folded = this.folded[mode];
-        if (folded) folded.forEach(k => this.collapsed.delete(k));
-        else {
-          const added = $$('.tnode.folder', host).map(f => f.dataset.key).filter(k => k && !this.collapsed.has(k));
-          added.forEach(k => this.collapsed.add(k));
-          this.folded[mode] = added;
-        }
-        if (folded) delete this.folded[mode];
-        try { localStorage.setItem('treeFolded', JSON.stringify(this.folded)); } catch { /* ignore */ }
-        return this.saveCollapsed();
-      }
       const exp = ev.target.closest('[data-dbexp]');
       if (exp) return SQL.toggleConn(byId(exp.dataset.dbexp), !!exp.dataset.retry);
       const n = ev.target.closest('.tnode');
@@ -3535,7 +3521,7 @@ Object.assign(SQL, {
       const k = this.nodeKey(n), open = t.ot.open.has(k);
       t.ot.nodes.set(k, n);
       let h = `<div class="tnode dbn ${n.bad ? 'bad' : ''}" style="padding-left:${8 + d * 14}px" data-dbk="${esc(k)}" data-sid="${t.sid}" title="${esc(n.detail || n.label)}">
-        <span class="tw">${n.leaf ? '' : open ? '▾' : '▸'}</span>${icon(n)} <span class="nm">${esc(n.label)}</span>${n.detail ? `<small>${esc(n.detail)}</small>` : ''}</div>`;
+        <span class="tw">${n.leaf ? '' : pm(open)}</span>${icon(n)} <span class="nm">${esc(n.label)}</span>${n.detail ? `<small>${esc(n.detail)}</small>` : ''}</div>`;
       if (open) {
         const sub = t.ot.kids.get(k);
         h += sub ? walk(sub, d + 1) : `<div class="tnode dbn muted" style="padding-left:${8 + (d + 1) * 14}px">loading…</div>`;

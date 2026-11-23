@@ -4,6 +4,9 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.10.2', title: 'Tree with + / − boxes', items: [
+    ['⊞', '[+] / [−] to open and close', 'Folders, environments, groups and servers open and close with Windows-style [+] / [−] boxes, like a tree view. The ⊟ Fold button is gone.', 'terminal'],
+  ] },
   { v: '1.10.1', title: 'Live connection status, duplicate folders, FileZilla-style lists', items: [
     ['●', 'Status that is true right now', 'In the SSH / FTP / SQL trees the dot is the state now: ● connected, dashed ◌ “disconnected” when a session dropped (its tab is still open), ○ not connected. It changes the moment a session ends; a dead network is noticed within about a minute.', 'terminal'],
     ['⏏', 'Disconnect all on a host', 'Right-click a server (or any connection on it) → ⏏ Disconnect all on this host: closes its SSH terminals, FTP session, SQL connections and running tunnels in one go. Other hosts stay connected. Folders, environments and groups have ⏏ Disconnect all in … too (next to Duplicate), for just the connections inside.', 'terminal'],

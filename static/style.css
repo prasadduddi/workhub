@@ -1108,3 +1108,7 @@ body.side-collapsed:not(.side-top) .side { width: 84px; padding-right: 4px; }
 #ctxMenu.subleft .ctxsub-menu { left: auto; right: 100%; }
 .ctxsub:hover > .ctxsub-menu, .ctxsub.open > .ctxsub-menu { display: block; }
 .ctxsub-menu button { display: block; width: 100%; text-align: left; }
+
+/* Tree expanders: [+] / [−] boxes like a Windows tree view */
+.tnode .tw .pm { display: inline-flex; align-items: center; justify-content: center; width: 9px; height: 9px; border: 1px solid var(--muted); border-radius: 2px; font: 700 9px/1 "Segoe UI", system-ui, sans-serif; font-style: normal; color: var(--text); background: var(--panel); cursor: pointer; }
+.tnode .tw .pm:hover { border-color: var(--accent); color: var(--accent); }
