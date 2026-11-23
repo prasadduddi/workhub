@@ -473,9 +473,10 @@
     <label id="masterCurL">Current master password<input id="masterCur" type="password" autocomplete="current-password"></label>
     <label id="masterNewL">New master password (at least 8 characters)<input id="masterNew" type="password" autocomplete="new-password"></label>
     <label id="masterNew2L">Type it again<input id="masterNew2" type="password" autocomplete="new-password"></label>
+    <label>Email the recovery code to<input id="masterEmail" type="email" autocomplete="email" placeholder="your own email address"></label>
     <div id="masterMsg" class="tiny" style="color:var(--danger);min-height:1em"></div>
   </div>
-  <div id="masterRec" hidden><p>Your recovery code — <b>write it down and keep it somewhere safe</b>. If you forget the master password it is the only way in; it is shown only now.</p><code id="masterCode" class="rec-code"></code></div>
+  <div id="masterRec" hidden><p id="masterRecMsg"></p><details id="masterRecShow"><summary class="muted tiny">Show the code</summary><code id="masterCode" class="rec-code"></code></details></div>
   <div class="row end" style="margin-top:10px"><button id="masterOff" class="danger" hidden>Turn off</button><span class="spacer"></span><button id="masterClose">Cancel</button><button id="masterSave" class="primary">Turn on</button></div>
 </dialog>
 <dialog id="pinDlg">

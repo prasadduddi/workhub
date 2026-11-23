@@ -4,7 +4,8 @@ package main
 //   - the team access password, asked once per PC when the build has one
 //     (access.go, set with "go run ./tools/accesshash"). The code is public,
 //     so this only keeps casual users out of a downloaded copy.
-//   - the master password, every start, when one is set (see master.go).
+//   - the master password, on the first start of each new version, when one
+//     is set (see master.go).
 // Once both are given the real app takes over on the same address.
 
 import (
@@ -142,13 +143,20 @@ func (a *App) gateRoutes(open func(key []byte) error) http.Handler {
 				}
 			}
 			key = k
+			_ = writeKeyCache(a.dataDir, k) // not asked again until the next version
 		}
 		g.fails = 0
 		if err := open(key); err != nil {
 			writeErr(w, 500, err)
 			return
 		}
-		writeJSON(w, map[string]any{"ok": true, "recovery": rec})
+		out := map[string]any{"ok": true}
+		if rec != "" {
+			for k, v := range a.mailRecovery(a.resetEmail(), rec) {
+				out[k] = v
+			}
+		}
+		writeJSON(w, out)
 	})
 	return a.guard(mux)
 }
@@ -189,7 +197,7 @@ function form() {
   show('accL', st.access); show('accHelp', st.access);
   show('pwL', st.master && !needNew); show('pwHelp', st.master && !needNew);
   show('newL', needNew); show('new2L', needNew);
-  $('sub').textContent = needNew ? 'Recovery code accepted. Choose a new master password.' : st.access && st.master ? 'This copy of WorkHub needs the team access password, then your master password.' : st.master ? 'Type your master password to open your data.' : 'This copy of WorkHub needs the team access password.';
+  $('sub').textContent = needNew ? 'Recovery code accepted. Choose a new master password.' : st.access && st.master ? 'This copy of WorkHub needs the team access password, then your master password.' : st.master ? 'This is a new version of WorkHub — type your master password to open your data.' : 'This copy of WorkHub needs the team access password.';
   (st.access ? $('acc') : needNew ? $('np') : $('pw')).focus();
 }
 call('GET').then(d => { st = d; form(); }).catch(e => { $('msg').textContent = e.message; });
@@ -201,7 +209,10 @@ $('f').onsubmit = async ev => {
     const d = await call('POST', { access: $('acc').value, password: $('pw').value, newpassword: $('np').value });
     if (d.need_new) { needNew = true; st.access = false; form(); return; }
     if (d.recovery) {
-      $('f').innerHTML = '<h2>✅ New master password set</h2><p class="muted">Your new recovery code — write it down and keep it somewhere safe. It is shown only now, and your old one no longer works.</p><code></code><button type="button" id="cont">I have saved it — open WorkHub</button>';
+      $('f').innerHTML = d.sent_to
+        ? '<h2>✅ New master password set</h2><p class="muted">Your new recovery code has been emailed to <b></b>. Your old code no longer works.</p><details><summary class="muted">Show the code</summary><code></code></details><button type="button" id="cont">Open WorkHub</button>'
+        : '<h2>✅ New master password set</h2><p class="muted">Your new recovery code (it couldn\'t be emailed) — write it down; it is shown only now, and your old one no longer works.</p><code></code><button type="button" id="cont">I have saved it — open WorkHub</button>';
+      if (d.sent_to) $('f').querySelector('b').textContent = d.sent_to;
       $('f').querySelector('code').textContent = d.recovery;
       $('cont').onclick = () => location.replace('/');
       return;

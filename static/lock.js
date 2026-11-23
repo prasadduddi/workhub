@@ -181,8 +181,9 @@ $('#pfCancel').onclick = () => $('#profileDlg').close();
 $('#pfCopy').onclick = () => copyText(Profile.text(), 'Your details copied');
 Profile.load();
 
-// 🔐 Master password: when on, WorkHub asks for it every time it starts and
-// the data can't be opened without it (see master.go). Separate from the PIN,
+// 🔐 Master password: when on, WorkHub asks for it on the first start of each
+// new version and the data can't be opened without it (see master.go). The
+// recovery code is emailed to the user's own address. Separate from the PIN,
 // which locks the open app after some idle minutes.
 const Master = {
   on: false,
@@ -190,8 +191,9 @@ const Master = {
     const r = await api('GET', '/api/master').catch(() => ({}));
     this.on = !!r.on;
     $('#masterState').textContent = this.on
-      ? 'On — WorkHub asks for it every time it starts, and your data can\'t be opened without it (not even by copying the data folder). Change it here, or turn it off.'
-      : 'Off. Turn it on and WorkHub asks for it every time it starts; your saved connections and passwords can\'t be opened without it, even from a copy of the data folder. If you forget it, only the recovery code you get now can open your data.';
+      ? 'On — WorkHub asks for it the first time each new version starts (after an update). Change it here (you get a new recovery code by email), or turn it off.'
+      : 'Off. Turn it on and WorkHub asks for it the first time each new version starts; your saved connections and passwords can\'t be opened without it, even from a copy of the data folder. If you forget it, the recovery code emailed to you opens your data.';
+    $('#masterEmail').value = r.email || '';
     $('#masterCurL').hidden = !this.on;
     $('#masterOff').hidden = !this.on;
     $('#masterSave').textContent = this.on ? 'Change password' : 'Turn on';
@@ -203,16 +205,21 @@ const Master = {
     (this.on ? $('#masterCur') : $('#masterNew')).focus();
   },
   async save() {
-    const pw = $('#masterNew').value;
+    const pw = $('#masterNew').value, email = $('#masterEmail').value.trim();
     if (pw.length < 8) return this.msg('At least 8 characters, please', '#masterNew');
     if (pw !== $('#masterNew2').value) return this.msg('The two new passwords are different', '#masterNew2');
+    if (!email) return this.msg('Type your email address — the recovery code is sent there', '#masterEmail');
     $('#masterSave').disabled = true;
     try {
-      const r = await api('POST', '/api/master', { current: $('#masterCur').value, password: pw });
+      const r = await api('POST', '/api/master', { current: $('#masterCur').value, password: pw, email });
       $('#masterForm').hidden = true; $('#masterSave').hidden = true; $('#masterOff').hidden = true;
       $('#masterRec').hidden = false; $('#masterCode').textContent = r.recovery;
-      $('#masterState').textContent = this.on ? '✅ Master password changed. The old recovery code no longer works.' : '✅ Master password is on. WorkHub will ask for it next time it starts.';
-      $('#masterClose').textContent = 'I have saved the code';
+      $('#masterRecShow').open = !r.sent_to;
+      $('#masterRecMsg').innerHTML = r.sent_to
+        ? `📧 Your recovery code has been emailed to <b>${esc(r.sent_to)}</b>. Keep that email — it is the only way in if you forget the password.`
+        : `⚠ The code couldn't be emailed (${esc(r.mail_error || 'unknown error')}). <b>Write it down now</b> — it is shown only once.`;
+      $('#masterState').textContent = this.on ? '✅ Master password changed. The old recovery code no longer works.' : '✅ Master password is on. WorkHub will ask for it the first time a new version starts.';
+      $('#masterClose').textContent = r.sent_to ? 'Done' : 'I have saved the code';
       this.on = true;
     } catch (err) { this.msg(err.message, this.on ? '#masterCur' : '#masterNew'); } finally { $('#masterSave').disabled = false; }
   },
@@ -230,4 +237,4 @@ const Master = {
 $('#masterSave').onclick = () => Master.save();
 $('#masterOff').onclick = () => Master.off();
 $('#masterClose').onclick = () => $('#masterDlg').close();
-for (const id of ['#masterCur', '#masterNew', '#masterNew2']) $(id).addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); Master.save(); } });
+for (const id of ['#masterCur', '#masterNew', '#masterNew2', '#masterEmail']) $(id).addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); Master.save(); } });

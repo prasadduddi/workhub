@@ -146,7 +146,19 @@ func main() {
 		sw.set(app.recoveryRoutes())
 	}
 
-	if !app.accessOK() || hasMaster(dir) {
+	opened := false
+	if key := cachedKey(dir); hasMaster(dir) && key != nil && app.accessOK() {
+		// the master password was already given for this version
+		if store, err := OpenStoreKey(dir, key); err == nil {
+			boot(store)
+			opened = true
+		} else {
+			_ = os.Remove(cachePath(dir)) // stale: ask for the password instead
+		}
+	}
+	switch {
+	case opened:
+	case !app.accessOK() || hasMaster(dir):
 		fmt.Println("WorkHub is waiting for its password in the window.")
 		sw.set(app.gateRoutes(func(key []byte) error {
 			store, err := OpenStoreKey(dir, key)
@@ -156,10 +168,12 @@ func main() {
 			boot(store)
 			return nil
 		}))
-	} else if store, err := OpenStore(dir); err != nil {
-		showRecovery(err)
-	} else {
-		boot(store)
+	default:
+		if store, err := OpenStore(dir); err != nil {
+			showRecovery(err)
+		} else {
+			boot(store)
+		}
 	}
 
 	sig := make(chan os.Signal, 1)

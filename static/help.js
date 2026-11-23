@@ -47,10 +47,10 @@ const HELP_TOPICS = [
     'Click “Saving to …” under the switch to choose the project new captures go to.',
     'Everything captured is listed on the Captured page; copying the same text twice is ignored.'] },
   { t: 'Protect WorkHub with a master password', k: 'master password protect encrypt data start startup secure copy stolen laptop access recovery code forgot', v: '', s: [
-    '☰ → 🔐 Master password… → type a password (8+ characters) twice → Turn on.',
-    'Write down the recovery code it shows — it is the only way in if you forget the password.',
-    'From then on WorkHub asks for the password every time it starts; your data can\'t be opened without it, even from a copy of the data folder.',
-    'Forgot it? On the start screen type the recovery code instead, then choose a new password (you get a new code).',
+    '☰ → 🔐 Master password… → type a password (8+ characters) twice and your email → Turn on.',
+    'The recovery code is emailed to you (through Outlook) — keep that email; it is the only way in if you forget the password.',
+    'From then on WorkHub asks for the password the first time each new version starts (after an update); your data can\'t be opened without it, even from a copy of the data folder.',
+    'Forgot it? On the start screen type the recovery code from the email instead, then choose a new password (a new code is emailed).',
     'Change it or turn it off in the same place (needs the current password). The PIN (🔒 Lock) still locks the open app when you are away.'] },
   { t: 'Team access password', k: 'access password team download first start copy who gave', v: '', s: [
     'A copy of WorkHub may ask for a team access password the first time it starts on a PC.',

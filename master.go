@@ -3,9 +3,11 @@ package main
 // Master password: when one is set, the key that encrypts workhub.dat is no
 // longer kept in key.bin (which only needs the Windows login) but in
 // key.master, sealed with a key made from the master password, and a second
-// time with a one-time recovery code. WorkHub then can't open the data until
-// the password (or the code) is typed, so a copied data folder is useless and
-// deleting a file can't get round it. Nothing about the password is stored.
+// time with a one-time recovery code (which is emailed to the user). The
+// password is asked on the first start of each new version of WorkHub; after
+// that, key.cache (tied to this Windows login, like key.bin, and to the
+// version) opens the data until the next update. Nothing about the password
+// itself is stored.
 
 import (
 	"crypto/aes"
@@ -16,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,6 +45,37 @@ type masterFile struct {
 }
 
 func masterPath(dir string) string { return filepath.Join(dir, "key.master") }
+func cachePath(dir string) string  { return filepath.Join(dir, "key.cache") }
+
+// writeKeyCache lets this version start without asking for the password.
+func writeKeyCache(dir string, key []byte) error {
+	b, _ := json.Marshal(map[string]string{"version": version, "key": hex.EncodeToString(key)})
+	prot, err := protectKey(b)
+	if err != nil {
+		return err
+	}
+	return writeAtomic(cachePath(dir), prot)
+}
+
+// cachedKey is the data key if this same version was unlocked before.
+func cachedKey(dir string) []byte {
+	raw, err := os.ReadFile(cachePath(dir))
+	if err != nil {
+		return nil
+	}
+	if raw, err = unprotectKey(raw); err != nil {
+		return nil
+	}
+	var c map[string]string
+	if json.Unmarshal(raw, &c) != nil || c["version"] != version {
+		return nil // a new version: ask for the password
+	}
+	k, err := hex.DecodeString(c["key"])
+	if err != nil || len(k) != 32 {
+		return nil
+	}
+	return k
+}
 
 func hasMaster(dir string) bool { return fileExists(masterPath(dir)) }
 
@@ -141,6 +175,7 @@ func (s *Store) SetMaster(current, pw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	_ = writeKeyCache(dir, s.key)
 	if err := os.Remove(filepath.Join(dir, "key.bin")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
@@ -160,17 +195,26 @@ func (s *Store) RemoveMaster(current string) error {
 	if err := writeAtomic(filepath.Join(dir, "key.bin"), prot); err != nil {
 		return err
 	}
+	_ = os.Remove(cachePath(dir))
 	return os.Remove(masterPath(dir))
 }
 
 func (a *App) handleMasterGet(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]bool{"on": hasMaster(a.dataDir)})
+	writeJSON(w, map[string]any{"on": hasMaster(a.dataDir), "email": a.resetEmail()})
 }
 
 func (a *App) handleMasterSet(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Current, Password string }
+	var in struct{ Current, Password, Email string }
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, 400, err)
+		return
+	}
+	to := strings.TrimSpace(in.Email)
+	if to == "" {
+		to = a.resetEmail()
+	}
+	if to != "" && !reEmail.MatchString(to) {
+		writeErr(w, 400, errors.New("that email address doesn't look right"))
 		return
 	}
 	rec, err := a.store.SetMaster(in.Current, in.Password)
@@ -179,7 +223,32 @@ func (a *App) handleMasterSet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err)
 		return
 	}
-	writeJSON(w, map[string]string{"recovery": rec})
+	if p := a.profile(); p.Email == "" && to != "" { // remember it for next time (and for the PIN reset)
+		p.Email = to
+		b, _ := json.MarshalIndent(p, "", "  ")
+		_ = writeAtomic(a.profileFile(), b)
+	}
+	writeJSON(w, a.mailRecovery(to, rec))
+}
+
+// mailRecovery emails the recovery code to the user's own address; the reply
+// says where it went, or why it couldn't be sent (the page then shows it).
+func (a *App) mailRecovery(to, rec string) map[string]string {
+	out := map[string]string{"recovery": rec}
+	if to == "" {
+		out["mail_error"] = "no email address"
+		return out
+	}
+	host, _ := os.Hostname()
+	body := fmt.Sprintf("Your WorkHub master password recovery code is:\n\n    %s\n\n"+
+		"If you forget the master password, type this code instead of it when WorkHub starts on %s, then choose a new password.\n"+
+		"Each new code replaces the previous one. Keep this email; delete it if you turn the master password off.\n", rec, orDefault(host, "your computer"))
+	if err := sendMail(to, "WorkHub master password recovery code", body); err != nil {
+		out["mail_error"] = err.Error()
+	} else {
+		out["sent_to"] = maskEmail(to)
+	}
+	return out
 }
 
 func (a *App) handleMasterRemove(w http.ResponseWriter, r *http.Request) {

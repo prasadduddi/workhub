@@ -134,3 +134,24 @@ func TestGate(t *testing.T) {
 		t.Fatal("new password doesn't work")
 	}
 }
+
+func TestMasterAskedOncePerVersion(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := OpenStore(dir)
+	old := version
+	defer func() { version = old }()
+	version = "v1.9.4"
+	if _, err := s.SetMaster("", "Correct horse 1"); err != nil {
+		t.Fatal(err)
+	}
+	if k := cachedKey(dir); k == nil || string(k) != string(s.key) {
+		t.Fatal("same version should open without the password")
+	}
+	version = "v1.9.5"
+	if cachedKey(dir) != nil {
+		t.Fatal("a new version must ask for the password")
+	}
+	if err := s.RemoveMaster("Correct horse 1"); err != nil || fileExists(cachePath(dir)) {
+		t.Fatalf("turning off should remove key.cache: %v", err)
+	}
+}

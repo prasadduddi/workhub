@@ -38,10 +38,10 @@ closing it stops WorkHub. "Windows protected your PC" → **More info → Run an
   in the sidebar handle other cases. If data can't be opened, a recovery page lets you pick another folder.
 
 ## Passwords that protect WorkHub
-- **Master password** (☰ → 🔐 Master password…): when it is on, WorkHub asks for it every time it
-  starts, and the key to your data is sealed with it, so a copied data folder can't be opened
-  without it. You get a one-time recovery code when you set it; typing that code instead of the
-  password lets you choose a new one. Each person sets their own.
+- **Master password** (☰ → 🔐 Master password…): when it is on, WorkHub asks for it the first time
+  each new version starts, and the key to your data is sealed with it, so a copied data folder can't
+  be opened without it. A recovery code is emailed to your own address (through Outlook); typing that
+  code instead of the password lets you choose a new one. Each person sets their own.
 - **PIN** (☰ → 🔒 Lock): locks the open app after some idle minutes.
 - **Team access password** (optional, per build): a copy of WorkHub asks for it once per PC before
   it can be used. Set it with `go run ./tools/accesshash` (writes only a salted hash to `access.go`;
