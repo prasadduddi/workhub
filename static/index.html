@@ -473,6 +473,14 @@
   <label>Notes<textarea id="pfNotes" rows="3"></textarea></label>
   <div class="row end" style="margin-top:10px"><button id="pfCopy" title="Copy your details to paste into emails or forms">Copy my details</button><span class="spacer"></span><button id="pfCancel">Close</button><button id="pfSave" class="primary">Save</button></div>
 </dialog>
+<dialog id="slogDlg">
+  <h3>📝 Session logs</h3>
+  <label class="switch small"><input type="checkbox" id="slogOn"><span></span> Save the text of SSH sessions</label>
+  <div class="muted tiny">What each SSH terminal shows — your commands and their output — is kept per server and day in your data folder, as plain text (typed passwords aren't shown by servers, so they aren't saved). Logs older than 180 days are removed.</div>
+  <div class="row" style="margin-top:8px"><input id="slogQ" type="search" placeholder="Search all logs… e.g. df -h, or an error message" style="flex:1"><button id="slogFolder" title="Open the session-logs folder">📁 Folder</button></div>
+  <div id="slogList" class="slog-list"></div>
+  <div class="row end" style="margin-top:8px"><button id="slogClose">Close</button></div>
+</dialog>
 <dialog id="masterDlg">
   <h3>🔐 Master password</h3>
   <div id="masterState" class="muted tiny"></div>

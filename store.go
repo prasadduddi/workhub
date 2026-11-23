@@ -112,6 +112,7 @@ type Settings struct {
 	NameRules     []NameRule   `json:"name_rules,omitempty"` // e.g. -BAT- → Batch (this workspace only)
 	Saved         []SavedQuery `json:"saved_searches,omitempty"`
 	ActiveThread  string       `json:"active_thread,omitempty"` // the task thread captures are added to: "" = General, "off" = none
+	SessionLog    bool         `json:"session_log,omitempty"`   // save the text of SSH sessions (sessionlog.go)
 }
 
 // SavedQuery is a search kept in the sidebar, e.g. "PROD Batch" = env:prod app:batch.

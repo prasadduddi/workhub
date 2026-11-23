@@ -499,6 +499,38 @@ $('#dataLocBtn').onclick = async () => {
     document.body.innerHTML = '<div class="empty">Restarting WorkHub… a new tab opens in a few seconds. You can close this one.</div>';
   } catch (err) { toast(err.message, true); }
 };
+// ☰ → Session logs: switch saving on/off, search the text of past SSH
+// sessions, open a day's log.
+const SessionLogs = {
+  async open() {
+    $('#slogOn').checked = !!S.settings.session_log;
+    $('#slogQ').value = '';
+    $('#slogDlg').showModal();
+    $('#slogQ').focus();
+    this.load();
+  },
+  async load() {
+    const q = $('#slogQ').value.trim();
+    const r = await api('GET', '/api/sessionlogs' + (q ? '?q=' + encodeURIComponent(q) : '')).catch(err => ({ error: err.message }));
+    const open = f => `data-slog="${esc(f)}" title="Open this log"`;
+    if (r.error) { $('#slogList').innerHTML = `<div class="muted tiny">${esc(r.error)}</div>`; return; }
+    if (!q) {
+      $('#slogList').innerHTML = r.files.length ? r.files.slice(0, 200).map(f => `<div class="slog-row" ${open(f.file)}><b>${esc(f.host)}</b><span>${esc(f.day)}</span><span class="muted tiny">${fmtSize(f.size)}</span></div>`).join('')
+        : `<div class="muted tiny" style="padding:8px">${S.settings.session_log ? 'No logs yet — they appear after your next SSH session.' : 'Nothing saved yet. Switch on “Save the text of SSH sessions” above.'}</div>`;
+      return;
+    }
+    const mark = t => esc(t).replace(new RegExp(q.split(/\s+/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi'), m => `<mark>${m}</mark>`);
+    $('#slogList').innerHTML = r.hits.length ? r.hits.map(h => `<div class="slog-row hit" ${open(h.file)}><b>${esc(h.host)}</b><span>${esc(h.day)} ${esc(h.time)}</span><code>${mark(h.text)}</code></div>`).join('')
+      + (r.hits.length >= 300 ? '<div class="muted tiny">First 300 matches — add another word to narrow it down.</div>' : '')
+      : '<div class="muted tiny" style="padding:8px">No matches.</div>';
+  },
+};
+$('#slogOn').onchange = async e => { await saveSettings({ session_log: e.target.checked }); toast(e.target.checked ? 'SSH sessions you open from now on are saved' : 'SSH sessions are no longer saved'); SessionLogs.load(); };
+{ let t; $('#slogQ').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => SessionLogs.load(), 250); }); }
+$('#slogList').addEventListener('click', e => { const r = e.target.closest('[data-slog]'); if (r) api('POST', '/api/sessionlogs/open', { file: r.dataset.slog }).catch(err => toast(err.message, true)); });
+$('#slogFolder').onclick = () => api('POST', '/api/sessionlogs/open', {}).catch(err => toast(err.message, true));
+$('#slogClose').onclick = () => $('#slogDlg').close();
+
 // ☰ → where the data is: open it in Explorer, or copy the path.
 const DataDir = {
   short: p => { const parts = (p || '').split(/[\\/]/).filter(Boolean); return parts.length > 3 ? '…' + (p.includes('\\') ? '\\' : '/') + parts.slice(-3).join(p.includes('\\') ? '\\' : '/') : p; },

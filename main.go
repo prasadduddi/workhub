@@ -133,7 +133,7 @@ func main() {
 			go app.jiraKeepAlive()
 			go app.tunnelKeeper()
 			go app.backupWatcher()
-			go func() { time.Sleep(15 * time.Second); cleanOldExe() }()
+			go func() { time.Sleep(15 * time.Second); cleanOldExe(); app.pruneSessionLogs() }()
 			sw.set(app.routes())
 		})
 	}
@@ -528,6 +528,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/sftp/upload", a.handleSFTPUpload)
 	mux.HandleFunc("POST /api/sftp/op", a.handleSFTPOp)
 	mux.HandleFunc("POST /api/sftp/transfer", a.handleSFTPTransfer)
+	mux.HandleFunc("GET /api/sessionlogs", a.handleSessionLogs)
+	mux.HandleFunc("POST /api/sessionlogs/open", a.handleSessionLogOpen)
 	mux.HandleFunc("GET /api/jobs", a.handleJobs)
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", a.handleJobCancel)
 	mux.HandleFunc("POST /api/jobs/{id}/retry", a.handleJobRetry)

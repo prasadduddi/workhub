@@ -196,6 +196,14 @@ func (a *App) handleTerm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if a.store.Settings().SessionLog { // ☰ → Session logs: keep the text of this session
+		if lg, err := a.openSessionLog(e.Host, user); err == nil {
+			defer lg.Close()
+			show := send
+			send = func(b []byte) { show(b); lg.Write(b) }
+			show([]byte("\x1b[90m[saving this session's text — ☰ › Session logs]\x1b[0m\r\n"))
+		}
+	}
 	cols, rows := max(start.Cols, 20), max(start.Rows, 5)
 	t := &termSession{app: a, client: client, entryID: e.ID, send: send, cols: cols, rows: rows}
 	go t.run(e.LastDir, conn)
