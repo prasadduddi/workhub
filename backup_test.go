@@ -55,3 +55,35 @@ func TestBackups(t *testing.T) {
 		t.Fatalf("kept %d backups, want %d", got, backupKeep)
 	}
 }
+
+// Backups are also copied to a second folder (e.g. OneDrive), newest 30 kept.
+func TestBackupCopy(t *testing.T) {
+	root := t.TempDir()
+	dir, copyTo := filepath.Join(root, "data"), filepath.Join(root, "OneDrive", "WorkHub backups")
+	st, _ := OpenStore(dir)
+	st.Ingest("ssh ops@app01.corp.local", "paste", "General")
+	set := st.Settings()
+	set.BackupCopy = copyTo
+	st.SetSettings(set)
+	a := &App{store: st, dataDir: dir}
+	n, err := a.backup(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig, _ := os.ReadFile(filepath.Join(a.backupDir(), n))
+	cp, err := os.ReadFile(filepath.Join(copyTo, n))
+	if err != nil || len(cp) != len(orig) || backupCopyErr != "" {
+		t.Fatalf("copy: %v %q", err, backupCopyErr)
+	}
+	for i := 0; i < 35; i++ { // older ones already there
+		os.WriteFile(filepath.Join(copyTo, "WorkHub-backup-2020-01-"+string(rune('a'+i%26))+string(rune('a'+i/26))+".zip"), []byte("x"), 0o600)
+	}
+	a.copyBackup(filepath.Join(a.backupDir(), n))
+	ents, _ := os.ReadDir(copyTo)
+	if len(ents) != backupKeep {
+		t.Fatalf("kept %d in the copy folder, want %d", len(ents), backupKeep)
+	}
+	if _, err := os.Stat(filepath.Join(copyTo, n)); err != nil {
+		t.Fatal("the newest copy was pruned")
+	}
+}

@@ -520,7 +520,13 @@
   <div class="muted tiny">Made automatically when WorkHub starts and every morning — only when something changed. The newest 30 are kept, in a folder <b>next to</b> your data folder (so they survive if the data folder is lost):</div>
   <div class="row" style="margin:6px 0"><code id="backupFolder" style="overflow-wrap:anywhere"></code></div>
   <div id="backupList" class="backup-list"></div>
-  <div class="muted tiny" style="margin-top:8px">To restore: quit WorkHub, unzip a backup into an empty folder, start WorkHub and pick that folder with <b>Data location…</b>. Backups open only for your Windows login (the key is protected by Windows).</div>
+  <div class="backup-copy">
+    <b>Also copy backups to</b> <span class="muted tiny">— e.g. OneDrive, so they are safe if this laptop is lost or replaced</span>
+    <div class="row" style="margin-top:4px"><code id="backupCopyTo" style="overflow-wrap:anywhere;flex:1"></code></div>
+    <div id="backupCopyState" class="tiny"></div>
+    <div class="row" style="margin-top:4px"><button id="backupOneDrive" hidden>☁ Use OneDrive</button><button id="backupCopyPick">Choose folder…</button><button id="backupCopyOff" hidden>Stop copying</button></div>
+  </div>
+  <div class="muted tiny" style="margin-top:8px">To restore: quit WorkHub, unzip a backup into an empty folder, start WorkHub and pick that folder with <b>Data location…</b>. With a <b>🔐 master password</b> on, a backup opens on any PC with that password (e.g. a new laptop, from OneDrive); without one it opens only for your Windows login on this PC.</div>
   <div class="row end" style="margin-top:10px"><button id="backupReveal">Open backup folder</button><button id="backupNow">Back up now</button><button id="backupClose" class="primary">Close</button></div>
 </dialog>
 

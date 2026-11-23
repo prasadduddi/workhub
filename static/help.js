@@ -59,6 +59,14 @@ const HELP_TOPICS = [
     'Right-click a connection of that user (in a tree, or ⋯ on its card) → 🔑 Change … password everywhere. Or ☰ → Change a password everywhere and pick the user.',
     'Type the new password. Every connection that logs in as that user is listed and ticked — untick any that keep the old one.',
     'Change password saves it (the old one stays in history) and, with the box ticked, tests them all.'] },
+  { t: 'Save and search SSH session text', k: 'session log logging history record save terminal output commands what did i run search putty log', v: 'terminal', s: [
+    '☰ → 📝 Session logs → switch on “Save the text of SSH sessions”.',
+    'Sessions you open from then on are kept per server and day (plain text, in session-logs in your data folder); the terminal says when it is saving.',
+    'Search all of them from the same window; click a result to open that day\'s log. Logs older than 180 days are removed.'] },
+  { t: 'Back up to OneDrive', k: 'backup onedrive copy cloud restore new laptop lost safe', v: '', s: [
+    '☰ → 🛟 Backups → ☁ Use OneDrive (or Choose folder… for any folder).',
+    'Every automatic backup (at start-up and each morning, when something changed) is then copied there too; the newest 30 are kept.',
+    'To restore on a new laptop: unzip a backup into an empty folder and choose it with ☰ → Data location…. With a master password it opens with that password; without one only on the same Windows login.'] },
   { t: 'Which thread gets my captures', k: 'thread capture default general where clipboard copied goes capture here', v: 'tasks', s: [
     'Copied text that Watch clipboard captures goes to the General thread (marked default on the Tasks page).',
     'To send captures to another thread, open it and press 📥 Capture here; press it again to go back to General.',

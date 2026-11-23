@@ -584,6 +584,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/backups", a.handleBackupsList)
 	mux.HandleFunc("POST /api/backups", a.handleBackupNow)
 	mux.HandleFunc("POST /api/backups/reveal", a.handleBackupReveal)
+	mux.HandleFunc("POST /api/backups/copy", a.handleBackupCopy)
 	mux.HandleFunc("GET /api/external", a.handleExternalList)
 	mux.HandleFunc("POST /api/external/paths", a.handleExternalPaths)
 	mux.HandleFunc("POST /api/external/open", a.handleExternalOpen)

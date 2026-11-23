@@ -975,3 +975,4 @@ body.side-collapsed:not(.side-top) .navhead:not(:first-child)::after { content: 
 .slog-row:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .slog-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slog-row code { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.backup-copy { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); }

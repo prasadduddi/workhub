@@ -3,8 +3,10 @@ package main
 // Automatic backups: a zip of the whole data folder, made when WorkHub starts
 // and every morning — only if something changed since the last one. They go
 // next to the data folder (<data>-backups), so losing the data folder doesn't
-// lose them, and the newest 30 are kept. Restoring: quit WorkHub, unzip one
-// into an empty folder and choose it with "Data location…".
+// lose them, and the newest 30 are kept. Each can also be copied to a second
+// folder, such as OneDrive (Settings.BackupCopy), where the newest 30 are
+// kept too. Restoring: quit WorkHub, unzip one into an empty folder and
+// choose it with "Data location…".
 
 import (
 	"archive/zip"
@@ -28,7 +30,11 @@ const (
 	backupMorning = 7 // hour after which the daily backup is made
 )
 
-var backupMu sync.Mutex
+var (
+	backupMu      sync.Mutex
+	backupCopyErr string // why the last copy to the second folder failed
+	backupCopyAt  time.Time
+)
 
 func (a *App) backupDir() string {
 	return filepath.Join(filepath.Dir(a.dataDir), filepath.Base(a.dataDir)+"-backups")
@@ -166,7 +172,91 @@ func (a *App) backup(force bool) (string, error) {
 	for _, old := range a.backups()[min(backupKeep, len(a.backups())):] {
 		_ = os.Remove(filepath.Join(dir, old.Name))
 	}
+	a.copyBackup(path)
 	return filepath.Base(path), nil
+}
+
+// copyBackup puts a backup in the second folder (e.g. OneDrive), if one is set,
+// and keeps the newest backupKeep there.
+func (a *App) copyBackup(path string) {
+	if a.store == nil {
+		return
+	}
+	to := strings.TrimSpace(a.store.Settings().BackupCopy)
+	if to == "" {
+		return
+	}
+	err := os.MkdirAll(to, 0o700)
+	if err == nil {
+		tmp := filepath.Join(to, filepath.Base(path)+".tmp")
+		if err = copyFile(path, tmp); err == nil {
+			err = os.Rename(tmp, filepath.Join(to, filepath.Base(path)))
+		}
+		if err != nil {
+			os.Remove(tmp)
+		}
+	}
+	backupCopyAt, backupCopyErr = time.Now(), ""
+	if err != nil {
+		backupCopyErr = err.Error()
+		log.Println("backup copy:", err)
+		return
+	}
+	ents, _ := os.ReadDir(to)
+	var names []string
+	for _, e := range ents {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), "WorkHub-backup-") && strings.HasSuffix(e.Name(), ".zip") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(names))) // the names carry the date: newest first
+	for _, n := range names[min(backupKeep, len(names)):] {
+		_ = os.Remove(filepath.Join(to, n))
+	}
+}
+
+// oneDriveDir suggests a folder in the user's OneDrive (work account first).
+func oneDriveDir(workspace string) string {
+	for _, v := range []string{"OneDriveCommercial", "OneDrive", "OneDriveConsumer"} {
+		if d := os.Getenv(v); d != "" {
+			if st, err := os.Stat(d); err == nil && st.IsDir() {
+				name := "WorkHub backups"
+				if workspace != "" {
+					name += " - " + workspace
+				}
+				return filepath.Join(d, name)
+			}
+		}
+	}
+	return ""
+}
+
+// handleBackupCopy sets (or, with "", stops) the second backup folder and
+// copies the latest backup there straight away.
+func (a *App) handleBackupCopy(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Folder string }
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	st := a.store.Settings()
+	st.BackupCopy = strings.TrimSpace(in.Folder)
+	a.store.SetSettings(st)
+	if st.BackupCopy != "" {
+		if list := a.backups(); len(list) > 0 {
+			backupMu.Lock()
+			a.copyBackup(filepath.Join(a.backupDir(), list[0].Name))
+			backupMu.Unlock()
+		} else if _, err := a.backup(true); err != nil {
+			writeErr(w, 500, err)
+			return
+		}
+		if backupCopyErr != "" {
+			writeErr(w, 500, fmt.Errorf("can't copy backups there: %s", backupCopyErr))
+			return
+		}
+	}
+	a.handleBackupsList(w, r)
 }
 
 // backupWatcher: one backup at start-up, then one each morning (the first
@@ -190,7 +280,14 @@ func (a *App) backupWatcher() {
 }
 
 func (a *App) handleBackupsList(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"folder": a.backupDir(), "backups": a.backups()})
+	out := map[string]any{"folder": a.backupDir(), "backups": a.backups(), "onedrive": oneDriveDir(a.workspace)}
+	if a.store != nil {
+		out["copy_to"] = a.store.Settings().BackupCopy
+	}
+	if !backupCopyAt.IsZero() {
+		out["copy_at"], out["copy_error"] = backupCopyAt, backupCopyErr
+	}
+	writeJSON(w, out)
 }
 
 func (a *App) handleBackupNow(w http.ResponseWriter, r *http.Request) {

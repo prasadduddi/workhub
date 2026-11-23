@@ -3,7 +3,8 @@ package main
 // Master password: when one is set, the key that encrypts workhub.dat is no
 // longer kept in key.bin (which only needs the Windows login) but in
 // key.master, sealed with a key made from the master password, and a second
-// time with a one-time recovery code (which is emailed to the user). The
+// time with a one-time recovery code (which is emailed to the user). It is not
+// tied to this PC, so a backup opens on a new laptop with the password. The
 // password is asked on the first start of each new version of WorkHub; after
 // that, key.cache (tied to this Windows login, like key.bin, and to the
 // version) opens the data until the next update. Nothing about the password
@@ -117,8 +118,10 @@ func readMaster(dir string) (masterFile, error) {
 	if err != nil {
 		return m, err
 	}
-	if raw, err = unprotectKey(raw); err != nil { // also tied to the Windows user, like key.bin
-		return m, errors.New("key.master belongs to another Windows user or PC")
+	if len(raw) == 0 || raw[0] != '{' { // written by 1.9.4–1.9.5: also tied to the Windows user
+		if raw, err = unprotectKey(raw); err != nil {
+			return m, errors.New("key.master belongs to another Windows user or PC")
+		}
 	}
 	if err := json.Unmarshal(raw, &m); err != nil || m.Key == "" {
 		return m, errors.New("key.master is damaged")
@@ -151,12 +154,10 @@ func writeMaster(dir string, key []byte, pw string) (string, error) {
 	m := masterFile{V: 1, Iter: masterIter, Salt: newSalt(), RecSalt: newSalt()}
 	m.Key = sealKey(passKey(pw, m.Salt, m.Iter), key)
 	m.RecKey = sealKey(passKey(normRecovery(rec), m.RecSalt, m.Iter), key)
+	// Protected by the password alone (not also by the Windows login), so a
+	// backup restored on another PC opens with the master password.
 	b, _ := json.Marshal(m)
-	prot, err := protectKey(b)
-	if err != nil {
-		return "", err
-	}
-	return rec, writeAtomic(masterPath(dir), prot)
+	return rec, writeAtomic(masterPath(dir), b)
 }
 
 // SetMaster turns the master password on, or changes it (current is then

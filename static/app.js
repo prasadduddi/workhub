@@ -3985,8 +3985,30 @@ async function showBackups() {
   $('#backupFolder').textContent = r.folder;
   $('#backupList').innerHTML = r.backups.map((b, i) => `<div class="grow"><span>${i === 0 ? '<b>' : ''}${esc(fmtDateTime(b.when))}${i === 0 ? '</b> (latest)' : ''}</span><span class="spacer"></span><span class="muted tiny">${fmtSize(b.size)} · ${esc(b.name)}</span></div>`).join('')
     || '<div class="muted tiny" style="padding:8px">No backups yet — one is made at start-up when there is data.</div>';
+  $('#backupCopyTo').textContent = r.copy_to || 'Not copied anywhere else';
+  $('#backupCopyState').innerHTML = !r.copy_to ? '' : r.copy_error ? `<span style="color:var(--danger)">⚠ Last copy failed: ${esc(r.copy_error)}</span>`
+    : r.copy_at ? `<span style="color:var(--ok)">✓ Last copied ${esc(fmtDateTime(r.copy_at))}</span>` : '<span class="muted">Each new backup is copied there.</span>';
+  $('#backupOneDrive').hidden = !r.onedrive || r.copy_to === r.onedrive;
+  $('#backupOneDrive').title = r.onedrive ? 'Copy backups to ' + r.onedrive : '';
+  $('#backupCopyOff').hidden = !r.copy_to;
+  Backups.onedrive = r.onedrive;
   if (!$('#backupDlg').open) $('#backupDlg').showModal();
 }
+const Backups = {
+  onedrive: '',
+  async copyTo(folder) {
+    try { await api('POST', '/api/backups/copy', { folder }); toast(folder ? 'Backups are now also copied to ' + folder : 'Backups are no longer copied'); }
+    catch (err) { toast(err.message, true); }
+    showBackups();
+  },
+};
+$('#backupOneDrive').onclick = () => Backups.copyTo(Backups.onedrive);
+$('#backupCopyOff').onclick = () => Backups.copyTo('');
+$('#backupCopyPick').onclick = async () => {
+  toast('Choose a folder in the window that opened (it may be behind WorkHub)');
+  const r = await api('POST', '/api/local/pick', { start: '' }).catch(err => (toast(err.message, true), null));
+  if (r?.ok) Backups.copyTo(r.path);
+};
 $('#backupBtn').onclick = showBackups;
 $('#backupClose').onclick = () => $('#backupDlg').close();
 $('#backupReveal').onclick = () => api('POST', '/api/backups/reveal').catch(err => toast(err.message, true));

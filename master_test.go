@@ -155,3 +155,33 @@ func TestMasterAskedOncePerVersion(t *testing.T) {
 		t.Fatalf("turning off should remove key.cache: %v", err)
 	}
 }
+
+// With a master password, a copy of the data folder opens anywhere with the
+// password (key.master isn't tied to the Windows login).
+func TestMasterPortable(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := OpenStore(dir)
+	s.Ingest("ssh deploy@srv-01.example.com", "paste", "")
+	s.Flush()
+	if _, err := s.SetMaster("", "Correct horse 1"); err != nil {
+		t.Fatal(err)
+	}
+	s.Flush()
+	raw, _ := os.ReadFile(masterPath(dir))
+	if len(raw) == 0 || raw[0] != '{' {
+		t.Fatal("key.master should be plain JSON (sealed by the password)")
+	}
+	other := t.TempDir() // "the new laptop"
+	for _, f := range []string{"workhub.dat", "key.master"} {
+		if err := copyFile(filepath.Join(dir, f), filepath.Join(other, f)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	key, _, err := unlockMaster(other, "Correct horse 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s2, err := OpenStoreKey(other, key); err != nil || len(s2.Entries()) != 1 {
+		t.Fatalf("restored copy: %v", err)
+	}
+}
