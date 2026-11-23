@@ -111,7 +111,7 @@ type Settings struct {
 	Mail          MailSettings `json:"mail"`
 	NameRules     []NameRule   `json:"name_rules,omitempty"` // e.g. -BAT- → Batch (this workspace only)
 	Saved         []SavedQuery `json:"saved_searches,omitempty"`
-	ActiveThread  string       `json:"active_thread,omitempty"` // the task thread captures are added to
+	ActiveThread  string       `json:"active_thread,omitempty"` // the task thread captures are added to: "" = General, "off" = none
 }
 
 // SavedQuery is a search kept in the sidebar, e.g. "PROD Batch" = env:prod app:batch.
@@ -915,7 +915,7 @@ func (s *Store) Ingest(text, source, project string) (*Clip, []EntryView) {
 	}
 	s.applyNameRules()
 	s.st.Clips = append(s.st.Clips, clip)
-	if s.st.Settings.ActiveThread != "" && (source == "clipboard" || source == "paste") {
+	if source == "clipboard" || source == "paste" {
 		s.captureToThread(text, clip.ID, now)
 	}
 	if len(s.st.Clips) > maxClips {

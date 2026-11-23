@@ -146,11 +146,22 @@ func (s *Store) DeletePost(id, pid string) error {
 	return nil
 }
 
-// captureToThread adds copied text to the thread chosen as "Capturing to"
+// captureToThread adds copied text to the thread chosen with "Capture here"
+// or, when none is chosen, to the General thread; "off" means no thread
 // (called from Ingest, with s.mu held).
 func (s *Store) captureToThread(text, clipID string, now time.Time) {
-	w := s.workItem(s.st.Settings.ActiveThread)
-	if w == nil {
+	var w *WorkItem
+	switch id := s.st.Settings.ActiveThread; id {
+	case "off":
+		return
+	case "":
+		w = s.generalThread(now)
+	default:
+		if w = s.workItem(id); w == nil { // that thread was deleted
+			w = s.generalThread(now)
+		}
+	}
+	if w == nil || w.Archived {
 		return
 	}
 	w.Posts = append(w.Posts, &Post{ID: randomHex(8), At: now, Kind: "capture", Text: text, Ref: clipID})
@@ -267,4 +278,26 @@ func (a *App) handlePostDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = a.store.writeWorkDocx(r.PathValue("id"))
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// generalThread is the thread captures go to by default, made the first time
+// it is needed (with s.mu held).
+func (s *Store) generalThread(now time.Time) *WorkItem {
+	for _, w := range s.st.WorkItems {
+		if w.General {
+			return w
+		}
+	}
+	w := &WorkItem{ID: randomHex(8), Title: "General", Status: "doing", General: true, Blocks: []*Block{}, Created: now, Updated: now}
+	s.st.WorkItems = append(s.st.WorkItems, w)
+	s.changed()
+	return w
+}
+
+// EnsureGeneral makes sure the General thread exists (shown on the Tasks page
+// even before the first capture).
+func (s *Store) EnsureGeneral() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.generalThread(time.Now())
 }

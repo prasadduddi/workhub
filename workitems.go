@@ -30,6 +30,7 @@ type WorkItem struct {
 	// Archived threads are kept but left out of the thread list (unless
 	// "Show archived" is on).
 	Archived bool      `json:"archived,omitempty"`
+	General  bool      `json:"general,omitempty"` // the default thread for captures
 	Created  time.Time `json:"created"`
 	Updated  time.Time `json:"updated"`
 }
@@ -261,6 +262,7 @@ func (s *Store) workAttachment(aid string) *Attachment {
 // ---- HTTP ----
 
 func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
+	a.store.EnsureGeneral()
 	out := []map[string]any{}
 	for _, wi := range a.store.WorkItems() {
 		n := map[string]int{}
@@ -288,7 +290,7 @@ func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 				sb.WriteString(" " + strings.ToLower(b.File.Name))
 			}
 		}
-		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated, "archived": wi.Archived,
+		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated, "archived": wi.Archived, "general": wi.General,
 			"notes": n["text"], "links": n["link"], "images": n["image"], "files": n["file"], "posts": n["post"], "search": sb.String()})
 	}
 	writeJSON(w, out)

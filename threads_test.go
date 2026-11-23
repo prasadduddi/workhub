@@ -244,3 +244,39 @@ func TestThreadJiraLink(t *testing.T) {
 		t.Fatal("Markdown lacks the Jira key")
 	}
 }
+
+// With no thread chosen, captures go to the General thread; "off" stops them.
+func TestGeneralThreadByDefault(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	s.Ingest("ssh ops@srv-01.example.com", "clipboard", "")
+	var gen *WorkItem
+	for _, w := range s.st.WorkItems {
+		if w.General {
+			gen = w
+		}
+	}
+	if gen == nil || gen.Title != "General" || len(gen.Posts) != 1 || gen.Posts[0].Kind != "capture" {
+		t.Fatalf("general thread: %+v", gen)
+	}
+	other := s.SaveWorkItem(WorkItem{Title: "CM-1 release"})
+	st := s.Settings()
+	st.ActiveThread = other.ID
+	s.SetSettings(st)
+	s.Ingest("ssh ops@srv-02.example.com", "clipboard", "")
+	if o, _ := s.GetWorkItem(other.ID); len(o.Posts) != 1 || len(gen.Posts) != 1 {
+		t.Fatalf("chosen thread should get it: other=%d general=%d", len(o.Posts), len(gen.Posts))
+	}
+	st.ActiveThread = "off"
+	s.SetSettings(st)
+	s.Ingest("ssh ops@srv-03.example.com", "clipboard", "")
+	if o, _ := s.GetWorkItem(other.ID); len(o.Posts) != 1 || len(gen.Posts) != 1 {
+		t.Fatal("off: no thread should get captures")
+	}
+	st.ActiveThread = ""
+	s.SetSettings(st)
+	_ = s.ArchiveWork(gen.ID, true)
+	s.Ingest("ssh ops@srv-04.example.com", "clipboard", "")
+	if len(gen.Posts) != 1 {
+		t.Fatal("archived General still captured")
+	}
+}

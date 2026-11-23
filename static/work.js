@@ -57,14 +57,19 @@ const Work = {
     this.renderCapture();
     if ($('#search').value.trim() && $('#view-dashboard').classList.contains('active')) renderBoard(); // threads in the main search
   },
-  active() { return S.settings?.active_thread || ''; },
+  // The thread captures go to: the one with "Capture here", else General ("off" = none).
+  active() {
+    const a = S.settings?.active_thread || '';
+    if (a === 'off') return '';
+    return this.list.some(w => w.id === a) ? a : (this.list.find(w => w.general && !w.archived)?.id || '');
+  },
 
   renderList() {
     const q = ($('#workSearch')?.value || '').trim().toLowerCase();
     const archived = this.list.filter(w => w.archived).length;
-    const items = this.list.filter(w => (this.showArchived || !w.archived || w.id === this.current?.id) && (!q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t))));
+    const items = [...this.list].sort((a, b) => (b.general && !b.archived) - (a.general && !a.archived)).filter(w => (this.showArchived || !w.archived || w.id === this.current?.id) && (!q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t))));
     $('#workList').innerHTML = (items.map(w => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''}" data-work="${w.id}">
-      <div class="tli-top"><span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.id === this.active() ? '<span class="tcap" title="Captures are being added here">● capturing</span>' : ''}</div>
+      <div class="tli-top"><span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.general ? '<span class="tgen" title="Copied text goes here when no other thread has 📥 Capture here on">default</span>' : ''}${w.id === this.active() ? '<span class="tcap" title="Captures are being added here">● capturing</span>' : ''}</div>
       <b>${esc(w.title)}</b><small>${w.jira && !w.title.toUpperCase().includes(w.jira) ? `◆ ${esc(w.jira)} · ` : ''}${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} post${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`).join('')
       || `<div class="muted tiny" style="padding:8px">${q ? 'No matches' : 'No task threads yet — press + New thread.'}</div>`)
       + (archived ? `<a href="#" class="tmore tarch-toggle" data-toggle-archived>${this.showArchived ? 'Hide archived' : `Show archived (${archived})`}</a>` : '');
@@ -83,7 +88,7 @@ const Work = {
     const w = this.list.find(x => x.id === this.active());
     const el = $('#captureThread'); if (!el) return;
     el.hidden = !w;
-    if (w) el.innerHTML = `and thread <a href="#" data-gothread="${w.id}">${esc(w.title)}</a> <a href="#" data-stopthread title="Stop adding captures to this thread">✕</a>`;
+    if (w) el.innerHTML = `and thread <a href="#" data-gothread="${w.id}">${esc(w.title)}</a> <a href="#" data-stopthread title="Stop adding captures to threads (📥 Capture here in any thread starts again)">✕</a>`;
   },
 
   async show() {
@@ -113,11 +118,13 @@ const Work = {
     return w;
   },
 
+  // Capture here on → this thread; off → back to General (off on General → no thread).
   async setCapture(on) {
     const w = this.current; if (!w) return;
-    await saveSettings({ active_thread: on ? w.id : '' });
+    await saveSettings({ active_thread: on ? (w.general ? '' : w.id) : (w.general ? 'off' : '') });
     this.render(); this.renderList(); this.renderCapture();
-    toast(on ? `Captures now also go to “${w.title}”` : 'Captures no longer go to a thread');
+    const g = this.list.find(x => x.general);
+    toast(on ? `Captures now also go to “${w.title}”` : w.general || !g ? 'Captures no longer go to a thread' : `Captures go to “${g.title}” again`);
   },
 
   // The linked Jira issue: key, status and summary when it's tracked on the Jira page.
@@ -357,7 +364,7 @@ $('#workList').addEventListener('click', e => {
 });
 $('#captureThread')?.addEventListener('click', e => {
   const go = e.target.closest('[data-gothread]'); if (go) { e.preventDefault(); return Work.open(go.dataset.gothread); }
-  if (e.target.closest('[data-stopthread]')) { e.preventDefault(); saveSettings({ active_thread: '' }).then(() => { Work.renderCapture(); Work.renderList(); if (Work.current) Work.render(); }); }
+  if (e.target.closest('[data-stopthread]')) { e.preventDefault(); saveSettings({ active_thread: 'off' }).then(() => { Work.renderCapture(); Work.renderList(); if (Work.current) Work.render(); }); }
 });
 
 const page = $('#taskMain');
@@ -418,7 +425,7 @@ page.addEventListener('click', async e => {
       ['Open the work-items folder', () => api('POST', `/api/work/${w.id}/word?what=folder`).catch(err => toast(err.message, true))],
       ['Delete this thread…', async () => {
         if (!confirm(`Delete the thread "${w.title}" and everything in it?`)) return;
-        if (w.id === Work.active()) await saveSettings({ active_thread: '' });
+        if (w.id === S.settings.active_thread) await saveSettings({ active_thread: '' });
         await api('DELETE', '/api/work/' + w.id); Work.current = null; await Work.loadList(); Work.show();
       }]]));
   }

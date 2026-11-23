@@ -59,6 +59,11 @@ const HELP_TOPICS = [
     'Right-click a connection of that user (in a tree, or ⋯ on its card) → 🔑 Change … password everywhere. Or ☰ → Change a password everywhere and pick the user.',
     'Type the new password. Every connection that logs in as that user is listed and ticked — untick any that keep the old one.',
     'Change password saves it (the old one stays in history) and, with the box ticked, tests them all.'] },
+  { t: 'Which thread gets my captures', k: 'thread capture default general where clipboard copied goes capture here', v: 'tasks', s: [
+    'Copied text that Watch clipboard captures goes to the General thread (marked default on the Tasks page).',
+    'To send captures to another thread, open it and press 📥 Capture here; press it again to go back to General.',
+    'The sidebar under Watch clipboard shows the current thread; ✕ there stops adding captures to any thread.',
+    'Text with no server, URL or login in it is only captured when “Capture everything” is on.'] },
   { t: 'Disconnect from a server', k: 'disconnect close end logout session stop ssh ftp sftp sql all', v: 'terminal', s: [
     'Right-click the connected server (green ● in the tree) → ⏏ Disconnect SSH, ⏏ Disconnect FTP or ⏏ Disconnect (databases).',
     'Or: ✕ on an SSH tab / ⏏ Disconnect all on the SSH tab bar; ⏏ Disconnect next to the server name on the FTP page; ⏏ Disconnect in the SQL window.',

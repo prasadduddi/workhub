@@ -4,7 +4,12 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
-  { v: '1.9.6', title: 'Disconnect, bookmarks table', items: [
+  { v: '1.9.6', title: 'General thread, thread formatting, PuTTY look, transfers, disconnect', items: [
+    ['🧵', 'General thread', 'Tasks has a General thread (marked default): whatever Watch clipboard captures goes there when no other thread has 📥 Capture here on. Turning Capture here off in a thread sends captures back to General; ✕ in the sidebar stops thread captures.', 'tasks'],
+    ['𝐁', 'Bold, italic and lists in threads', 'A small bar above the thread box: B, I, U, S, bulleted and numbered lists, clear formatting — also for replies and edited posts (Ctrl+B / Ctrl+I / Ctrl+U work too).', 'tasks'],
+    ['🗄', 'Archive a thread', 'Thread ⋯ → Archive hides it from the list (Show archived brings it back). It still turns up in search.', 'tasks'],
+    ['🖥', 'SSH looks like PuTTY', 'The terminal uses PuTTY\'s Courier New font, its colours on black and a steady block cursor.', 'terminal'],
+    ['⇅', 'Transfers panel', 'Under the FTP panes: every upload and download with progress and speed, Cancel, Retry for failed ones, Show to find a downloaded file in This PC, and Clear finished.', 'files'],
     ['☰', 'Bookmarks as a table', 'Bookmarks → ☰ Table shows every link in full: name, app, URL, user, environment, folder, how often and when you last opened it. Drag a column edge to resize, click a heading to sort, click a row to open. ▦ Tiles switches back.', ''],
     ['▭', 'Wider bookmark tiles', 'In ▦ Tiles view, drag the ▭ slider to make the tiles wider and see more of each name.', ''],
     ['⏏', 'Disconnect SSH, FTP and SQL', 'Right-click a connected server (green ●) → ⏏ Disconnect SSH / FTP. FTP has a ⏏ Disconnect button next to the server name, SSH a ⏏ Disconnect all on the tab bar, and ☰ → Disconnect all closes every session (command prompts on this PC stay).', 'terminal'],
