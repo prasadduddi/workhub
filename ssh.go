@@ -196,12 +196,12 @@ func (a *App) handleTerm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if a.store.Settings().SessionLog { // ☰ → Session logs: keep the text of this session
+	if a.store.Settings().SessionLog { // ⚙ Settings → Save SSH session text: keep the text of this session
 		if lg, err := a.openSessionLog(e.Host, user); err == nil {
 			defer lg.Close()
 			show := send
 			send = func(b []byte) { show(b); lg.Write(b) }
-			show([]byte("\x1b[90m[saving this session's text — ☰ › Session logs]\x1b[0m\r\n"))
+			show([]byte("\x1b[90m[saving this session's text — ⚙ Settings › Session logs]\x1b[0m\r\n"))
 		}
 	}
 	cols, rows := max(start.Cols, 20), max(start.Rows, 5)

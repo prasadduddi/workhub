@@ -442,7 +442,7 @@ async function poll() {
     const { v, data_dir, app_version } = await api('GET', '/api/version');
     $('#dataDir').textContent = 'Data: ' + data_dir; S.dataDir = data_dir;
     $('#appVersion').textContent = 'Version ' + app_version;
-    $('#appVersion').title = 'Data: ' + data_dir + ' — change it from ☰ › Data location…';
+    $('#appVersion').title = 'Data: ' + data_dir + ' — ☰ › ⚙ Settings › Data folder';
     if (v !== S.version) { S.version = v; await refreshAll(); }
   } catch (e) { if (e.message !== 'unauthorized') console.error('WorkHub refresh failed:', e); }
 }
@@ -499,7 +499,7 @@ $('#dataLocBtn').onclick = async () => {
     document.body.innerHTML = '<div class="empty">Restarting WorkHub… a new tab opens in a few seconds. You can close this one.</div>';
   } catch (err) { toast(err.message, true); }
 };
-// ☰ → Session logs: switch saving on/off, search the text of past SSH
+// ⚙ Settings → Session logs: switch saving on/off, search the text of past SSH
 // sessions, open a day's log.
 const SessionLogs = {
   async open() {
@@ -531,7 +531,7 @@ $('#slogList').addEventListener('click', e => { const r = e.target.closest('[dat
 $('#slogFolder').onclick = () => api('POST', '/api/sessionlogs/open', {}).catch(err => toast(err.message, true));
 $('#slogClose').onclick = () => $('#slogDlg').close();
 
-// ☰ → where the data is: open it in Explorer, or copy the path.
+// ⚙ Settings → where the data is: open it in Explorer, or copy the path.
 const DataDir = {
   short: p => { const parts = (p || '').split(/[\\/]/).filter(Boolean); return parts.length > 3 ? '…' + (p.includes('\\') ? '\\' : '/') + parts.slice(-3).join(p.includes('\\') ? '\\' : '/') : p; },
   open: () => api('POST', '/api/datadir/open').catch(err => toast(err.message, true)),

@@ -47,7 +47,7 @@ const HELP_TOPICS = [
     'Click “Saving to …” under the switch to choose the project new captures go to.',
     'Everything captured is listed on the Captured page; copying the same text twice is ignored.'] },
   { t: 'Protect WorkHub with a master password', k: 'master password protect encrypt data start startup secure copy stolen laptop access recovery code forgot', v: '', s: [
-    '☰ → 🔐 Master password… → type a password (8+ characters) twice and your email → Turn on.',
+    '☰ → ⚙ Settings → 🔐 Master password → type a password (8+ characters) twice and your email → Turn on.',
     'The recovery code is emailed to you (through Outlook) — keep that email; it is the only way in if you forget the password.',
     'From then on WorkHub asks for the password the first time each new version starts (after an update); your data can\'t be opened without it, even from a copy of the data folder.',
     'Forgot it? On the start screen type the recovery code from the email instead, then choose a new password (a new code is emailed).',
@@ -63,15 +63,15 @@ const HELP_TOPICS = [
     'Closing the WorkHub window (✕) hides it to the tray, next to the clock — it keeps capturing, tunnels stay open, transfers finish.',
     'Click the WorkHub icon in the tray (or press Ctrl+Alt+W) to open it again.',
     'To stop WorkHub: right-click the tray icon → Quit WorkHub, or ☰ → Quit WorkHub.',
-    'Prefer ✕ to quit? ☰ → untick “Close button keeps WorkHub running (in the tray)”.'] },
+    'Prefer ✕ to quit? ☰ → ⚙ Settings → switch off “Close button keeps WorkHub running”.'] },
   { t: 'Save and search SSH session text', k: 'session log logging history record save terminal output commands what did i run search putty log', v: 'terminal', s: [
-    '☰ → 📝 Session logs → switch on “Save the text of SSH sessions”.',
+    '☰ → ⚙ Settings → switch on “Save SSH session text” (Logs… opens them).',
     'Sessions you open from then on are kept per server and day (plain text, in session-logs in your data folder); the terminal says when it is saving.',
     'Search all of them from the same window; click a result to open that day\'s log. Logs older than 180 days are removed.'] },
   { t: 'Back up to OneDrive', k: 'backup onedrive copy cloud restore new laptop lost safe', v: '', s: [
-    '☰ → 🛟 Backups → ☁ Use OneDrive (or Choose folder… for any folder).',
+    '☰ → ⚙ Settings → 🛟 Backups → Manage… → ☁ Use OneDrive (or Choose folder… for any folder).',
     'Every automatic backup (at start-up and each morning, when something changed) is then copied there too; the newest 30 are kept.',
-    'To restore on a new laptop: unzip a backup into an empty folder and choose it with ☰ → Data location…. With a master password it opens with that password; without one only on the same Windows login.'] },
+    'To restore on a new laptop: unzip a backup into an empty folder and choose it with ☰ → ⚙ Settings → Data folder → Change…. With a master password it opens with that password; without one only on the same Windows login.'] },
   { t: 'Which thread gets my captures', k: 'thread capture default general where clipboard copied goes capture here', v: 'tasks', s: [
     'Copied text that Watch clipboard captures goes to the General thread (marked default on the Tasks page).',
     'To send captures to another thread, open it and press 📥 Capture here; press it again to go back to General.',
@@ -128,7 +128,7 @@ const HELP_TOPICS = [
     'A database needs Type oracle/postgres and the service name / database in Edit; the port alone usually fills the type.'] },
   { t: 'Open in the real PuTTY, FileZilla, SQL Developer or DBeaver', k: 'open in putty filezilla dbeaver sql developer external program real', v: 'dashboard', s: [
     'Right-click a server (tree or search result) → Open in PuTTY / FileZilla / SQL Developer / DBeaver ↗, or use the buttons in Edit.',
-    'If a program isn’t found, ☰ → Programs for “Open in” lets you point to it.'] },
+    'If a program isn’t found, ☰ → ⚙ Settings → Programs for “Open in” lets you point to it.'] },
 
   // ---- Tasks ----
   { t: 'Start a task thread', k: 'task tasks thread threads new start create work item ticket change notes', v: 'tasks', s: [
@@ -201,19 +201,19 @@ const HELP_TOPICS = [
 
   // ---- WorkHub itself ----
   { t: 'Lock WorkHub with a PIN', k: 'lock pin security forgot reset idle', v: '', s: [
-    'Right-click 🔒 at the bottom of the sidebar (or ☰ → Lock) to set a PIN and the idle time.',
+    '☰ → ⚙ Settings → 🔒 PIN lock → Set up… to choose a PIN and the idle time (or right-click 🔒 at the bottom of the sidebar).',
     'Ctrl+L locks now. Forgot the PIN: use the recovery code, or have a code emailed to the address in your profile.'] },
   { t: 'Update WorkHub', k: 'update upgrade new version install check restart later next start', v: '', s: [
     '☰ → Check for updates & install (a green ⬆ button appears at the top when there is one).',
     'Update now tells you WorkHub will restart; choose ↻ Restart now, or Update at next start to keep working — the new version starts the next time you open WorkHub.',
     'Your data stays as it is. Until you restart, ☰ (and the ⬆ button) offer ↻ Restart to finish.'] },
   { t: 'Backups and data location', k: 'backup backups restore data location folder move', v: '', s: [
-    'WorkHub backs up at start-up and every morning (when something changed); ☰ → Backups… shows them.',
-    'To restore: quit, unzip a backup into an empty folder, start WorkHub and pick it with ☰ → Data location…'] },
+    'WorkHub backs up at start-up and every morning (when something changed); ☰ → ⚙ Settings → Backups shows them.',
+    'To restore: quit, unzip a backup into an empty folder, start WorkHub and pick it with ☰ → ⚙ Settings → Data folder → Change…'] },
   { t: 'Menu on the left or at the top', k: 'menu sidebar top left layout move collapse icons room wide', v: '', s: [
-    'The ▭ button at the top of the menu (or ☰ → Menu at the top) moves it into a bar across the top; again to move it back.',
+    'The ▭ button at the top of the menu (or ☰ → ⚙ Settings → Menu position) moves it into a bar across the top; again to move it back.',
     'On SSH, FTP, SQL, Tasks and other tree pages the sidebar shrinks to icons; click that page’s icon again (or ») to bring it back to full size.'] },
-  { t: 'Light or dark theme', k: 'theme dark light mode colours', v: '', s: ['☰ → Theme: follow Windows, light or dark.'] },
+  { t: 'Light or dark theme', k: 'theme dark light mode colours', v: '', s: ['☰ → ⚙ Settings → Theme: follow Windows, light or dark.'] },
   { t: 'Keyboard shortcuts', k: 'keyboard shortcuts keys hotkey ctrl', v: '', s: [
     'Ctrl+K search · Ctrl+J assistant · Ctrl+L lock · Ctrl+B sidebar · F1 help.',
     'Desktop version: Ctrl+Alt+W in any program brings WorkHub up with the search ready.',

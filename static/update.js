@@ -110,14 +110,11 @@ $('#mainMenuBtn').onclick = () => {
     ['❓ Help (F1)', () => Help.open()],
     ['💬 Ask the assistant (Ctrl+J)', () => Chat.toggle(true)],
     ["✨ What's new & tips", click('#whatsNewBtn')],
-    [document.body.classList.contains('side-top') ? '⇤ Menu on the left' : '⇡ Menu at the top', click('#sideFlip')],
-    [`🌓 Theme: ${{ auto: 'follow Windows', light: 'light', dark: 'dark' }[Theme.pref()]} — switch to ${{ auto: 'light', light: 'dark', dark: 'follow Windows' }[Theme.pref()]}`, () => Theme.set({ auto: 'light', light: 'dark', dark: 'auto' }[Theme.pref()])], '-',
-    ...((o => o.ssh.length || o.ftp || o.sql ? [[`⏏ Disconnect all (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && 'FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')})`, disconnectAll], '-'] : [])(openSessions())),
-    ['👤 Your profile', click('#profileBtn')], ['🔑 Change a password everywhere…', () => PwAll.open()], ['🔒 Lock (Ctrl+L)', click('#lockBtn')], ['🔐 Master password…', () => Master.open()], '-',
-    ...(window.WH_DESKTOP ? [[`${Tray.on() ? '☑' : '☐'} Close button keeps WorkHub running (in the tray)`, () => Tray.set(!Tray.on())]] : []),
-    ['📝 Session logs…', () => SessionLogs.open()],
-    ['↗ Programs for “Open in”…', click('#extBtn')], ['🛟 Backups…', click('#backupBtn')], ['Import data…', click('#importBtn')], ['Data location…', click('#dataLocBtn')], '-',
-    ...(S.dataDir ? [[`📁 Data: ${DataDir.short(S.dataDir)} — open`, DataDir.open], ['📋 Copy data folder path', () => copyText(S.dataDir, 'Data folder path copied')], '-'] : []),
+    '-',
+    ...((o => o.ssh.length || o.ftp || o.sql ? [[`⏏ Disconnect all (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && 'FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')})`, disconnectAll]] : [])(openSessions())),
+    ['🔑 Change a password everywhere…', () => PwAll.open()],
+    ['🔒 Lock (Ctrl+L)', click('#lockBtn')], '-',
+    ['⚙ Settings…', () => Settings.open()], '-',
     ['Quit WorkHub', click('#quitBtn')]]));
 };
 $('#updNow').onclick = () => Update.ready() ? Update.restartNow() : Update.asking ? Update.apply(false) : Update.confirm();

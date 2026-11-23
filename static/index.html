@@ -12,7 +12,7 @@
 <body>
 <aside class="side">
   <div class="brand"><span class="logo">W</span><span class="brand-text">WorkHub</span><button id="sideToggle" class="ghost icon" title="Hide/show sidebar (Ctrl+B)">«</button></div>
-  <div class="brand-tools"><button id="sideFlip" class="ghost icon" title="Move this menu to the top of the window (or back to the left)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg></button><button id="chatFab" class="ghost icon" title="Ask the assistant (Ctrl+J)"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></button><button id="whatsNewTop" class="ghost icon" title="What's new &amp; tips"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg></button><button id="mainMenuBtn" class="ghost icon" title="Menu: updates, theme, profile, lock, programs, backups…"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
+  <div class="brand-tools"><button id="sideFlip" class="ghost icon" title="Move this menu to the top of the window (or back to the left)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg></button><button id="chatFab" class="ghost icon" title="Ask the assistant (Ctrl+J)"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></button><button id="whatsNewTop" class="ghost icon" title="What's new &amp; tips"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg></button><button id="mainMenuBtn" class="ghost icon" title="Menu: updates, help, settings…"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
   <button id="updPill" class="upd-pill" hidden title="Click to see what's new and install it">⬆ <span id="updPillText">A new version is available</span></button>
   <button id="wsName" class="ws" title="Workspace — click to rename"></button>
   <nav id="nav">
@@ -473,6 +473,11 @@
   <label>Notes<textarea id="pfNotes" rows="3"></textarea></label>
   <div class="row end" style="margin-top:10px"><button id="pfCopy" title="Copy your details to paste into emails or forms">Copy my details</button><span class="spacer"></span><button id="pfCancel">Close</button><button id="pfSave" class="primary">Save</button></div>
 </dialog>
+<dialog id="settingsDlg" class="settings-dlg">
+  <h3>⚙ Settings</h3>
+  <div id="settingsBody"></div>
+  <div class="row end" style="margin-top:10px"><button id="settingsClose" class="primary">Close</button></div>
+</dialog>
 <dialog id="slogDlg">
   <h3>📝 Session logs</h3>
   <label class="switch small"><input type="checkbox" id="slogOn"><span></span> Save the text of SSH sessions</label>
@@ -620,6 +625,7 @@
 <script src="help.js"></script>
 <script src="lock.js"></script>
 <script src="update.js"></script>
+<script src="settings.js"></script>
 <script src="calendar.js"></script>
 <script src="commands.js"></script>
 </body>

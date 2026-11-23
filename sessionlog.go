@@ -4,7 +4,7 @@ package main
 // shows (commands echo back, so they are in it; typed passwords are not, as
 // servers don't echo them) is appended to
 // <data>/session-logs/<server>/<YYYY-MM-DD>.log as plain text, and can be
-// searched from ☰ → Session logs. Logs older than 180 days are removed.
+// searched from ⚙ Settings → Session logs. Logs older than 180 days are removed.
 
 import (
 	"bufio"

@@ -5,7 +5,7 @@ package main
 // Tray icon (Desktop version): closing the window hides WorkHub to the
 // notification area, so clipboard capture, tunnels and transfers keep going.
 // Click the icon to bring the window back; right-click for Open / Quit.
-// ☰ → "Close button keeps WorkHub running" switches it off (close = quit).
+// ⚙ Settings → "Close button keeps WorkHub running" switches it off (close = quit).
 
 import (
 	"syscall"

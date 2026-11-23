@@ -4,14 +4,17 @@
 // top of RELEASES for every new version.
 
 const RELEASES = [
+  { v: '1.9.7', title: 'Settings in one place', items: [
+    ['⚙', 'Settings', 'Theme, menu position, profile, PIN lock, master password, data folder, backups, session logs, “Open in” programs and the tray switch are now in ☰ → ⚙ Settings. The ☰ menu keeps only everyday actions.', ''],
+  ] },
   { v: '1.9.6', title: 'General thread, thread formatting, PuTTY look, transfers, disconnect', items: [
     ['🧵', 'General thread', 'Tasks has a General thread (marked default): whatever Watch clipboard captures goes there when no other thread has 📥 Capture here on. Turning Capture here off in a thread sends captures back to General; ✕ in the sidebar stops thread captures.', 'tasks'],
     ['𝐁', 'Bold, italic and lists in threads', 'A small bar above the thread box: B, I, U, S, bulleted and numbered lists, clear formatting — also for replies and edited posts (Ctrl+B / Ctrl+I / Ctrl+U work too).', 'tasks'],
     ['🗄', 'Archive a thread', 'Thread ⋯ → Archive hides it from the list (Show archived brings it back). It still turns up in search.', 'tasks'],
     ['🖥', 'SSH looks like PuTTY', 'The terminal uses PuTTY\'s Courier New font, its colours on black and a steady block cursor.', 'terminal'],
-    ['📝', 'Session logs', '☰ → 📝 Session logs: switch on “Save the text of SSH sessions” and what each terminal shows is kept per server and day, plain text, searchable (“what did I run on that server last Tuesday?”). Off unless you turn it on; kept 180 days.', 'terminal'],
-    ['☁', 'Backups to OneDrive', '☰ → 🛟 Backups → ☁ Use OneDrive (or Choose folder…) copies every automatic backup there too, newest 30 kept. With a master password on, a backup opens on any PC with that password — e.g. a new laptop.', ''],
-    ['🔽', 'Keeps running in the tray (Desktop)', 'Closing the WorkHub window now hides it to the tray (next to the clock) — clipboard capture, tunnels and transfers carry on. Click the icon to open it again; right-click → Quit WorkHub to stop. Switch it off in ☰ → Close button keeps WorkHub running.', ''],
+    ['📝', 'Session logs', '⚙ Settings: switch on “Save SSH session text” and what each terminal shows is kept per server and day, plain text, searchable (“what did I run on that server last Tuesday?”). Off unless you turn it on; kept 180 days.', 'terminal'],
+    ['☁', 'Backups to OneDrive', '⚙ Settings → 🛟 Backups → ☁ Use OneDrive (or Choose folder…) copies every automatic backup there too, newest 30 kept. With a master password on, a backup opens on any PC with that password — e.g. a new laptop.', ''],
+    ['🔽', 'Keeps running in the tray (Desktop)', 'Closing the WorkHub window now hides it to the tray (next to the clock) — clipboard capture, tunnels and transfers carry on. Click the icon to open it again; right-click → Quit WorkHub to stop. Switch it off in ⚙ Settings.', ''],
     ['⇅', 'Transfers panel', 'Under the FTP panes: every upload and download with progress and speed, Cancel, Retry for failed ones, Show to find a downloaded file in This PC, and Clear finished.', 'files'],
     ['☰', 'Bookmarks as a table', 'Bookmarks → ☰ Table shows every link in full: name, app, URL, user, environment, folder, how often and when you last opened it. Drag a column edge to resize, click a heading to sort, click a row to open. ▦ Tiles switches back.', ''],
     ['▭', 'Wider bookmark tiles', 'In ▦ Tiles view, drag the ▭ slider to make the tiles wider and see more of each name.', ''],
