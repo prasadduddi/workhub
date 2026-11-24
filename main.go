@@ -45,6 +45,7 @@ type App struct {
 	mail        mailStatus
 	mailNow     chan struct{}
 	jobs        *jobList
+	mon         *monitor
 
 	lock     lockState
 	lockPath string // set when -data is given, so a test or demo folder has its own PIN
@@ -99,6 +100,7 @@ func main() {
 		tunnels:   &tunnelManager{},
 		mailNow:   make(chan struct{}, 1),
 		jobs:      &jobList{},
+		mon:       &monitor{status: map[string]*monStatus{}, kick: make(chan struct{}, 1)},
 		backedUp:  map[string]bool{},
 	}
 	app.restarted.Store(os.Getenv("WORKHUB_RESTART") == "1")
@@ -144,6 +146,7 @@ func main() {
 			go app.jiraKeepAlive()
 			go app.tunnelKeeper()
 			go app.backupWatcher()
+			go app.monitorLoop()
 			removeOldCopy() // after "Install for easy access"
 			go func() { time.Sleep(15 * time.Second); cleanOldExe(); app.pruneSessionLogs() }()
 			sw.set(app.routes())
@@ -561,6 +564,10 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/sftp/transfer", a.handleSFTPTransfer)
 	mux.HandleFunc("GET /api/sessionlogs", a.handleSessionLogs)
 	mux.HandleFunc("POST /api/sessionlogs/open", a.handleSessionLogOpen)
+	mux.HandleFunc("GET /api/monitor", a.handleMonitorGet)
+	mux.HandleFunc("POST /api/monitor", a.handleMonitorSave)
+	mux.HandleFunc("POST /api/monitor/run", a.handleMonitorRun)
+	mux.HandleFunc("GET /api/monitor/suggest", a.handleMonitorSuggest)
 	mux.HandleFunc("GET /api/jobs", a.handleJobs)
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", a.handleJobCancel)
 	mux.HandleFunc("POST /api/jobs/{id}/retry", a.handleJobRetry)

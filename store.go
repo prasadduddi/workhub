@@ -100,26 +100,27 @@ type RecentFile struct {
 }
 
 type Settings struct {
-	Workspace     string       `json:"workspace"`
-	Watch         bool         `json:"watch"`
-	CaptureAll    bool         `json:"capture_all"`
-	Project       string       `json:"project"`
-	OpenTabs      []string     `json:"open_tabs"`
-	NoBrowserSync bool         `json:"no_browser_sync"`
-	Repos         []string     `json:"repos"`
-	Groups        []Group      `json:"groups"`
-	BlockedSites  []string     `json:"blocked_sites"`
-	LinkBrowser   string       `json:"link_browser"` // desktop version: chrome (default), edge or default
-	Mail          MailSettings `json:"mail"`
-	NameRules     []NameRule   `json:"name_rules,omitempty"` // e.g. -BAT- → Batch (this workspace only)
-	Saved         []SavedQuery `json:"saved_searches,omitempty"`
-	ActiveThread  string       `json:"active_thread,omitempty"`   // the task thread captures are added to: "" = General, "off" = none
-	SessionLog    bool         `json:"session_log,omitempty"`     // save the text of SSH sessions (sessionlog.go)
-	BackupCopy    string       `json:"backup_copy,omitempty"`     // second folder for backups, e.g. in OneDrive
-	NoShots       bool         `json:"no_shots,omitempty"`        // don't capture copied screenshots
-	NoUpdateFetch bool         `json:"no_update_fetch,omitempty"` // don't download new versions in the background
-	LastSession   *SessionSnap `json:"last_session,omitempty"`    // reopened after a restart or update
-	NoReopen      bool         `json:"no_reopen,omitempty"`       // don't offer to reopen the last session
+	Workspace     string          `json:"workspace"`
+	Watch         bool            `json:"watch"`
+	CaptureAll    bool            `json:"capture_all"`
+	Project       string          `json:"project"`
+	OpenTabs      []string        `json:"open_tabs"`
+	NoBrowserSync bool            `json:"no_browser_sync"`
+	Repos         []string        `json:"repos"`
+	Groups        []Group         `json:"groups"`
+	BlockedSites  []string        `json:"blocked_sites"`
+	LinkBrowser   string          `json:"link_browser"` // desktop version: chrome (default), edge or default
+	Mail          MailSettings    `json:"mail"`
+	NameRules     []NameRule      `json:"name_rules,omitempty"` // e.g. -BAT- → Batch (this workspace only)
+	Saved         []SavedQuery    `json:"saved_searches,omitempty"`
+	ActiveThread  string          `json:"active_thread,omitempty"`   // the task thread captures are added to: "" = General, "off" = none
+	SessionLog    bool            `json:"session_log,omitempty"`     // save the text of SSH sessions (sessionlog.go)
+	BackupCopy    string          `json:"backup_copy,omitempty"`     // second folder for backups, e.g. in OneDrive
+	NoShots       bool            `json:"no_shots,omitempty"`        // don't capture copied screenshots
+	Monitor       MonitorSettings `json:"monitor"`                   // server monitoring (monitor.go)
+	NoUpdateFetch bool            `json:"no_update_fetch,omitempty"` // don't download new versions in the background
+	LastSession   *SessionSnap    `json:"last_session,omitempty"`    // reopened after a restart or update
+	NoReopen      bool            `json:"no_reopen,omitempty"`       // don't offer to reopen the last session
 }
 
 // SessionSnap is what was open: SSH terminals and SQL tabs (connection ids),

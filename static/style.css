@@ -1370,3 +1370,27 @@ dialog.palettedlg { width: min(680px, 92vw); padding: 0; margin-top: 12vh; overf
 .bm-tbl .ulabel { white-space: normal; display: inline-block; max-width: 100%; margin-right: 0; }
 .bm-tbl td.bm-ttools { white-space: nowrap; text-align: right; }
 .bm-tbl th:last-child .colgrip { display: none; } /* nothing to resize after the last column */
+
+/* Monitor */
+.mon-note { margin: 0 0 10px; }
+#monList { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(480px, 100%), 1fr)); gap: 10px; }
+.mon-card { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--ok); border-radius: var(--radius); padding: 8px 10px; }
+.mon-card.bad { border-left-color: #e5484d; }
+.mon-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.mon-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px dashed var(--border); }
+.mon-main { flex: 1; min-width: 0; }
+.mon-main > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mon-dot { width: 16px; height: 16px; border-radius: 50%; flex: none; background: #9aa4b2; }
+.mon-row.up .mon-dot { background: #1f9d55; box-shadow: 0 0 0 4px color-mix(in srgb, #1f9d55 22%, transparent); }
+.mon-row.down .mon-dot { background: #e5484d; box-shadow: 0 0 0 4px color-mix(in srgb, #e5484d 25%, transparent); animation: monpulse 1.6s infinite; }
+.mon-row.off { opacity: .6; }
+@keyframes monpulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, #e5484d 10%, transparent); } }
+.mon-hist { display: flex; gap: 1px; align-items: flex-end; height: 16px; flex: none; }
+.mon-hist i { width: 4px; height: 16px; border-radius: 1px; background: #1f9d55; }
+.mon-hist i.d { background: #e5484d; }
+#monCount.down:not(:empty) { background: #e5484d; color: #fff; }
+.mon-add { width: min(680px, 94vw); }
+.mon-filter { width: 100%; box-sizing: border-box; margin: 8px 0; }
+.mon-sugs { max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.mon-sug { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); cursor: pointer; font-size: 13px; }
+.mon-sug.locked { opacity: .55; cursor: not-allowed; }

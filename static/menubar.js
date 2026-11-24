@@ -8,7 +8,7 @@
 // name, icon, colour (none of them red: red is for PROD), what it holds, pages
 const PAGE_GROUPS = [
   ['My work', '📋', '#7c5cd6', 'Your day: dashboard, threads, notes, calendar, Jira', ['dashboard', 'tasks', 'notes', 'cal', 'jira']],
-  ['Connect', '🔌', '#2f7de1', 'Servers and services: SSH, FTP, SQL, API requests, Git', ['terminal', 'files', 'sql', 'api', 'git']],
+  ['Connect', '🔌', '#2f7de1', 'Servers and services: SSH, FTP, SQL, API requests, Monitor, Git', ['terminal', 'files', 'sql', 'api', 'monitor', 'git']],
   ['Saved', '📚', '#2a9d8f', 'Things you keep: folders of files, bookmarks, groups, captured text', ['ref', 'bookmarks', 'groups', 'inbox']],
 ];
 

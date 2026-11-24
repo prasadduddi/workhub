@@ -397,6 +397,7 @@ function show(view) {
   if (view === 'ref') Ref.load();
   if (view === 'api') Api.load();
   if (view === 'jira') Jira.load();
+  if (view === 'monitor') Monitor.load();
   if (view === 'cal') Cal.load();
   if (view === 'git') {
     Git.renderRepos();
