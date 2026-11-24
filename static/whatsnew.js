@@ -4,6 +4,10 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.14.0', title: 'Server monitor, pull request reviews', items: [
+    ['🟢', 'Monitor: are the servers up?', 'Connect → Monitor → + Add checks…: pick Tomcat manager / admin pages and ports and Oracle listeners from your connections (or + Custom… for any address). Green when they answer, red when not, with a short history; you get a pop-up when one goes down or comes back, and the menu shows how many are down. Nothing logs in. PROD, UAT and DR servers are never checked unless you switch that on.', 'monitor'],
+    ['🔍', 'Review a pull request', 'Tools → Review a pull request… (or 🔍 Review PR on the Git page): paste a Bitbucket pull request or GitLab merge request link. WorkHub fetches it into your local copy with your normal git login — nothing is posted back — and checks what it adds: passwords and keys, SQL that changes every row, swallowed errors, debug output, hard-coded IPs, TODOs, switched-off tests, and whether tests changed. Save it as a review thread with a checklist.', 'git'],
+  ] },
   { v: '1.13.0', title: 'Import connections, command palette, compare across servers', items: [
     ['⬇', 'Import from DBeaver, PuTTY, FileZilla, SQL Developer', 'File → Import → Connections…: finds them on this PC (or pick a file, e.g. a PuTTY .reg export). Folders, types, service names, environments, users and — where the program keeps them readably — passwords come along; PuTTY port forwards become tunnels. Tick what to bring in; connections you already have only get what they’re missing. Those programs are only read, never changed.', 'terminal'],
     ['⌘', 'Command palette (Ctrl+Shift+P or Ctrl+P)', 'Type to run any menu action, open any page, connect to any server or database, open a thread or an API request. Enter runs it; what you use most comes first.', ''],

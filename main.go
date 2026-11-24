@@ -564,6 +564,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/sftp/transfer", a.handleSFTPTransfer)
 	mux.HandleFunc("GET /api/sessionlogs", a.handleSessionLogs)
 	mux.HandleFunc("POST /api/sessionlogs/open", a.handleSessionLogOpen)
+	mux.HandleFunc("POST /api/review", a.handleReview) // fetches the PR read-only; nothing is sent
 	mux.HandleFunc("GET /api/monitor", a.handleMonitorGet)
 	mux.HandleFunc("POST /api/monitor", a.handleMonitorSave)
 	mux.HandleFunc("POST /api/monitor/run", a.handleMonitorRun)

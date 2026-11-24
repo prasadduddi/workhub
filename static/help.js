@@ -4,6 +4,16 @@
 // offline: the answers are written here, matched by words in the question.
 
 const HELP_TOPICS = [
+  { t: 'Monitor servers (Tomcat, Oracle)', k: 'monitor monitoring up down status health tomcat manager admin port oracle listener database green red alert uptime', v: 'monitor', s: [
+    'Connect → Monitor → + Add checks…, tick one or two DEV / TEST servers first, press Add and check.',
+    'Tomcat manager / host-manager pages are fetched (a login prompt still counts as up); Tomcat ports and Oracle listeners are checked by connecting. Nothing logs in.',
+    'Green = answering, red = not; the strip shows the last checks. You get a pop-up (and a Windows notification) when one goes down or comes back.',
+    'PROD, UAT and DR servers are locked out unless you tick “also PROD / UAT”. + Custom… adds any web address or host:port.'] },
+  { t: 'Review a pull request', k: 'review code pull request pr merge request mr bitbucket gitlab check diff secrets', v: 'git', s: [
+    'Add the repository on the Git page once (+ or Find) — WorkHub uses that local copy.',
+    'Tools → Review a pull request… (or 🔍 Review PR on the Git page), paste the PR / MR link, press Review.',
+    'It fetches the pull request with your git login (nothing is posted to Bitbucket or GitLab; your branches and files are not changed) and lists must-fix, should-fix and worth-a-look items with file and line.',
+    '🧵 Save as review thread keeps the findings with a checklist; 📋 Copy findings gives text to paste into a comment yourself.'] },
   // ---- Finding things ----
   { t: 'Search for anything', k: 'search find look ctrl k top right box results', v: 'dashboard', s: [
     'Click the search box at the top right (or press Ctrl+K on any page).',

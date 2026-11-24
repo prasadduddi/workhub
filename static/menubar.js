@@ -127,6 +127,7 @@ const Menubar = {
       ],
       Tools: [
         ['⇆ Compare files or folders…', () => { show('ref'); Compare.chooser(); }],
+        ['🔍 Review a pull request…', () => Review.open()],
         ['📜 Tail a log', null, [...this.recentConns(canSSH).map(e => [this.connName(e), () => LogView.open(e)]), ...(this.recentConns(canSSH).length ? ['-'] : []), ['Choose a server in SSH…', go('terminal')]]],
         ['🌐 API requests', go('api')],
         ['🔑 My SSH keys (copy for GitHub)…', () => SSHKeys.open()],
