@@ -11,13 +11,24 @@ const Compare = {
   // A side: { kind: 'ref'|'local', path, label }
   ref: p => ({ kind: 'ref', path: p, label: p }),
   local: p => ({ kind: 'local', path: p, label: p }),
+  // a file on a server (read over SFTP, never written)
+  remote: (e, p) => ({ kind: 'remote', id: e.id, path: p, label: `${e.name || e.host}: ${p}` }),
+  creds: {}, // logins typed for servers without a saved password, per connection
   sep(s) { return s.kind === 'local' && s.path.includes('\\') ? '\\' : '/'; },
   child(s, rel) { return { kind: s.kind, path: s.path.replace(/[\\/]+$/, '') + this.sep(s) + rel.split('/').join(this.sep(s)), label: rel }; },
 
-  async stat(s) { return api('POST', '/api/compare/stat', s); },
+  async stat(s) { return s.kind === 'remote' ? { dir: false } : api('POST', '/api/compare/stat', s); },
 
   // Read a side as text: { text, eol, binary }.
   async read(s) {
+    if (s.kind === 'remote') {
+      const e = byId(s.id); if (!e) throw new Error('That server is no longer in WorkHub');
+      if (needsCreds(e) && !this.creds[e.id]) { const c = await askCreds(e); if (!c) throw new Error('No login for ' + e.host); this.creds[e.id] = c; }
+      const d = await api('POST', '/api/compare/remote', { id: e.id, path: s.path, ...(this.creds[e.id] || {}) });
+      if (d.binary) return { binary: true, size: d.size };
+      s.label = `${e.name || e.host}: ${d.path}`;
+      return { text: d.text, eol: /\r\n/.test(d.text) ? '\r\n' : '\n' };
+    }
     if (s.kind === 'ref') {
       const r = await fetch('/api/ref/file?path=' + encodeURIComponent(s.path));
       if (!r.ok) throw new Error(`Can't read ${s.label}`);
@@ -32,6 +43,7 @@ const Compare = {
     } catch (err) { if (/binary/i.test(err.message)) return { binary: true }; throw err; }
   },
   async write(s, text) {
+    if (s.kind === 'remote') throw new Error('Files on servers are only read here — nothing is changed on the server');
     if (s.kind === 'ref') {
       const r = await fetch('/api/ref/file?path=' + encodeURIComponent(s.path), { method: 'PUT', body: text });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Save failed');
@@ -48,19 +60,44 @@ const Compare = {
       else await this.openFiles(a, b);
     } catch (err) { toast(err.message, true); }
   },
-  // The ⇆ Compare button: choose both sides (Folders paths or anywhere on the PC).
-  chooser(left = '') {
+  // The ⇆ Compare button: choose both sides — Folders paths, anywhere on this
+  // PC, or 🖥 a file on a server.
+  chooser(left = '', modes) {
     const d = this.dlg();
+    this.modes = modes || [{ kind: 'path', value: left }, { kind: 'path', value: '' }];
     const opts = (typeof Ref !== 'undefined' ? Ref.items : []).map(i => `<option value="${esc(i.path)}">`).join('');
+    const servers = S.entries.filter(e => e.host && canSSH(e)).sort((x, y) => (x.name || x.host).localeCompare(y.name || y.host));
+    const row = (m, i) => m.kind === 'server'
+      ? `<div class="cmp-side"><b>${i ? 'Right' : 'Left'}</b><select class="cmp-srv" data-side="${i}"><option value="">— server —</option>${servers.map(e => `<option value="${e.id}" ${e.id === m.id ? 'selected' : ''}>${esc((e.env ? e.env + ' · ' : '') + (e.name || e.host))}</option>`).join('')}</select>
+          <input class="cmp-rpath" data-side="${i}" value="${esc(m.path || '')}" placeholder="/opt/app/config/application.properties"><button data-cmode="path" data-side="${i}" title="Use a Folders path or a file on this PC instead">📁 Folders / PC…</button></div>`
+      : `<div class="cmp-side"><b>${i ? 'Right' : 'Left'}</b><input class="cmp-in" data-side="${i}" list="cmpPaths" value="${esc(m.value || '')}" placeholder="${i ? 'e.g. UAT/app.properties' : 'e.g. DEV/app.properties'}">
+          <button data-cpc="file" data-side="${i}" title="Pick a file on this PC">📄 PC file…</button><button data-cpc="folder" data-side="${i}" title="Pick a folder on this PC">📁 PC folder…</button><button data-cmode="server" data-side="${i}" title="A file on a server (read over SFTP, never changed)">🖥 Server file…</button></div>`;
     $('.cmp-body', d).innerHTML = `<div class="cmp-choose">
-      <p class="muted tiny">A path from Folders (start typing to pick), or a full path anywhere on this PC (C:\\…). Two files, or two folders.</p>
-      ${['Left', 'Right'].map((s, i) => `<label class="cmp-side"><b>${s}</b><input class="cmp-in" data-side="${i}" list="cmpPaths" value="${esc(i ? '' : left)}" placeholder="${i ? 'e.g. UAT/app.properties' : 'e.g. DEV/app.properties'}">
-        <button data-cpc="file" data-side="${i}" title="Pick a file on this PC">📄 PC file…</button><button data-cpc="folder" data-side="${i}" title="Pick a folder on this PC">📁 PC folder…</button></label>`).join('')}
+      <p class="muted tiny">A path from Folders (start typing to pick), a full path on this PC (C:\\…), or 🖥 a file on a server — e.g. the same config file on UAT and PROD. Servers are only read, never changed.</p>
+      ${this.modes.map(row).join('')}
       <datalist id="cmpPaths">${opts}</datalist>
       <div class="cmp-row"><span class="spacer"></span><button class="primary" data-cgo>⇆ Compare</button></div></div>`;
     $('.cmp-title', d).textContent = '⇆ Compare';
     $('.cmp-tools', d).innerHTML = '';
-    setTimeout(() => $$('.cmp-in', d)[left ? 1 : 0].focus());
+    // typing a path on one server fills the same path on the other (still editable)
+    $$('.cmp-rpath', d).forEach(inp => inp.addEventListener('input', () => {
+      const other = $$('.cmp-rpath', d).find(x => x !== inp);
+      if (other && (!other.value || other.dataset.synced === '1')) { other.value = inp.value; other.dataset.synced = '1'; }
+    }));
+    setTimeout(() => ($$('.cmp-in, .cmp-rpath', d)[left ? 1 : 0] || $('.cmp-srv', d))?.focus());
+  },
+  // right-click a server → compare one of its files with another server
+  chooserRemote(e) { this.chooser('', [{ kind: 'server', id: e.id, path: '' }, { kind: 'server', id: '', path: '' }]); },
+  readChooser() {
+    const d = this.dlg();
+    return this.modes.map((m, i) => {
+      if (m.kind === 'server') {
+        const e = byId($(`.cmp-srv[data-side="${i}"]`, d).value), p = $(`.cmp-rpath[data-side="${i}"]`, d).value.trim();
+        return e && p ? this.remote(e, p) : null;
+      }
+      const v = $(`.cmp-in[data-side="${i}"]`, d).value.trim();
+      return v ? this.sideFrom(v) : null;
+    });
   },
   sideFrom(v) { v = v.trim(); return /^([a-zA-Z]:[\\/]|\\\\|\/|~)/.test(v) ? this.local(v) : this.ref(v.replace(/^\/+/, '')); },
 
@@ -75,7 +112,7 @@ const Compare = {
     d.addEventListener('change', e => this.change(e));
     d.addEventListener('keydown', e => {
       if (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); this.jump(e.key === 'ArrowDown' ? 1 : -1); }
-      if (e.key === 'Enter' && e.target.classList.contains('cmp-in')) $('[data-cgo]', d)?.click();
+      if (e.key === 'Enter' && (e.target.classList.contains('cmp-in') || e.target.classList.contains('cmp-rpath'))) $('[data-cgo]', d)?.click();
     });
     d.addEventListener('cancel', e => { if (!this.okToClose()) e.preventDefault(); });
     d.showModal();
@@ -98,7 +135,7 @@ const Compare = {
       file: { A: ra.text.replace(/\r\n/g, '\n').split('\n'), B: rb.text.replace(/\r\n/g, '\n').split('\n'), eolA: ra.eol, eolB: rb.eol, dirtyA: false, dirtyB: false, cur: -1 } };
     this.diffFiles();
   },
-  opts() { try { return JSON.parse(localStorage.getItem('cmpOpts')) || { ws: false, cs: false, only: false }; } catch { return { ws: false, cs: false, only: false }; } },
+  opts() { const d = { ws: false, cs: false, only: false, mask: true }; try { return { ...d, ...JSON.parse(localStorage.getItem('cmpOpts')) }; } catch { return d; } },
   saveOpts() { try { localStorage.setItem('cmpOpts', JSON.stringify(this.st.opts)); } catch { /* ignore */ } },
 
   diffFiles() {
@@ -133,20 +170,22 @@ const Compare = {
       <label title="Spaces and tabs don't count"><input type="checkbox" data-copt="ws" ${o.ws ? 'checked' : ''}> Ignore whitespace</label>
       <label><input type="checkbox" data-copt="cs" ${o.cs ? 'checked' : ''}> Ignore case</label>
       <label title="Hide the lines that are the same (3 lines of context kept)"><input type="checkbox" data-copt="only" ${o.only ? 'checked' : ''}> Only differences</label>
+      <label title="Show password=, secret=, token=… values as dots (a changed value still shows as a difference)"><input type="checkbox" data-copt="mask" ${o.mask ? 'checked' : ''}> Hide passwords</label>
       <button data-cact="swap" title="Swap left and right">⇄ Swap</button>`;
-    const side = (s, dirty, which) => `<div class="cmp-name ${dirty ? 'dirty' : ''}" title="${esc(s.path)}"><span>${esc(s.path)}</span>${dirty ? `<button class="primary" data-cact="save${which}">💾 Save</button>` : ''}</div>`;
+    const side = (s, dirty, which) => `<div class="cmp-name ${dirty ? 'dirty' : ''}" title="${esc(s.label || s.path)}"><span>${s.kind === 'remote' ? '🖥 ' + esc(s.label) + ' <small class="muted">(read-only)</small>' : esc(s.path)}</span>${dirty ? `<button class="primary" data-cact="save${which}">💾 Save</button>` : ''}</div>`;
     const ctx = 3, show = f.rows.map((r, i) => !o.only || f.rows.slice(Math.max(0, i - ctx), i + ctx + 1).some(x => x.t !== 'same'));
     let html = '', hidden = 0;
     const flush = () => { if (hidden) { html += `<tr class="cmp-skip"><td colspan="5">⋯ ${hidden} same line${hidden > 1 ? 's' : ''}</td></tr>`; hidden = 0; } };
     f.rows.forEach((r, i) => {
       if (!show[i]) { hidden++; return; }
       flush();
-      const la = r.a != null ? f.A[r.a] : null, lb = r.b != null ? f.B[r.b] : null;
+      const hide = o.mask ? maskSecrets : x => x;
+      const la = r.a != null ? hide(f.A[r.a]) : null, lb = r.b != null ? hide(f.B[r.b]) : null;
       const [ha, hb] = r.t === 'chg' ? charDiff(la, lb) : [la != null ? esc(la) : '', lb != null ? esc(lb) : ''];
       const first = r.t !== 'same' && f.blocks[r.blk].start === i;
       const cur = r.t !== 'same' && r.blk === f.cur ? ' cur' : '';
       html += `<tr class="cr ${r.t}${cur}" ${first ? `data-blk="${r.blk}"` : ''}><td class="ln">${r.a != null ? r.a + 1 : ''}</td><td class="tx">${ha || (la === '' ? ' ' : '')}</td>
-        <td class="gut">${first ? `<button class="icon" data-cto="b" data-b="${r.blk}" title="Copy this change to the right →">→</button><button class="icon" data-cto="a" data-b="${r.blk}" title="← Copy this change to the left">←</button>` : ''}</td>
+        <td class="gut">${first ? `${b.kind !== 'remote' ? `<button class="icon" data-cto="b" data-b="${r.blk}" title="Copy this change to the right →">→</button>` : ''}${a.kind !== 'remote' ? `<button class="icon" data-cto="a" data-b="${r.blk}" title="← Copy this change to the left">←</button>` : ''}` : ''}</td>
         <td class="ln">${r.b != null ? r.b + 1 : ''}</td><td class="tx">${hb || (lb === '' ? ' ' : '')}</td></tr>`;
     });
     flush();
@@ -251,10 +290,18 @@ const Compare = {
       if (r.ok) $$('.cmp-in', d)[+pc.dataset.side].value = r.path;
       return;
     }
+    const cm = e.target.closest('[data-cmode]');
+    if (cm) { // switch one side between Folders/PC and a server file, keeping what the other side has
+      const i = +cm.dataset.side;
+      this.modes = this.modes.map((m, j) => j === i ? (cm.dataset.cmode === 'server' ? { kind: 'server', id: '', path: '' } : { kind: 'path', value: '' })
+        : m.kind === 'server' ? { kind: 'server', id: $(`.cmp-srv[data-side="${j}"]`, d)?.value || '', path: $(`.cmp-rpath[data-side="${j}"]`, d)?.value || '' }
+        : { kind: 'path', value: $(`.cmp-in[data-side="${j}"]`, d)?.value || '' });
+      return this.chooser('', this.modes);
+    }
     if (e.target.closest('[data-cgo]')) {
-      const [l, r] = $$('.cmp-in', d).map(i => i.value.trim());
-      if (!l || !r) return toast('Choose both sides', true);
-      return this.open(this.sideFrom(l), this.sideFrom(r));
+      const [l, r] = this.readChooser();
+      if (!l || !r) return toast('Choose both sides: a server and its file path, or a Folders / PC path', true);
+      return this.open(l, r);
     }
     const filt = e.target.closest('[data-cfilt]'); if (filt) { st.filter = filt.dataset.cfilt; return this.renderDirs(); }
     const to = e.target.closest('[data-cto]'); if (to) return this.copyBlock(+to.dataset.b, to.dataset.cto);
@@ -289,6 +336,10 @@ const Compare = {
     this.diffFiles();
   },
 };
+
+// password=…, secret: …, token=… → the value shown as dots (Compare's "Hide passwords")
+const SECRET_KEY = /((?:pass(?:word)?|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|credentials?)[\w.-]*\s*[=:]\s*)(\S.*)$/i;
+const maskSecrets = line => line == null ? line : line.replace(SECRET_KEY, (m, k) => k + '••••••');
 
 const cmpParent = p => p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';
 

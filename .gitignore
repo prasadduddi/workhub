@@ -13,3 +13,6 @@ known_hosts
 .DS_Store
 .idea/
 .vscode/
+
+# browser smoke test tooling (build machine only)
+tools/uitest/.venv/

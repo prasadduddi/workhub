@@ -658,9 +658,13 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/ref/reveal", a.handleRefReveal)
 	mux.HandleFunc("POST /api/ref/open", a.handleRefOpen)
 	mux.HandleFunc("GET /api/ref/search", a.handleRefSearch)
-	mux.HandleFunc("GET /api/sshkeys", a.handleSSHKeys) // read-only
+	mux.HandleFunc("GET /api/sshkeys", a.handleSSHKeys)              // read-only
+	mux.HandleFunc("GET /api/import/conns/scan", a.handleImportScan) // read-only: DBeaver, PuTTY, FileZilla, SQL Developer
+	mux.HandleFunc("POST /api/import/conns/read", a.handleImportRead)
+	mux.HandleFunc("POST /api/import/conns/apply", a.handleImportApply)
 	mux.HandleFunc("POST /api/compare/dirs", a.handleCompareDirs)
 	mux.HandleFunc("POST /api/compare/stat", a.handleCompareStat)
+	mux.HandleFunc("POST /api/compare/remote", a.handleCompareRemote) // read-only
 	mux.HandleFunc("GET /api/ref/history", a.handleRefHistory)
 	mux.HandleFunc("GET /api/props", a.handlePropsList)
 	mux.HandleFunc("POST /api/props", a.handlePropsSave)

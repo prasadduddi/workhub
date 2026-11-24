@@ -4,6 +4,11 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.13.0', title: 'Import connections, command palette, compare across servers', items: [
+    ['⬇', 'Import from DBeaver, PuTTY, FileZilla, SQL Developer', 'File → Import → Connections…: finds them on this PC (or pick a file, e.g. a PuTTY .reg export). Folders, types, service names, environments, users and — where the program keeps them readably — passwords come along; PuTTY port forwards become tunnels. Tick what to bring in; connections you already have only get what they’re missing. Those programs are only read, never changed.', 'terminal'],
+    ['⌘', 'Command palette (Ctrl+Shift+P or Ctrl+P)', 'Type to run any menu action, open any page, connect to any server or database, open a thread or an API request. Enter runs it; what you use most comes first.', ''],
+    ['🖥', 'Compare files across servers', 'Right-click a server → ⇆ Compare a file with another server…, or 🖥 Server file… in ⇆ Compare: the same config file on UAT and PROD side by side. Read-only over SFTP; password=, secret=, token= values are hidden (a changed value still shows as a difference).', 'ref'],
+  ] },
   { v: '1.12.3', title: 'Tabs in their own window', items: [
     ['⧉', 'Pop out a tab', '⧉ on an SSH or SQL tab, ⧉ New window on a thread, or View → Open this page in a new window: it opens in its own window without the sidebar and menus. SQL tabs keep their session (nothing is lost, even uncommitted changes); SSH terminals reconnect with the same login. ⇲ Dock back to WorkHub — or just closing that window — puts it back; the ⧉ chips at the top of WorkHub dock them back too.', 'terminal'],
     ['📌', 'Install from the Tools menu', 'Tools → Install for easy access… opens Settings at This PC with the Install button ready (Windows).', ''],

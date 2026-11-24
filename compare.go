@@ -5,8 +5,10 @@ package main
 // compared by size, then by content. File compare itself happens in the page.
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -15,6 +17,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"github.com/pkg/sftp"
 )
 
 type cmpSide struct {
@@ -200,4 +205,82 @@ func (a *App) handleCompareStat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"dir": st.IsDir(), "size": st.Size(), "abs": p})
+}
+
+// ---- a file on a server (read-only, over SFTP) ----
+
+type remoteSide struct {
+	ID       string `json:"id"` // the connection
+	Path     string `json:"path"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+const maxRemoteCompare = 10 << 20
+
+// handleCompareRemote reads one file from a server for Compare. It only reads:
+// nothing on the server is changed.
+func (a *App) handleCompareRemote(w http.ResponseWriter, r *http.Request) {
+	var in remoteSide
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, 400, err)
+		return
+	}
+	e, ok := a.store.Entry(in.ID)
+	if !ok {
+		writeErr(w, 404, errors.New("connection not found"))
+		return
+	}
+	if strings.TrimSpace(in.Path) == "" {
+		writeErr(w, 400, errors.New("type the file's path on the server"))
+		return
+	}
+	client, err := a.dialSSH(e, in.Username, in.Password)
+	a.store.SetStatus(e.ID, err)
+	if err != nil {
+		writeErr(w, 502, err)
+		return
+	}
+	defer client.Close()
+	sc, err := sftp.NewClient(client)
+	if err != nil {
+		writeErr(w, 502, fmt.Errorf("SFTP isn't available on %s: %v", e.Host, err))
+		return
+	}
+	defer sc.Close()
+	p := in.Path
+	if strings.HasPrefix(p, "~/") {
+		if home, err := sc.Getwd(); err == nil {
+			p = home + p[1:]
+		}
+	}
+	st, err := sc.Stat(p)
+	if err != nil {
+		writeErr(w, 404, fmt.Errorf("%s: %v", p, err))
+		return
+	}
+	if st.IsDir() {
+		writeErr(w, 400, errors.New(p+" is a folder — compare a file"))
+		return
+	}
+	if st.Size() > maxRemoteCompare {
+		writeErr(w, 400, fmt.Errorf("%s is %d MB; Compare reads files up to 10 MB", p, st.Size()>>20))
+		return
+	}
+	f, err := sc.Open(p)
+	if err != nil {
+		writeErr(w, 502, err)
+		return
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, maxRemoteCompare))
+	if err != nil {
+		writeErr(w, 502, err)
+		return
+	}
+	if bytes.IndexByte(b, 0) >= 0 || !utf8.Valid(b) {
+		writeJSON(w, map[string]any{"binary": true, "size": len(b), "path": p})
+		return
+	}
+	writeJSON(w, map[string]any{"text": string(b), "path": p, "mtime": st.ModTime(), "host": e.Host})
 }

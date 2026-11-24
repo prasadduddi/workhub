@@ -85,6 +85,8 @@ const Menubar = {
         ['+ New API request', () => { show('api'); Api.edit(Api.blank()); }],
         '-',
         ['⬇ Import', null, [
+          ['Connections from DBeaver / PuTTY / FileZilla / SQL Developer…', () => ConnImport.open()],
+          '-',
           ['WorkHub data (an older data folder)…', click('#importBtn')],
           ['Postman collection / environment…', () => { show('api'); $('#apiImportFiles').click(); }],
           ['Bruno collection folder…', () => { show('api'); $('#apiImportFolder').click(); }],
@@ -97,6 +99,7 @@ const Menubar = {
       ],
       Edit: [
         ['🔎 Search everything\tCtrl+K', () => { $('#search').focus(); $('#search').select(); }],
+        ['⌘ Command palette…\tCtrl+Shift+P', () => Palette.open()],
         ['🔑 Change a password everywhere…', () => PwAll.open()],
         ['🏷 Naming rules…', () => openNameRules()],
         '-',

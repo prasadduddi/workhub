@@ -2639,7 +2639,7 @@ const Tree = {
         if (t) items.push(['Reconnect', () => SQL.reconnect(t)], ['⏏ Disconnect', () => SQL.close(t)]);
         else items.push(['Connect and show tables', () => SQL.toggleConn(e)]);
       }
-      if (canSSH(e)) items.push(['Open SSH terminal', () => Term.open(e)], ['📜 Tail a log…', () => LogView.open(e)]);
+      if (canSSH(e)) items.push(['Open SSH terminal', () => Term.open(e)], ['📜 Tail a log…', () => LogView.open(e)], ['⇆ Compare a file with another server…', () => Compare.chooserRemote(e)]);
       const tabs = Term.tabs.filter(t => t.entry?.id === e.id && !t.local && !t.closed);
       if (canSSH(e) || tabs.length) items.push([`⏏ Disconnect SSH${tabs.length > 1 ? ` (${tabs.length} terminals)` : ''}`, tabs.length ? () => tabs.forEach(t => Term.close(t)) : null]);
       if (canFiles(e)) items.push([`Open in FTP (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);

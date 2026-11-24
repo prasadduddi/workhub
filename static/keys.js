@@ -5,7 +5,7 @@
 const Keys = {
   GROUPS: [
     ['Everywhere', [
-      ['?', 'This list'], ['Ctrl+K', 'Search everything'], ['Ctrl+J', 'Assistant'], ['F1', 'Help'],
+      ['?', 'This list'], ['Ctrl+K', 'Search everything'], ['Ctrl+Shift+P · Ctrl+P', 'Command palette: any action, page, server, thread'], ['Ctrl+J', 'Assistant'], ['F1', 'Help'],
       ['Ctrl+L', 'Lock (with a PIN set)'], ['Ctrl+B', 'Hide / show the sidebar'], ['Ctrl+Alt+N', 'Quick note into the capture thread'],
       ['Ctrl+Alt+W', 'Bring WorkHub up from any program (Desktop version)'], ['Esc', 'Close a menu or dialog']]],
     ['Search box', [
