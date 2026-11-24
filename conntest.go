@@ -56,6 +56,9 @@ func (a *App) testEntry(e Entry) (string, error) {
 		f.Close()
 		return "FTP login OK", nil
 	case e.Host != "" && (e.Protocol == "" || e.Protocol == "ssh" || e.Protocol == "sftp" || e.Protocol == "scp" || e.Port == 22) && e.URL == "":
+		if sshOff { // before anything else: not even "enter a username"
+			return "SSH", errSSHOff
+		}
 		if e.Username == "" {
 			return "SSH", errors.New("enter a username")
 		}

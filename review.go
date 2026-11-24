@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
 	"path"
 	"regexp"
@@ -92,11 +91,11 @@ type gitRunner struct {
 func (g gitRunner) run(args ...string) (string, error) {
 	cmd := exec.CommandContext(g.ctx, g.exe, args...)
 	cmd.Dir = g.dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
+	cmd.Env = gitEnv("LC_ALL=C")
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
-		return out.String(), fmt.Errorf("git %s: %s", args[0], strings.TrimSpace(errb.String()+" "+err.Error()))
+		return out.String(), fmt.Errorf("git %s: %s", args[0], gitSSHHint(strings.TrimSpace(errb.String()+" "+err.Error())))
 	}
 	return out.String(), nil
 }

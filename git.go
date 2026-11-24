@@ -320,10 +320,10 @@ func (a *App) handleGitFetch(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, gitPath, "fetch", "--all", "--prune")
 	cmd.Dir = in.Path
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = gitEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		writeErr(w, 400, errors.New(strings.TrimSpace(string(out))+" "+err.Error()))
+		writeErr(w, 400, errors.New(gitSSHHint(strings.TrimSpace(string(out))+" "+err.Error())))
 		return
 	}
 	writeJSON(w, map[string]string{"output": strings.TrimSpace(string(out))})

@@ -35,6 +35,9 @@ func TestParseForwards(t *testing.T) {
 // A real SSH server (in-process) forwards tunnel traffic to an echo
 // "database"; bytes sent to the local port come back through the tunnel.
 func TestTunnelEndToEnd(t *testing.T) {
+	if sshOff {
+		t.Skip("SSH is switched off (sshswitch.go)")
+	}
 	echo, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer echo.Close()
 	go func() {
@@ -279,6 +282,9 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 }
 
 func TestTunnelKeeper(t *testing.T) {
+	if sshOff {
+		t.Skip("SSH is switched off (sshswitch.go)")
+	}
 	keeperTick = 50 * time.Millisecond
 	db, _ := net.Listen("tcp", "127.0.0.1:0") // the "database"
 	defer db.Close()

@@ -265,6 +265,9 @@ var keeperTick = 15 * time.Second
 // when the SSH connection drops: network errors are retried with a growing
 // pause (30 s … 10 min); a refused login waits until the connection is edited.
 func (a *App) tunnelKeeper() {
+	if sshOff { // tunnels are SSH: none are started
+		return
+	}
 	type state struct {
 		next    time.Time
 		wait    time.Duration

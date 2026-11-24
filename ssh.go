@@ -39,6 +39,9 @@ func sshPort(e Entry) int {
 // dialSSH connects with the entry's password and/or private key. user and
 // pass override the stored values when the user typed them at connect time.
 func (a *App) dialSSH(e Entry, user, pass string) (*ssh.Client, error) {
+	if sshOff { // see sshswitch.go: nothing is read (not even the key file)
+		return nil, errSSHOff
+	}
 	if user == "" {
 		user = e.Username
 	}

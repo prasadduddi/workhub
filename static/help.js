@@ -103,6 +103,10 @@ const HELP_TOPICS = [
   { t: 'Find a file attached to a thread', k: 'find search file files attachment attached thread screenshot document log download', v: 'tasks', s: [
     'Type part of its name — or words inside it (text files and Word documents) — in the search at the top.',
     '📎 Files in threads lists them with their thread; click one to open the thread at that message, ⬇ to download it.'] },
+  { t: 'SSH is switched off', k: 'ssh sftp tunnel tunnels log tail putty terminal server keys .ssh known_hosts git fetch switched off disabled not working', v: '', s: [
+    'This version of WorkHub doesn\'t use SSH at all: SSH terminals, SFTP, tunnels, log tailing and comparing files on servers don\'t connect.',
+    'Nothing in ~/.ssh is read or changed — the SSH keys window stays empty, and the Git page can only fetch from https:// remotes.',
+    'Still working: FTP, databases, web links and bookmarks, local command prompts, threads, notes and everything else. Open in ↗ PuTTY still starts the real PuTTY if you have it.'] },
   { t: 'Restart WorkHub', k: 'restart reload relaunch start again stuck frozen slow reset reboot', v: '', s: [
     'File → ↻ Restart WorkHub (or ☰ → ↻ Restart WorkHub, or right-click the tray icon → Restart WorkHub).',
     'What you are typing in Notes is saved first; open SSH, SFTP and SQL tabs reconnect by themselves after the restart.',

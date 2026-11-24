@@ -563,6 +563,9 @@ func (s *Store) Searched(id string) {
 
 // SetStatus records whether the last connection or link check worked.
 func (s *Store) SetStatus(id string, err error) {
+	if errors.Is(err, errSSHOff) { // SSH switched off is not a failed login: the entry keeps its status
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, e := range s.st.Entries {

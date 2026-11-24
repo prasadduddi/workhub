@@ -36,7 +36,7 @@ const Session = {
     if (/[?&]popout=/.test(location.search)) return; // a popped-out window: nothing to reopen
     // wait until the data is there (and the PIN screen, if any, is passed)
     for (let i = 0; i < 120 && (Lock.shown || !S.entries.length); i++) await new Promise(r => setTimeout(r, 500));
-    const s = S.settings.last_session;
+    const s = S.settings.last_session && { ...S.settings.last_session, ssh: S.sshOff ? [] : S.settings.last_session.ssh }; // SSH switched off: none to reopen
     const has = s && (s.ssh?.length || s.sql?.length || s.thread);
     if (has && S.restarted) await this.restore(s, true);
     else if (has && !S.settings.no_reopen) {

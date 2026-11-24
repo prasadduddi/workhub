@@ -112,3 +112,6 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] Dashboard: a NEW SSH connection -> 🔌 Test -> green dot if it logs in, red "⚠ Needs attention" if not
   [ ] File -> Restart WorkHub with an SSH tab open -> asks first; WorkHub comes back (Desktop: its window; web: a new tab)
       and the SSH tab reconnects; the tray icon is not left behind twice. Also from the tray icon's right-click menu.
+  [ ] SSH switched off: double-click an SSH server -> message, no terminal; SFTP server -> message (FTP still connects);
+      ☰ -> My SSH keys -> "~/.ssh is not read"; Git page -> Fetch on a git@ remote -> fails with the https hint;
+      afterwards ~/.ssh (config, known_hosts) is unchanged — compare file dates before and after.

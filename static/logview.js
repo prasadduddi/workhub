@@ -78,6 +78,7 @@ const LogView = {
   open(e) { return this.openMany([e]); },
 
   async openMany(entries) {
+    if (sshBlocked()) return;
     // One per server (several logins on it: the one used most, with a password).
     const byHost = {};
     for (const e of entries.filter(canSSH)) {

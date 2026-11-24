@@ -4,6 +4,9 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.15.2', title: 'SSH switched off', items: [
+    ['⛔', 'SSH is switched off', 'WorkHub no longer uses SSH: SSH terminals, SFTP, tunnels, log tailing and comparing files on servers don\'t connect, the SSH keys window doesn\'t read ~/.ssh, and the Git page can\'t fetch from git@… / ssh:// remotes (https:// remotes work). Nothing in ~/.ssh is read or changed. FTP, databases, links, local command prompts and everything else work as before.', ''],
+  ] },
   { v: '1.15.1', title: 'Restart WorkHub from the menu', items: [
     ['↻', 'Restart WorkHub', 'File → ↻ Restart WorkHub (also in ☰, the command palette and the tray icon\'s menu): WorkHub saves what you are typing, starts again and reconnects the SSH, SFTP and SQL tabs that were open. It asks first only when something would be lost (uncommitted SQL changes, an unsaved file in Folders).', ''],
   ] },

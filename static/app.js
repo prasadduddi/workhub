@@ -451,6 +451,25 @@ const EnvSwitch = {
 EnvSwitch.paint();
 $('#envSwitch').addEventListener('click', e => { const b = e.target.closest('[data-envsw]'); if (b && b.dataset.envsw !== EnvSwitch.v) EnvSwitch.set(b.dataset.envsw); });
 
+// ---------- SSH switched off (sshswitch.go) ----------
+// The SSH terminal, SFTP and log tailing stop here with a message; tunnels and
+// remote compare are refused by WorkHub itself. FTP, databases and links work.
+function sshBlocked(e) {
+  if (!S.sshOff || (e && isFTP(e))) return false;
+  toast('SSH is switched off in this version of WorkHub — SSH terminals, SFTP, tunnels and log tailing don\'t work. FTP, databases and links still do.', true);
+  return true;
+}
+function sshOffNotes() {
+  for (const v of ['terminal', 'files']) {
+    const sec = $('#view-' + v); if (!sec) continue;
+    let n = $('.sshoff-note', sec);
+    if (!S.sshOff) { n?.remove(); continue; }
+    if (!n) { n = document.createElement('div'); n.className = 'sshoff-note'; sec.prepend(n); }
+    n.textContent = v === 'terminal' ? '⛔ SSH is switched off in this version of WorkHub: terminals to servers don\'t open (local command prompts still work).'
+      : '⛔ SSH is switched off in this version of WorkHub: SFTP doesn\'t connect. FTP servers and This PC still work.';
+  }
+}
+
 // ---------- sync ----------
 async function refreshAll() {
   const [entries, clips, settings] = await Promise.all([api('GET', '/api/entries'), api('GET', '/api/clips'), api('GET', '/api/settings')]);
@@ -471,7 +490,8 @@ async function redrawAll() {
 
 async function poll() {
   try {
-    const { v, data_dir, app_version, restarted } = await api('GET', '/api/version');
+    const { v, data_dir, app_version, restarted, ssh_off } = await api('GET', '/api/version');
+    if (S.sshOff !== !!ssh_off) { S.sshOff = !!ssh_off; sshOffNotes(); }
     if (restarted) S.restarted = true; // WorkHub restarted itself (update / install): reopen the last session
     $('#dataDir').textContent = 'Data: ' + data_dir; S.dataDir = data_dir;
     $('#appVersion').textContent = 'Version ' + app_version;
@@ -958,7 +978,7 @@ function suggestPlace(e) {
 function unsortedRow(e) {
   const sg = suggestPlace(e);
   return `<span class="inboxrow"><span class="newpill">NEW</span>${sg ? `<span>belongs in <b>${esc(sg.project)}</b>${sg.env ? ' · ' + esc(sg.env) : ''}?</span>` : ''}
-    ${sg ? `<button class="icon primary" data-act="accept" data-id="${e.id}" title="Move it there">✓ Move</button><button class="icon" data-act="keep" data-id="${e.id}" title="Keep in ${esc(e.project)}">Keep</button>` : ''}${isConn(e)
+    ${sg ? `<button class="icon primary" data-act="accept" data-id="${e.id}" title="Move it there">✓ Move</button><button class="icon" data-act="keep" data-id="${e.id}" title="Keep in ${esc(e.project)}">Keep</button>` : ''}${isConn(e) && !(S.sshOff && canSSH(e) && !canDB(e) && !isFTP(e)) // SSH switched off: nothing to test
       ? `<button class="icon ${sg ? '' : 'primary'}" data-act="trytest" data-id="${e.id}" title="Try connecting once with the saved login: a green dot if it works, ⚠ Needs attention if it doesn't">🔌 Test</button>`
       : sg ? '' : `<button class="icon primary" data-act="accept" data-id="${e.id}" title="It is right where it is: stop marking it new">✓ OK</button>`}</span>`;
 }
@@ -1694,7 +1714,7 @@ $('#pwAllSave').onclick = () => PwAll.save();
 $('#pwAllPw').addEventListener('keydown', ev => { if (ev.key === 'Enter') PwAll.save(); });
 
 async function retest(list) {
-  list = list.filter(isConn);
+  list = list.filter(isConn).filter(e => !S.sshOff || !canSSH(e) || canDB(e) || isFTP(e)); // SSH switched off: not tried
   if (!list.length) return toast('No connections to test here', true);
   if (list.length > 10 && !confirm(`Test ${list.length} connections now? Each one logs in once with its saved details.`)) return;
   let done = 0, ok = 0; const queue = [...list];
@@ -1917,6 +1937,7 @@ const Term = {
   tabs: [], active: null,
 
   async open(e, opts = {}) {
+    if (sshBlocked(e)) return; // SSH switched off (local prompts don't come here)
     if (isProd(e) && !opts.confirmed && !confirm(`⚠ PROD — open a terminal on a production server?\n\n${prodName(e)}\n\nCommands you type there run on PROD.`)) return;
     let creds = {};
     if (needsCreds(e)) { creds = await askCreds(e); if (!creds) return; }
@@ -2173,6 +2194,7 @@ $('#localPane').addEventListener('click', async e => {
 });
 
 Remote.connect = async e => {
+  if (sshBlocked(e)) return; // FTP still connects
   show('files'); roomForWork();
   let creds = {};
   if (needsCreds(e) && !(isFTP(e) && !e.username)) { creds = await askCreds(e); if (!creds) return; }

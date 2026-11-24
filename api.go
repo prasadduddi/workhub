@@ -33,7 +33,7 @@ func readJSON(r *http.Request, v any) error {
 // ---- misc ----
 
 func (a *App) handleVersion(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"v": a.store.Version(), "data_dir": a.dataDir, "app_version": version, "desktop": isDesktop,
+	writeJSON(w, map[string]any{"v": a.store.Version(), "data_dir": a.dataDir, "app_version": version, "ssh_off": sshOff, "desktop": isDesktop,
 		"restarted": a.restarted.Swap(false)}) // told once, to the first page after a restart
 }
 

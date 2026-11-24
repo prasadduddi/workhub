@@ -15,6 +15,10 @@ results = []
 BEFORE = []  # run before every check (closes dialogs that open by themselves, e.g. What's new)
 
 
+class Skip(Exception):
+    pass
+
+
 def check(name):
     def wrap(fn):
         t = time.time()
@@ -24,6 +28,8 @@ def check(name):
             fn()
             results.append((name, True, ""))
             print(f"  ✓ {name}  ({time.time() - t:.1f}s)")
+        except Skip as e:
+            print(f"  – {name}: skipped ({e})")
         except Exception as e:  # keep going: report every failure
             msg = str(e).splitlines()[0][:200] if str(e) else type(e).__name__
             results.append((name, False, msg))
@@ -60,6 +66,7 @@ with sync_playwright() as p:
     pg.wait_for_function("typeof S !== 'undefined' && S.entries.length > 0", timeout=20000)
     pg.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
     ev = pg.evaluate
+    ssh_off = lambda: bool(ev("S.sshOff"))
     close_dialogs = lambda: ev("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
     pg.wait_for_timeout(9000)  # What's new opens a few seconds after a first start
     BEFORE.append(lambda: (close_dialogs(), pg.keyboard.press("Escape")))
@@ -106,6 +113,8 @@ with sync_playwright() as p:
 
     @check("SSH: connect to the lab server, then the tree shows it live")
     def _():
+        if ssh_off():
+            raise Skip("SSH is switched off")
         ev("show('terminal')")
         ev("Term.open(S.entries.find(e => e.port === 2222))")
         pg.wait_for_function("Term.tabs.some(t => !t.closed)", timeout=15000)
@@ -114,6 +123,8 @@ with sync_playwright() as p:
 
     @check("pop out an SSH tab and dock it back")
     def _():
+        if ssh_off():
+            raise Skip("SSH is switched off")
         with ctx.expect_page() as pw:
             pg.click("#termTabs [data-pop]")
         w = pw.value
@@ -126,10 +137,33 @@ with sync_playwright() as p:
 
     @check("log viewer follows a file on the lab server")
     def _():
+        if ssh_off():
+            raise Skip("SSH is switched off")
         ev("LogView.open(S.entries.find(e => e.port === 2222))"); pg.wait_for_timeout(400)
         pg.fill("#logPanel .lp-path", "app/logs/application.log"); pg.click("#logPanel [data-lp=follow]")
         pg.wait_for_function("LogView.lines.length > 50", timeout=15000)
         pg.click("#logPanel [data-lp=close]")
+
+    @check("SSH switched off: nothing connects, ~/.ssh isn't read")
+    def _():
+        if not ssh_off():
+            raise Skip("SSH is on")
+        lab = "S.entries.find(e => e.port === 2222)"
+        ev("show('terminal')"); ev(f"Term.open({lab})"); pg.wait_for_timeout(400)
+        expect(ev("Term.tabs.filter(t => !t.local).length") == 0, "an SSH tab opened")
+        expect(pg.is_visible("#view-terminal .sshoff-note"), "no notice on the SSH page")
+        ev(f"Remote.connect({lab})"); pg.wait_for_timeout(400)
+        expect(not ev("Remote.sid"), "SFTP connected")
+        ev(f"LogView.open({lab})"); pg.wait_for_timeout(300)
+        expect(not pg.is_visible("#logPanel"), "log viewer opened")
+        expect(ev("api('GET', '/api/sshkeys').then(r => r.off === true && r.keys.length === 0)"), "SSH keys were read")
+        err = ev(f"api('POST', '/api/compare/remote', {{ id: {lab}.id, path: 'x' }}).then(() => '', e => e.message)")
+        expect("switched off" in err, f"remote compare: {err!r}")
+        err = ev(f"api('POST', '/api/tunnels/' + {lab}.id + '/start').then(() => '', e => e.message)")
+        expect("switched off" in err or err, f"tunnel started: {err!r}")
+        r = ev(f"api('POST', '/api/test', {{ id: {lab}.id, host: '127.0.0.1', port: 2222, username: 'deploy', protocol: 'ssh' }})")
+        expect(not r["ok"] and "switched off" in r["message"], f"SSH test: {r}")
+        expect(ev(f"api('GET', '/api/entries').then(l => l.find(e => e.port === 2222).status || '')") != "fail", "the switched-off test marked the entry failed")
 
     @check("threads: open one with a screenshot")
     def _():
@@ -212,7 +246,16 @@ with sync_playwright() as p:
     @check("new capture: Test tries the connection, failure shows Needs attention")
     def _():
         ev("show('dashboard')")
-        eid = ev("(S.entries.find(e => e.unsorted && canSSH(e) && !suggestPlace(e)) || {}).id")
+        if ssh_off():  # new SSH captures just get ✓ OK; a new database is tested instead
+            sid = ev("(S.entries.find(e => e.unsorted && canSSH(e) && !canDB(e) && !suggestPlace(e)) || {}).id")
+            if sid:
+                pg.wait_for_selector(f"#board [data-act=accept][data-id='{sid}']", timeout=5000)
+                expect(not pg.query_selector(f"#board [data-act=trytest][data-id='{sid}']"), "Test offered for SSH while SSH is off")
+            eid = ev("(S.entries.find(e => e.unsorted && canDB(e) && !suggestPlace(e)) || {}).id")
+            if not eid:
+                raise Skip("no new database capture in the demo")
+        else:
+            eid = ev("(S.entries.find(e => e.unsorted && canSSH(e) && !suggestPlace(e)) || {}).id")
         expect(eid, "no new SSH capture in the demo")
         btn = f"#board [data-act=trytest][data-id='{eid}']"
         pg.wait_for_selector(btn, timeout=5000)
@@ -261,6 +304,8 @@ with sync_playwright() as p:
 
     @check("compare a file on two servers (read-only)")
     def _():
+        if ssh_off():
+            raise Skip("SSH is switched off")
         lab = os.path.join(SIM, "lab")
         for n, v in (("acme-app-01", "1"), ("acme-bat-01", "2")):
             os.makedirs(os.path.join(lab, n, "conf"), exist_ok=True)
@@ -283,6 +328,8 @@ with sync_playwright() as p:
 
     @check("SSH keys window lists keys (read-only)")
     def _():
+        if ssh_off():
+            raise Skip("SSH is switched off")
         ev("SSHKeys.open()"); pg.wait_for_timeout(600)
         expect(pg.is_visible("#sshKeysDlg"), "keys window")
         close_dialogs()

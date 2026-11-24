@@ -200,6 +200,10 @@ func readSSHConfig(path string) []sshHost {
 }
 
 func (a *App) handleSSHKeys(w http.ResponseWriter, r *http.Request) {
+	if sshOff { // ~/.ssh is not read at all
+		writeJSON(w, map[string]any{"off": true, "keys": []sshKeyInfo{}, "hosts": []sshHost{}})
+		return
+	}
 	dir := sshDirFunc()
 	_, err := os.Stat(dir)
 	writeJSON(w, map[string]any{"dir": dir, "exists": err == nil, "keys": readSSHKeys(dir), "hosts": readSSHConfig(filepath.Join(dir, "config"))})
