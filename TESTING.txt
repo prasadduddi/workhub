@@ -114,3 +114,20 @@ Word documents into a thread, search, UAT/PROD, capture switch
       and the SSH tab reconnects; the tray icon is not left behind twice. Also from the tray icon's right-click menu.
   [ ] ~/.ssh not read: ☰ and Tools menus have no "My SSH keys"; no 🔑 Keys button in the SSH tree;
       SSH terminal, SFTP, tunnels, Git fetch work as before; ~/.ssh (config, known_hosts) file dates unchanged.
+  [ ] Open the Assistant (Ctrl+J): copy "ssh ops@server -p 22" in Notepad -> "I found an SSH server … Add it?" appears; Yes -> ✅ Connection created
+  [ ] Paste server details into the Assistant's box and press Send -> "I found … Add it?"; type clear -> empty
+  [ ] Win+Shift+S a screenshot of server details (or paste one into the Assistant's box, then Send) -> its text is read (Windows OCR) and offered
+      — if it says no OCR language: Windows Settings -> Time & language -> Language -> add the OCR/handwriting feature
+  [ ] Close the Assistant -> copies are captured as before (NEW on the Dashboard)
+  [ ] Double-click empty space in the left menu -> narrow icon rail; double-click again -> full menu
+  [ ] Restart WorkHub (File -> Restart) or reboot, then reload an old WorkHub tab / bookmark -> still signed in (no "Session expired")
+  [ ] Settings -> Security -> Show my SSH keys: off by default (no Keys button / menu item); tick it -> Tools -> My SSH keys works
+  [ ] Top switch shows Others · UAT n · PROD n · All: PROD servers are not in the SSH/SQL trees or search until PROD is picked
+  [ ] In a thread: drag a screenshot's corner -> smaller/bigger, kept after reload; right-click it -> Copy image -> paste into Paint/Teams
+  [ ] Right-click a message with text + picture -> Copy -> paste into Outlook/Word -> text and picture
+  [ ] Search a word that is in a thread -> full-width card with the matching messages, word highlighted; click one -> opens there
+  [ ] Dashboard on the big monitor: cards fill the width and reach the bottom
+  [ ] 💬 next to Capturing; the Assistant opens below the search; drag its left edge to resize
+  [ ] Right-click a server in the SSH tree -> Background colour… -> pick -> row tinted; Remove the colour
+  [ ] Files page: drag the Type column edge -> wider; double-click the edge -> default
+  [ ] + New thread -> the name box opens next to the click (no "127.0.0.1 says")

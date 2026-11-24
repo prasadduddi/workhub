@@ -26,7 +26,7 @@ function sanitizeHTML(html) {
       }
       for (const at of [...el.attributes]) {
         const n = at.name.toLowerCase();
-        const keep = (el.tagName === 'A' && n === 'href') || (el.tagName === 'IMG' && (n === 'src' || n === 'alt' || n === 'data-file')) ||
+        const keep = (el.tagName === 'A' && n === 'href') || (el.tagName === 'IMG' && (n === 'src' || n === 'alt' || n === 'data-file' || (n === 'width' && /^\d{2,4}$/.test(at.value)))) ||
           (['TD', 'TH'].includes(el.tagName) && (n === 'colspan' || n === 'rowspan')) || (el.tagName === 'INPUT' && (n === 'type' || n === 'checked'));
         if (!keep) el.removeAttribute(at.name);
       }
@@ -192,7 +192,7 @@ const Work = {
   },
 
   async create(title) {
-    title = title || prompt('Thread name (e.g. PAY-123 refund limits, CM-456 UAT release):', '');
+    title = title || await askText('Thread name (e.g. PAY-123 refund limits, CM-456 UAT release)', '', 'Create thread');
     if (!title?.trim()) return null;
     const w = await api('POST', '/api/work', { title: title.trim(), jira: title }); // a key in the name links it
     await this.loadList();
@@ -726,11 +726,51 @@ page.addEventListener('click', async e => {
   }
 });
 // The ⋯ menu of a message (also its right-click menu).
-function postMenu(p, postEl, r) {
+// A picture as PNG (what the clipboard takes), via a canvas.
+async function imagePNG(img) {
+  const bmp = await createImageBitmap(await (await fetch(img.src)).blob());
+  const c = Object.assign(document.createElement('canvas'), { width: bmp.width, height: bmp.height });
+  c.getContext('2d').drawImage(bmp, 0, 0);
+  return new Promise(res => c.toBlob(res, 'image/png'));
+}
+async function copyImage(img) {
+  try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': imagePNG(img) })]); toast('Picture copied'); }
+  catch (err) { toast('Couldn\'t copy the picture: ' + err.message, true); }
+}
+// 📋 Copy: the message's text and pictures together — pasting into Outlook,
+// Word or Teams gives both; a message that is only a picture copies as a picture.
+async function copyPost(p, postEl) {
+  const body = postEl.querySelector('.tbody'), imgs = [...body.querySelectorAll('img')];
+  const text = (p.kind === 'capture' && !p.html ? p.text : body.innerText || '').trim();
+  if (!imgs.length) return copyText(text, 'Copied');
+  try {
+    if (!text) { await navigator.clipboard.write([new ClipboardItem({ 'image/png': imagePNG(imgs[0]) })]); return toast(imgs.length > 1 ? 'First picture copied (copy the others one by one)' : 'Picture copied'); }
+    const clone = body.cloneNode(true);
+    const data = async src => { const b = await (await fetch(src)).blob(); return new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); }); };
+    for (const im of clone.querySelectorAll('img')) im.src = await data(im.src).catch(() => im.src); // pictures travel inside the HTML
+    clone.querySelectorAll('button, .tcopy').forEach(x => x.remove());
+    const item = { 'text/html': new Blob([clone.innerHTML], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) };
+    if (imgs.length === 1) item['image/png'] = imagePNG(imgs[0]); // for programs that take only a picture
+    await navigator.clipboard.write([new ClipboardItem(item)]);
+    toast(`Copied — text and ${imgs.length} picture${imgs.length > 1 ? 's' : ''}`);
+  } catch (err) { copyText(text, 'Copied the text (the pictures couldn\'t be copied here)'); }
+}
+// Resize a picture in a message (drag its bottom-right corner; 0 = original size): saved with the message.
+async function resizePostImage(p, postEl, img, width) {
+  const all = [...postEl.querySelectorAll('.tbody img')], n = all.indexOf(img);
+  const doc = new DOMParser().parseFromString(`<body>${p.html || ''}</body>`, 'text/html');
+  const target = [...doc.body.querySelectorAll('img')][n]; if (!target) return;
+  if (width) target.setAttribute('width', String(Math.round(width))); else target.removeAttribute('width');
+  const html = doc.body.innerHTML;
+  await api('PUT', `/api/work/${Work.current.id}/posts/${p.id}`, { html }).catch(err => toast(err.message, true));
+  p.html = html; Work.render();
+}
+function postMenu(p, postEl, r, img) {
   const w = Work.current, kids = w.posts.filter(x => x.parent === p.id);
   const at = (h, m = 0, days = 0) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, m, 0, 0); return d; };
   const nextMon = () => { const d = at(9); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return d; };
   setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
+    ...(img ? [['🖼 Copy image', () => copyImage(img)], ...(img.getAttribute('width') && p.kind === 'note' ? [['↺ Original size', () => resizePostImage(p, postEl, img, 0)]] : []), '-'] : []),
     ...(Work.canEdit(p) ? [[p.kind === 'entry' ? '✎ Edit connection' : '✎ Edit message', () => Work.editPost(p.id)], '-'] : []),
     ['💬 Reply in thread', () => Work.openPanel(p.parent || p.id)],
     [p.pinned ? '📌 Unpin' : '📌 Pin to the top', () => Work.pin(p, !p.pinned)],
@@ -744,7 +784,7 @@ function postMenu(p, postEl, r) {
     ...(p.remind_at ? [['⏰ Remove the reminder', () => Work.remind(p, null)]] : []),
     '-',
     ['🔗 Copy link to this message', () => copyText(Work.postLink(p), 'Link copied — paste it in another thread or note to jump here')],
-    ['Copy text', () => copyText(p.text || postEl.querySelector('.tbody').innerText)],
+    ['📋 Copy', () => copyPost(p, postEl)],
     ['➡ Move to another thread…', () => Work.movePost(p, false, { clientX: r.left - 160, clientY: r.bottom })],
     ['⧉ Copy to another thread…', () => Work.movePost(p, true, { clientX: r.left - 160, clientY: r.bottom })],
     [kids.length ? `Delete message and its ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'}` : 'Delete message', async () => {
@@ -943,5 +983,25 @@ $('#taskMain').addEventListener('contextmenu', e => {
   const p = Work.current?.posts.find(x => x.id === el.dataset.post); if (!p) return;
   if (getSelection().toString()) return; // let the browser copy selected text
   e.preventDefault();
-  postMenu(p, el, { left: e.clientX + 160, bottom: e.clientY });
+  postMenu(p, el, { left: e.clientX + 160, bottom: e.clientY }, e.target.closest('.tbody img'));
 });
+
+// ---- resize pictures in messages: drag the bottom-right corner ----
+{
+  const grip = (img, e) => { const r = img.getBoundingClientRect(); return e.clientX > r.right - 18 && e.clientY > r.bottom - 18; };
+  const postOf = img => { const el = img.closest('[data-post]'); const p = el && Work.current?.posts.find(x => x.id === el.dataset.post); return p && p.kind === 'note' && !img.closest('[contenteditable=true]') ? [p, el] : null; };
+  page.addEventListener('mousemove', e => {
+    const img = e.target.closest?.('.tposts .tbody img, .tpanel .tbody img'); if (!img) return;
+    img.classList.toggle('grip', !!postOf(img) && grip(img, e));
+  });
+  page.addEventListener('mousedown', e => {
+    const img = e.target.closest?.('.tposts .tbody img, .tpanel .tbody img'); if (!img || e.button !== 0 || !grip(img, e)) return;
+    const pp = postOf(img); if (!pp) return;
+    e.preventDefault();
+    const startX = e.clientX, startW = img.getBoundingClientRect().width, max = img.closest('.tbody').clientWidth;
+    let w = startW;
+    const move = ev => { w = Math.max(60, Math.min(max, startW + ev.clientX - startX)); img.style.width = w + 'px'; img.style.maxWidth = 'none'; };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); if (Math.abs(w - startW) > 3) resizePostImage(pp[0], pp[1], img, w); };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  });
+}

@@ -46,7 +46,7 @@ func backupSkip(rel string, d fs.DirEntry) bool {
 	if d.IsDir() {
 		return n == "webview2" || strings.HasSuffix(n, "-backups")
 	}
-	return n == "session.token" || strings.HasSuffix(n, ".tmp") || strings.HasSuffix(n, ".wh-tmp") || strings.HasPrefix(n, "~$")
+	return n == "session.token" || n == "browser.key" || strings.HasSuffix(n, ".tmp") || strings.HasSuffix(n, ".wh-tmp") || strings.HasPrefix(n, "~$")
 }
 
 // dataFingerprint changes whenever any data file changes.

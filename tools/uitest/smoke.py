@@ -71,6 +71,7 @@ with sync_playwright() as p:
     close_dialogs = lambda: ev("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
     pg.wait_for_timeout(9000)  # What's new opens a few seconds after a first start
     BEFORE.append(lambda: (close_dialogs(), pg.keyboard.press("Escape")))
+    ev("EnvSwitch.set('ALL')")  # most checks use the lab servers (UAT); the default (Others) is checked on its own
 
     @check("page loads without errors")
     def _():
@@ -183,6 +184,128 @@ with sync_playwright() as p:
         ev("disconnectAll()"); pg.wait_for_timeout(300)
         expect(ev("Remote.tabs.length") == 0 and not ev("Remote.sid"), "Disconnect all left FTP open")
 
+    @check("💬 Assistant: details or a screenshot + Send → 'I found … Add it?' → Yes creates it, with a message; clear")
+    def _():
+        ev("Chat.toggle(true)"); pg.wait_for_timeout(300)
+        expect("anything you copy" in pg.inner_text("#chatLog"), "the Assistant doesn't say it asks first")
+        n0 = ev("S.entries.length")
+        pg.fill("#chatText", "Host: smoke-app-09.dev.acme.local  user: deploy  port 22\njdbc:oracle:thin:@smoke-ora-09.dev.acme.local:1521/SMK\nalso 10.0.0.9")
+        expect(pg.locator("#chatLog .asq").count() == 0, "recognised before Send")
+        pg.click("#chatSend")
+        pg.wait_for_function("document.querySelectorAll('#chatLog .asq').length >= 3", timeout=10000)
+        txt = pg.inner_text("#chatLog")
+        expect("an SSH server" in txt and "an Oracle database" in txt, f"questions: {txt[-400:]}")
+        pg.locator("#chatLog .asq", has_text="smoke-app-09").locator("[data-asyes]").click()
+        pg.wait_for_function("/Connection created/.test(document.querySelector('#chatLog').textContent)", timeout=10000)
+        pg.wait_for_function(f"S.entries.length === {n0} + 1", timeout=10000)
+        e = ev("S.entries.find(e => e.host === 'smoke-app-09.dev.acme.local')")
+        expect(e and e["username"] == "deploy" and not e.get("unsorted"), f"created: {e}")
+        pg.locator("#chatLog .asq", has_text="10.0.0.9").locator("[data-asno]").click(); pg.wait_for_timeout(200)
+        expect("Not added" in pg.locator("#chatLog .asq", has_text="10.0.0.9").inner_text(), "No didn't answer")
+        pg.fill("#chatText", "find picasso"); pg.click("#chatSend"); pg.wait_for_timeout(500)  # a command stays a command
+        expect(pg.locator("#chatLog .asq").count() == 3, "a command was taken for details")
+        if ev("AsstCapture.ocr"):  # a pasted screenshot waits, then is read with the system's OCR on Send
+            ev("""(async () => { const c = Object.assign(document.createElement('canvas'), { width: 900, height: 120 }); const x = c.getContext('2d');
+                x.fillStyle = '#fff'; x.fillRect(0, 0, 900, 120); x.fillStyle = '#000'; x.font = '26px Arial';
+                x.fillText('jdbc:oracle:thin:@shot-ora-77.uat.acme.local:1521/SHOT', 20, 70);
+                const blob = await new Promise(r => c.toBlob(r, 'image/png')); const dt = new DataTransfer(); dt.items.add(new File([blob], 'shot.png', { type: 'image/png' }));
+                document.querySelector('#chatText').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })()""")
+            pg.wait_for_selector("#asImg", timeout=5000)
+            expect(not pg.locator("#chatLog", has_text="shot-ora-77").count(), "read before Send")
+            pg.click("#chatSend")
+            pg.wait_for_function("/shot-ora-77/.test(document.querySelector('#chatLog').textContent)", timeout=20000)
+            expect("In your screenshot" in pg.inner_text("#chatLog") and not pg.query_selector("#asImg"), "screenshot not read on Send")
+        pg.fill("#chatText", "clear"); pg.click("#chatSend"); pg.wait_for_timeout(200)
+        expect(ev("document.querySelector('#chatLog').children.length") == 0, "clear left the conversation")
+        ev("Chat.toggle(false)")
+
+    @check("double-click on empty space in the left menu toggles its size")
+    def _():
+        was = ev("document.body.classList.contains('side-collapsed')")
+        empty = """(() => { const s = document.querySelector('.side'), r = s.getBoundingClientRect();
+            for (let y = r.bottom - 10; y > r.top + 40; y -= 6) for (const x of [r.left + 12, r.left + r.width / 2])
+              if (document.elementFromPoint(x, y) === s) return [x, y];
+            return null; })()"""
+        for step, want in (("first", not was), ("second", was)):
+            pt = ev(empty)
+            expect(pt, f"no empty space found in the menu ({step} double-click)")
+            pg.mouse.dblclick(pt[0], pt[1]); pg.wait_for_timeout(300)
+            expect(ev("document.body.classList.contains('side-collapsed')") == want, f"the {step} double-click didn't toggle the menu")
+        # (a page entry is not empty space: clicking the page you are on already toggles the menu, so it's left out here)
+        if ev("document.body.classList.contains('side-collapsed')"):
+            pg.click("#sideToggle"); pg.wait_for_timeout(200)  # leave the menu open for the next checks
+
+    @check("Files: columns resize by dragging a heading's edge (kept); a drag doesn't sort")
+    def _():
+        ev("show('files')"); pg.wait_for_function("document.querySelectorAll('#localPane .fhead span').length === 4", timeout=10000)
+        sort0 = ev("JSON.stringify(Local.sortBy)")
+        type_w = pg.locator("#localPane .fhead span").nth(1).bounding_box()["width"]
+        g = pg.locator("#localPane .fhead .fgrip[data-fcol='1']").bounding_box()
+        pg.mouse.move(g["x"] + 4, g["y"] + g["height"] / 2); pg.mouse.down(); pg.mouse.move(g["x"] + 84, g["y"] + g["height"] / 2, steps=5); pg.mouse.up(); pg.wait_for_timeout(200)
+        new_w = pg.locator("#localPane .fhead span").nth(1).bounding_box()["width"]
+        expect(abs(new_w - (type_w + 80)) < 12, f"Type column {type_w} → {new_w}, wanted +80")
+        expect(abs(pg.locator("#localPane .frow .ty").first.bounding_box()["width"] - new_w) < 4, "rows don't follow the heading")
+        expect(ev("JSON.stringify(Local.sortBy)") == sort0, "the drag also sorted")
+        expect(ev("store.get('fcols.localPane', null)") is not None, "width not remembered")
+        pg.locator("#localPane .fhead .fgrip[data-fcol='1']").dblclick(); pg.wait_for_timeout(200)
+        expect(abs(pg.locator("#localPane .fhead span").nth(1).bounding_box()["width"] - type_w) < 6, "double-click didn't restore the default")
+
+    @check("✨ What's new sits after the version (bottom left); naming rules live in Settings → Connections")
+    def _():
+        expect(ev("document.querySelector('#whatsNewTop')?.parentElement?.classList.contains('ver-row')"), "✨ isn't after the version")
+        pg.click("#whatsNewTop"); pg.wait_for_timeout(400)
+        expect(ev("document.querySelector('#whatsNewDlg').open"), "✨ didn't open What's new")
+        close_dialogs()
+        ev("show('terminal')"); pg.wait_for_timeout(200)
+        expect(not pg.query_selector("#view-terminal [data-tool=rules]"), "🏷 Names still on the tree")
+        pg.click("#settingsTop"); pg.wait_for_timeout(400); pg.click("[data-settab=connections]")
+        pg.click("#settingsBody [data-set=namerules]"); pg.wait_for_timeout(300)
+        expect(ev("document.querySelector('#nameRulesDlg').open"), "Settings → Connections → Naming rules didn't open")
+        close_dialogs()
+
+    @check("🎨 a connection's background colour in the tree (kept by the edit dialog, removable)")
+    def _():
+        ev("show('terminal')"); pg.wait_for_timeout(300)
+        eid = ev("S.entries.find(e => e.port === 2222).id")
+        node = pg.locator(f"#view-terminal .tnode.item[data-id='{eid}']").first
+        node.click(button="right"); pg.wait_for_timeout(300)
+        expect("Background colour" in pg.inner_text("#ctxMenu"), "no Background colour in the menu")
+        pg.keyboard.press("Escape")
+        ev(f"setEntryColor(byId('{eid}'), '#4caf50')"); pg.wait_for_timeout(600)
+        row = pg.locator(f"#view-terminal .tnode.item[data-id='{eid}']").first
+        expect("tinted" in (row.get_attribute("class") or "") and "#4caf50" in (row.get_attribute("style") or ""), "row not tinted")
+        ev(f"openEntryDialog(byId('{eid}'))"); pg.wait_for_timeout(300)
+        expect("color" not in ev("document.querySelector('#entryForm').extra.value"), "colour shown as a field")
+        body = ev("entryFormBody()")
+        expect((body.get("extra") or {}).get("color") == "#4caf50", "the edit dialog would drop the colour")
+        close_dialogs()
+        ev(f"setEntryColor(byId('{eid}'), '')"); pg.wait_for_timeout(600)
+        expect("tinted" not in (pg.locator(f"#view-terminal .tnode.item[data-id='{eid}']").first.get_attribute("class") or ""), "colour not removed")
+
+    @check("the left menu slides when it opens and closes")
+    def _():
+        ev("show('dashboard')")
+        pg.click("#sideToggle")
+        tr = ev("getComputedStyle(document.querySelector('.side')).transitionProperty")
+        expect("width" in tr, f"no slide: transition {tr}")
+        pg.wait_for_timeout(400)
+        expect(ev("getComputedStyle(document.querySelector('.side')).transitionProperty") in ("all", "none") or not ev("document.body.classList.contains('side-anim')"), "still animating afterwards")
+        pg.click("#sideToggle"); pg.wait_for_timeout(400)
+
+    @check("💬 Assistant starts below the search bar and resizes by its left edge (remembered)")
+    def _():
+        ev("Chat.toggle(true)"); pg.wait_for_timeout(300)
+        chat, srch = pg.locator("#chat").bounding_box(), pg.locator("#search").bounding_box()
+        expect(chat["y"] >= srch["y"] + srch["height"], f"Assistant covers the search: chat top {chat['y']} vs search bottom {srch['y'] + srch['height']}")
+        pg.click("#search"); expect(ev("document.activeElement.id") == "search", "the search can't be used with the Assistant open")
+        g = pg.locator("#chat .chat-grip").bounding_box()
+        pg.mouse.move(g["x"] + 4, g["y"] + 200); pg.mouse.down(); pg.mouse.move(g["x"] - 116, g["y"] + 200, steps=5); pg.mouse.up(); pg.wait_for_timeout(200)
+        w = pg.locator("#chat").bounding_box()["width"]
+        expect(abs(w - (chat["width"] + 120)) < 12, f"resize: {chat['width']} → {w}")
+        expect(abs(ev("store.get('chatW', 0)") - w) < 3, "width not remembered")
+        pg.locator("#chat .chat-grip").dblclick(); pg.wait_for_timeout(200)
+        ev("Chat.toggle(false)")
+
     @check("threads: open one with a screenshot")
     def _():
         ev("show('tasks')")
@@ -248,6 +371,32 @@ with sync_playwright() as p:
         expect(ev("!!document.querySelector('dialog[open]')"), "the connection didn't open for editing")
         close_dialogs()
 
+    @check("pictures in messages: drag the corner to resize; right-click → Copy image; ⋯ → 📋 Copy (text + picture)")
+    def _():
+        ctx.grant_permissions(["clipboard-read", "clipboard-write"], origin=URL.split("/?")[0])
+        ev("show('tasks')")
+        tid = ev("Work.list.find(w => w.images > 0).id")
+        ev(f"Work.open('{tid}')"); pg.wait_for_timeout(600)
+        img = pg.locator("#tposts .tmsg.k-note .tbody img").first
+        img.scroll_into_view_if_needed(); pg.wait_for_function("[...document.querySelectorAll('#tposts .tbody img')].some(i => i.complete && i.naturalWidth > 0)", timeout=10000)
+        pid = img.evaluate("i => i.closest('[data-post]').dataset.post")
+        b = img.bounding_box()
+        pg.mouse.move(b["x"] + b["width"] - 6, b["y"] + b["height"] - 6); pg.mouse.down()
+        pg.mouse.move(b["x"] + b["width"] - 120, b["y"] + b["height"] - 6, steps=5); pg.mouse.up(); pg.wait_for_timeout(600)
+        html = ev(f"api('GET', '/api/work/{tid}').then(d => d.posts.find(p => p.id === '{pid}').html)")
+        import re
+        m = re.search(r'width="(\d+)"', html)
+        expect(m and abs(int(m.group(1)) - (b["width"] - 114)) < 12, f"resized width not saved: {m and m.group(1)} vs {b['width'] - 114}")
+        img = pg.locator(f"#tposts [data-post='{pid}'] .tbody img").first
+        img.click(button="right"); pg.wait_for_timeout(300)
+        menu = pg.inner_text("#ctxMenu")
+        expect("Copy image" in menu and "Original size" in menu and "📋 Copy" in menu and "Copy text" not in menu, f"menu: {menu[:200]}")
+        pg.click("#ctxMenu button:has-text('Original size')"); pg.wait_for_timeout(600)
+        expect("width=" not in ev(f"api('GET', '/api/work/{tid}').then(d => d.posts.find(p => p.id === '{pid}').html)"), "Original size kept the width")
+        ev(f"(() => {{ const el = document.querySelector(\"#tposts [data-post='{pid}']\"); copyPost(Work.current.posts.find(p => p.id === '{pid}'), el); }})()"); pg.wait_for_timeout(1500)
+        types = ev("navigator.clipboard.read().then(items => items.flatMap(i => i.types))")
+        expect("image/png" in types and ("text/html" in types or "text/plain" in types), f"clipboard: {types}")
+
     @check("add a Word document to a thread, formatting kept")
     def _():
         import io, zipfile
@@ -294,9 +443,44 @@ with sync_playwright() as p:
         pg.click("#envSwitch [data-envsw=UAT]")
         pg.wait_for_timeout(300)
         expect(all(e.upper().startswith("UAT") for e in ev("S.entries.map(e => e.env)")), "UAT only expected")
-        pg.click("#envSwitch [data-envsw='']")
+        pg.click("#envSwitch [data-envsw=ALL]")
         pg.wait_for_timeout(300)
         expect(ev("S.entries.length") == total, "All should show everything again")
+
+    @check("search: thread results full width, with the matching messages (who, when, highlighted) that open the thread there")
+    def _():
+        ev("show('dashboard')")
+        pg.fill("#search", "deadlock"); pg.dispatch_event("#search", "input")
+        pg.wait_for_selector("#board .tresult .thit", timeout=10000)
+        card = pg.locator("#board .tresult").first
+        expect(card.bounding_box()["width"] > 700, "the thread card is still narrow")
+        hit = card.locator(".thit").first
+        expect(hit.locator("mark").count() > 0, "the search word isn't highlighted")
+        tid, pid = hit.get_attribute("data-thread"), hit.get_attribute("data-tpost")
+        hit.click(); pg.wait_for_timeout(600)
+        expect(ev("Work.current?.id") == tid, "didn't open that thread")
+        pg.fill("#search", ""); pg.dispatch_event("#search", "input"); ev("show('dashboard')")
+
+    @check("💬 Assistant button sits next to ● Capturing")
+    def _():
+        expect(ev("document.querySelector('#capBtn').previousElementSibling?.id === 'chatFab' || document.querySelector('#capBtn').nextElementSibling?.id === 'chatFab'"), "💬 isn't next to Capturing")
+        pg.click("#chatFab"); pg.wait_for_timeout(200)
+        expect(not ev("document.querySelector('#chat').hidden"), "💬 didn't open the Assistant")
+        pg.click("#chatFab"); pg.wait_for_timeout(200)
+
+    @check("+ New thread asks in WorkHub's own box, right of the click (not the browser's prompt)")
+    def _():
+        ev("show('tasks')"); pg.wait_for_timeout(300)
+        n = ev("Work.list.length")
+        b = pg.locator("#workNew").bounding_box()
+        pg.mouse.click(b["x"] + 20, b["y"] + 10); pg.wait_for_selector(".askbox", timeout=3000)
+        box = pg.locator(".askbox").bounding_box()
+        expect(box["x"] >= b["x"] + 20 and abs(box["y"] - (b["y"] - 2)) < 40, f"box not right of the click: {box} vs click {b['x'] + 20},{b['y'] + 10}")
+        pg.keyboard.type("SMOKE-1 thread from the box"); pg.keyboard.press("Enter")
+        pg.wait_for_function(f"Work.list.length === {n} + 1", timeout=5000)
+        expect(ev("Work.current?.title") == "SMOKE-1 thread from the box", "thread not created")
+        pg.click("#workNew"); pg.wait_for_selector(".askbox"); pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+        expect(not pg.query_selector(".askbox") and ev("Work.list.length") == n + 1, "Esc didn't cancel")
 
     @check("capture button at the top pauses and resumes clipboard capture")
     def _():
@@ -403,20 +587,27 @@ with sync_playwright() as p:
         pg.click("#sideToggle"); pg.wait_for_timeout(300)
         expect(not ev("document.body.classList.contains('side-collapsed')"), "menu didn't expand again")
 
-    @check("search leaves UAT and PROD out unless picked at the top (with a note and Show buttons)")
+    @check("Others (default) hides UAT and PROD everywhere — trees, full list, search — until picked at the top")
     def _():
-        ev("show('dashboard')"); ev("EnvSwitch.v && EnvSwitch.set('')")
+        ev("show('dashboard')"); ev("EnvSwitch.set('')")
+        envs = ev("S.entries.map(e => (e.env || '').toUpperCase())")
+        expect(envs and not any(e.startswith("UAT") or e.startswith("PROD") for e in envs), f"UAT/PROD listed: {set(envs)}")
+        expect(pg.inner_text("#envSwitch [data-envsw=PROD] .envn").strip().isdigit(), "no hidden count on PROD")
+        ev("show('terminal')"); pg.wait_for_timeout(300)
+        expect(not pg.locator("#view-terminal .tree-host", has_text="prod.acme.local").count(), "PROD servers in the SSH tree")
+        ev("show('dashboard')")
         pg.fill("#search", "acme"); pg.dispatch_event("#search", "input"); pg.wait_for_timeout(500)
         envs = ev("filtered().map(e => (e.env || '').toUpperCase())")
-        expect(envs and not any(e.startswith("UAT") or e.startswith("PROD") for e in envs), f"UAT/PROD in results: {set(envs)}")
+        expect(not any(e.startswith("UAT") or e.startswith("PROD") for e in envs), f"UAT/PROD in results: {set(envs)}")
         expect(pg.is_visible("#board .guard-note"), "no note about hidden UAT/PROD results")
         pg.click("#board [data-guardenv=PROD]"); pg.wait_for_timeout(400)
         envs = ev("filtered().map(e => (e.env || '').toUpperCase())")
         expect(envs and all(e.startswith("PROD") for e in envs), f"PROD picked, results: {set(envs)}")
         ev("EnvSwitch.set('')")
         pg.fill("#search", "acme env:prod"); pg.dispatch_event("#search", "input"); pg.wait_for_timeout(400)
-        expect(ev("filtered().length") > 0, "env:prod typed shows nothing")
+        expect(pg.is_visible("#board .guard-note"), "env:prod typed: no way to show them")
         pg.fill("#search", ""); pg.dispatch_event("#search", "input")
+        ev("EnvSwitch.set('ALL')")
 
     @check("text size: bigger by default, Settings → Appearance changes it")
     def _():
@@ -495,23 +686,25 @@ with sync_playwright() as p:
         r = ev(f"api('POST', '/api/import/conns/read', {{ name: 'x.reg', content: '{base64.b64encode(reg.encode()).decode()}' }})")
         expect(r["source"] == "putty" and r["items"][0]["host"] == "smoke-jump.example.com", f"read: {r}")
 
-    @check("SSH keys window switched off: ~/.ssh not read, menu items hidden")
+    @check("SSH keys window: off by default (~/.ssh not read, hidden); Settings → Security turns it on")
     def _():
-        if not ssh_keys_off():
-            raise Skip("the SSH keys window is on")
+        expect(ev("S.sshKeysOff"), "the SSH keys window is on by default")
         expect(ev("api('GET', '/api/sshkeys').then(r => r.off === true && !r.keys.length && !r.hosts.length)"), "~/.ssh was read")
-        ev("SSHKeys.open()"); pg.wait_for_timeout(300)
-        expect(not pg.is_visible("#sshKeysDlg"), "the keys window opened")
         ev("show('terminal')"); pg.wait_for_timeout(200)
-        expect(not pg.is_visible("#view-terminal [data-tool=sshkeys]"), "🔑 Keys button shown")
+        expect(not pg.is_visible("#view-terminal [data-tool=sshkeys]"), "🔑 Keys button shown while off")
+        pg.click("#settingsTop"); pg.wait_for_timeout(400); pg.click("[data-settab=security]")
+        pg.click("#settingsBody label.switch:has([data-set=sshkeys])"); pg.wait_for_timeout(800)
+        expect(not ev("S.sshKeysOff"), "ticking didn't turn it on")
+        close_dialogs()
+        expect(pg.is_visible("#view-terminal [data-tool=sshkeys]"), "🔑 Keys button not shown when on")
         pg.click("#menubar [data-menu=Tools]"); pg.wait_for_timeout(200)
-        expect("SSH keys" not in pg.inner_text("#ctxMenu"), "SSH keys in the Tools menu")
+        expect("SSH keys" in pg.inner_text("#ctxMenu"), "SSH keys not in the Tools menu when on")
         pg.keyboard.press("Escape")
 
     @check("SSH keys window lists keys (read-only)")
     def _():
         if ssh_keys_off():
-            raise Skip("the SSH keys window is switched off")
+            raise Skip("the SSH keys window is off in Settings")
         ev("SSHKeys.open()"); pg.wait_for_timeout(600)
         expect(pg.is_visible("#sshKeysDlg"), "keys window")
         close_dialogs()

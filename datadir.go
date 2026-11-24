@@ -152,7 +152,7 @@ func (a *App) copyDataTo(target string) error {
 	if a.store != nil {
 		a.store.Flush()
 	}
-	for _, f := range []string{"workhub.dat", "key.bin", "key.master", "known_hosts"} {
+	for _, f := range []string{"workhub.dat", "key.bin", "key.master", "known_hosts", "browser.key"} { // browser.key: tabs stay signed in
 		src := filepath.Join(a.dataDir, f)
 		if !fileExists(src) {
 			continue

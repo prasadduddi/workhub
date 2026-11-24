@@ -123,19 +123,37 @@ const HELP_TOPICS = [
     'New connections on the Dashboard are marked NEW with a 🔌 Test button.',
     'Test logs in once with the saved details: a green dot means it worked; ⚠ Needs attention (red) means it didn\'t — click it to fix the user, password or host.',
     'Web links have ✓ OK instead: it just stops marking them new.'] },
-  { t: 'Why don\'t UAT or PROD servers show in search?', k: 'uat prod search missing hidden results not found where server env', v: 'dashboard', s: [
-    'With All picked at the top, search leaves UAT and PROD servers out, so you don\'t open one by accident.',
-    'Pick UAT or PROD in the switch at the top (or press Show UAT / Show PROD in the note above the results, or type env:prod).'] },
+  { t: 'Add connections by copying (Assistant)', k: 'capture copy paste screenshot ocr picture jdbc add connection ask confirm yes detect assistant', v: '', s: [
+    'Open the 💬 Assistant (Ctrl+J, or 💬 next to WorkHub at the top left).',
+    'While it is open, copy server details anywhere: it says “I found an SSH server … Add it?” (or a database, FTP server, link) — Yes creates the connection and says ✅ Connection created.',
+    'Or paste into its message box — text, a JDBC URL or a screenshot — and press Send; the text in a picture is read with the OCR built into Windows. (Start with ssh / ftp / sql to open it instead.) clear empties the conversation.',
+    'While the Assistant is open nothing you copy is saved without asking; close it and capture works as before.'] },
+  { t: 'Where are my UAT or PROD servers?', k: 'uat prod production missing hidden not shown where server database tree search env others', v: 'dashboard', s: [
+    'They are hidden by default so you don\'t open one by accident: the switch at the top says Others (everything except UAT and PROD).',
+    'Pick UAT or PROD at the top to see them — the number on each button is how many are hidden; All shows every environment.',
+    'In search, a note says how many UAT / PROD servers match, with Show UAT / Show PROD.'] },
   { t: 'Make the text bigger', k: 'text font size bigger larger small screen zoom readable scale', v: '', s: [
     '⚙ Settings (top right) → Appearance → Text size: Small, Normal, Large or Larger.',
     'Terminal, editor and SQL have their own A− / A+ (or Ctrl + mouse wheel over them).'] },
   { t: 'Several FTP / SFTP servers at once', k: 'ftp sftp tabs several servers files two connections second', v: 'files', s: [
     'On the Files page each server you open gets its own tab above the server side; opening one that is already open switches to its tab.',
     'Each tab keeps its folder; ✕ on a tab (or ⏏ Disconnect) closes that connection.'] },
-  { t: 'Show only UAT or only PROD', k: 'uat prod production environment switch filter only hide show env all', v: '', s: [
-    'Use the All · UAT · PROD switch beside the search at the top.',
-    'UAT or PROD shows only that environment\'s connections, databases and bookmarks on every page (UAT also covers UAT1, UAT2…); entries without an environment are hidden too.',
-    'All shows everything again. The choice is remembered when WorkHub restarts.'] },
+  { t: 'My SSH keys (copy for GitHub)', k: 'ssh key keys public github id_rsa id_ed25519 .ssh config missing where', v: '', s: [
+    'The 🔑 SSH keys window is off by default, so WorkHub never looks in ~/.ssh.',
+    'To use it: ⚙ Settings (top right) → Security → tick “Show my SSH keys”; then Tools → 🔑 My SSH keys (or 🔑 Keys above the SSH servers).'] },
+  { t: 'Colour a connection in the tree', k: 'colour color background highlight tree server row picker mark', v: 'terminal', s: [
+    'Right-click the server or database in the SSH, SQL or FTP tree → 🎨 Background colour… and pick a colour.',
+    'Right-click → Remove the colour takes it off again.'] },
+  { t: 'Naming rules', k: 'naming rules names label host rename bat app', v: '', s: [
+    '⚙ Settings (top right) → Connections → Naming rules → Edit… (also View → 🏷 Naming rules…).',
+    'Each line: what the host name contains = the name to show, e.g. -BAT- = Batch.'] },
+  { t: 'Show only UAT or only PROD', k: 'uat prod production environment switch filter only hide show env all others', v: '', s: [
+    'Use the Others · UAT · PROD · All switch beside the search at the top. It applies on every page: lists, server trees, search.',
+    'Others (the default) hides UAT and PROD; UAT or PROD shows only that environment (UAT also covers UAT1, UAT2…); All shows everything.',
+    'The choice is remembered when WorkHub restarts.'] },
+  { t: 'Copy or resize a picture in a message', k: 'copy picture image screenshot resize size smaller bigger message thread paste outlook word teams', v: 'tasks', s: [
+    'Resize: point at the picture\'s bottom-right corner and drag; the size is kept with the message. Right-click → Original size undoes it.',
+    'Right-click a picture → 🖼 Copy image. Right-click a message (or ⋯) → 📋 Copy: its text and pictures together — paste into Outlook, Word or Teams.'] },
   { t: 'Edit a message in a thread', k: 'edit change correct fix message post typo update rewrite', v: 'tasks', s: [
     'Point at the message: ✎ Edit is the first button on the bar that appears (or ⋯ → ✎ Edit message). It is on every kind of message:',
     'your messages and emails are edited in place; a clipboard capture shows its real text (passwords too) and stays a capture, masked when shown; a server card opens the connection.',

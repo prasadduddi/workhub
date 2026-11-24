@@ -47,7 +47,7 @@
   </div>
   <div class="side-foot">
     <div class="foot-row"><button id="profileBtn" class="ghost" title="Your profile"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg> <span id="profileName">Your profile</span></button><button id="lockBtn" class="ghost icon" title="Lock WorkHub with your PIN (Ctrl+L)"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button></div>
-    <div id="appVersion" class="muted tiny" title=""></div>
+    <div class="ver-row"><div id="appVersion" class="muted tiny" title=""></div></div>
     <!-- Reached from ☰ at the top (kept here for the menu to use) -->
     <div hidden><div id="dataDir"></div><button id="whatsNewBtn"></button><button id="updBtn"></button><button id="extBtn"></button><button id="backupBtn"></button><button id="importBtn"></button><button id="dataLocBtn"></button><button id="quitBtn"></button></div>
   </div>
@@ -56,7 +56,7 @@
 <div id="sideSplit" class="vsplit" title="Drag to resize"></div>
 <main>
   <header class="appbar"><span id="pageTitle" class="apptitle"></span><span class="spacer"></span>
-    <div id="gsearch" class="gsearch"><button id="capBtn" class="capbtn" title="Clipboard capture">Capture</button><div id="envSwitch" class="seg envsw" title="Show one environment only, everywhere in WorkHub (connections, bookmarks, databases)"><button data-envsw="" class="active">All</button><button data-envsw="UAT">UAT</button><button data-envsw="PROD">PROD</button></div><input id="search" type="search" placeholder="Search everything…  (Ctrl+K)"><button id="saveSearchBtn" hidden title="Keep this search in the sidebar, with a live count">☆</button><button id="settingsTop" class="gearbtn" title="Settings (Ctrl+,)" aria-label="Settings"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M10.3 2.6h3.4l.5 2.6 1.9.8 2.2-1.5 2.4 2.4-1.5 2.2.8 1.9 2.6.5v3.4l-2.6.5-.8 1.9 1.5 2.2-2.4 2.4-2.2-1.5-1.9.8-.5 2.6h-3.4l-.5-2.6-1.9-.8-2.2 1.5-2.4-2.4 1.5-2.2-.8-1.9-2.6-.5v-3.4l2.6-.5.8-1.9-1.5-2.2 2.4-2.4 2.2 1.5 1.9-.8z"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
+    <div id="gsearch" class="gsearch"><button id="capBtn" class="capbtn" title="Clipboard capture">Capture</button><div id="envSwitch" class="seg envsw" title="Which environments WorkHub shows, everywhere (lists, trees, search)"><button data-envsw="" class="active" title="Everything except UAT and PROD (DEV, SIT, TEST, no environment, links)">Others</button><button data-envsw="UAT" title="UAT only">UAT<span class="envn"></span></button><button data-envsw="PROD" title="PROD only">PROD<span class="envn"></span></button><button data-envsw="ALL" title="Every environment">All</button></div><input id="search" type="search" placeholder="Search everything…  (Ctrl+K)"><button id="saveSearchBtn" hidden title="Keep this search in the sidebar, with a live count">☆</button><button id="settingsTop" class="gearbtn" title="Settings (Ctrl+,)" aria-label="Settings"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M10.3 2.6h3.4l.5 2.6 1.9.8 2.2-1.5 2.4 2.4-1.5 2.2.8 1.9 2.6.5v3.4l-2.6.5-.8 1.9 1.5 2.2-2.4 2.4-2.2-1.5-1.9.8-.5 2.6h-3.4l-.5-2.6-1.9-.8-2.2 1.5-2.4-2.4 1.5-2.2-.8-1.9-2.6-.5v-3.4l2.6-.5.8-1.9-1.5-2.2 2.4-2.4 2.2 1.5 1.9-.8z"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
       <div id="searchHint" class="muted tiny search-hint" hidden><div id="recentSearches" hidden></div><b>↵</b> connect / open the highlighted one · <b>Shift+↵</b> details · <b>↑↓</b> choose · <b>Alt+P</b> password · <b>Alt+U</b> user · <b>Alt+H</b> host · <b>Alt+J</b> JDBC/URL &nbsp;|&nbsp; Filters: <code>env:prod</code> <code>type:db</code> <code>user:ops</code> <code>app:batch</code> <code>port:1521</code> <code>has:password</code> <code>no:env</code> <code>is:fail</code> <code>needs:attention</code> <code>is:stale</code> <code>is:unsorted</code> <code>db:name</code> <code>added:today</code> <code>used:7d</code> <code>used:never</code> <code>-word</code> &nbsp;|&nbsp; Desktop: <b>Ctrl+Alt+W</b> anywhere opens this search</div></div>
   </header>
   <!-- DASHBOARD -->
@@ -113,7 +113,7 @@
       <button id="bmCheck" title="Check which links answer (green = reachable, red = not)">Check links</button>
       <label class="switch small" title="Hide public websites (Google, GitHub, Stack Overflow…)"><input type="checkbox" id="bmInternal"><span></span> Internal only</label>
       <label class="switch small" title="Show bookmarks you removed, to restore them"><input type="checkbox" id="bmHidden"><span></span> Show hidden</label>
-      <button id="bmNameRules" title="Name links and servers by what their host name contains (this workspace only)">🏷 Naming rules…</button>
+      <button id="bmNameRules" hidden></button>
       <button id="bmBlocked" title="Sites that are never imported or captured in this workspace">Blocked sites…</button>
     </header>
     <div id="bmChips" class="vchips"></div>
@@ -670,10 +670,10 @@
   <div class="chat-head"><b>Assistant</b><span class="muted tiny">Ctrl+J</span><span class="spacer"></span><button id="chatClose" class="ghost icon">✕</button></div>
   <div id="chatLog"></div>
   <div class="chat-hints">
-    <button data-hint="help">help</button><button data-hint="find prod">find prod</button><button data-hint="terminal ">terminal …</button><button data-hint="ftp ">ftp …</button>
+    <button data-hint="help">help</button><button data-hint="clear">clear</button><button data-hint="find prod">find prod</button><button data-hint="terminal ">terminal …</button><button data-hint="ftp ">ftp …</button>
   </div>
   <div class="chat-input">
-    <textarea id="chatText" rows="3" placeholder="Paste connection details and say what to do, e.g.&#10;  ftp  host: files.corp.local user: bob pass: x&#10;Enter = send, Shift+Enter = new line"></textarea>
+    <textarea id="chatText" rows="3" placeholder="Paste server details, a JDBC URL or a screenshot to add it — or say what to do, e.g.&#10;  ftp  host: files.corp.local user: bob pass: x&#10;Enter = send, Shift+Enter = new line"></textarea>
     <button id="chatSend" class="primary">Send</button>
   </div>
 </aside>
@@ -709,6 +709,7 @@
 <script src="connimport.js"></script>
 <script src="menubar.js"></script>
 <script src="popout.js"></script>
+<script src="capture.js"></script>
 <script src="palette.js"></script>
 </body>
 </html>

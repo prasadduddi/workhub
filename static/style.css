@@ -490,7 +490,7 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 .pathbar input { flex: 1; font-family: var(--mono); font-size: calc(12px * var(--ui-scale)); }
 .listing { flex: 1; overflow: auto; min-height: 120px; }
 .listing.dragover { outline: 2px dashed var(--accent); outline-offset: -6px; }
-.frow, .fhead { display: grid; grid-template-columns: minmax(0, 1fr) 100px 72px 118px; gap: 8px; padding: 3px 10px; cursor: default; font-size: calc(13px * var(--ui-scale)); user-select: none; }
+.frow, .fhead { display: grid; grid-template-columns: var(--fcols, minmax(0, 1fr) 100px 72px 118px); gap: 8px; padding: 3px 10px; cursor: default; font-size: calc(13px * var(--ui-scale)); user-select: none; }
 .fhead { position: sticky; top: 0; z-index: 1; background: var(--panel2); border-bottom: 1px solid var(--border); font-size: calc(12px * var(--ui-scale)); color: var(--muted); padding-top: 5px; padding-bottom: 5px; }
 .fhead span { cursor: pointer; white-space: nowrap; }
 .fhead span:hover, .fhead span.on { color: var(--accent); }
@@ -608,7 +608,7 @@ dialog label.check { flex-direction: row; align-items: center; gap: 6px; }
 
 /* chat */
 #chatFab.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); } /* Ask: in the sidebar's top row */
-#chat { position: fixed; right: 0; top: 0; bottom: 0; width: min(420px, 100vw); z-index: 16; background: var(--panel); border-left: 1px solid var(--border); box-shadow: -10px 0 30px rgba(0,0,0,.2); display: flex; flex-direction: column; }
+#chat { position: fixed; right: 0; top: var(--chat-top, 0px); bottom: 0; width: min(var(--chat-w, 360px), 100vw); border-top-left-radius: 10px; border-top: 1px solid var(--border); z-index: 16; background: var(--panel); border-left: 1px solid var(--border); box-shadow: -10px 0 30px rgba(0,0,0,.2); display: flex; flex-direction: column; }
 #chat[hidden] { display: none; }
 .chat-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
 #chatLog { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -1476,7 +1476,7 @@ dialog.palettedlg { width: min(680px, 92vw); padding: 0; margin-top: 12vh; overf
 /* Dashboard overview */
 .today-head { margin: 0 0 6px; font-size: calc(14px * var(--ui-scale)); }
 .today { margin-bottom: 12px; }
-.today .today-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; align-items: start; }
+.today .today-grid { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; align-items: start; }
 .tc-host { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-pins { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
 .pinchip { display: inline-flex; align-items: center; gap: 5px; font-size: calc(12.5px * var(--ui-scale)); padding: 3px 10px; border-radius: 14px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1535,3 +1535,68 @@ body.side-collapsed:not(.side-top) .brand { flex-direction: column; gap: 6px; }
 .ftab-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ftab .x { color: var(--muted); padding: 0 2px; border-radius: 4px; }
 .ftab .x:hover { color: var(--text); background: var(--border); }
+
+/* Assistant: "I found an SSH server … Add it?" */
+#chatLog .asq { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+#chatLog .asq code { overflow-wrap: anywhere; }
+.as-img { margin: 0 10px 6px; padding: 5px 10px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--panel)); font-size: calc(13px * var(--ui-scale)); display: flex; align-items: center; gap: 6px; }
+.as-img button { margin-left: auto; }
+
+.envsw .envn { font-size: calc(10.5px * var(--ui-scale)); opacity: .75; font-weight: 600; }
+
+/* pictures in messages: drag the bottom-right corner to resize (the size is saved with the message) */
+.tbody img[width] { max-width: 100%; height: auto; }
+.tbody img.grip { cursor: nwse-resize; outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* 🧵 Tasks in search results: full width, the messages that matched */
+.tresults { display: flex; flex-direction: column; gap: 10px; }
+.card.tresult { gap: 6px; border-left-color: var(--accent); }
+.tres-head { cursor: pointer; }
+.tres-head b { font-size: calc(14.5px * var(--ui-scale)); }
+.thit { cursor: pointer; padding: 6px 10px; border-radius: 8px; background: var(--panel2); display: flex; flex-direction: column; gap: 2px; }
+.thit:hover { background: color-mix(in srgb, var(--accent) 10%, var(--panel2)); }
+.thit-who { display: flex; align-items: center; gap: 6px; font-size: calc(12.5px * var(--ui-scale)); }
+.thit-text { font-size: calc(13px * var(--ui-scale)); line-height: 1.45; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.thit-text mark, .tres-head mark { background: color-mix(in srgb, #ffd400 55%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+/* 💬 Assistant at the top, next to ● Capturing */
+#gsearch #chatFab { flex: none; display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 9px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; }
+#gsearch #chatFab svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+#gsearch #chatFab:hover, #gsearch #chatFab.on { color: var(--accent); border-color: var(--accent); }
+
+/* The overview fills the window on any monitor: cards share the width, the card area grows to the bottom,
+   each card lists more and scrolls inside (the attention line, Recently captured and the full list stay below) */
+#view-dashboard.home #today { flex: 1 1 0; display: flex; flex-direction: column; min-height: 340px; }
+#view-dashboard.home .today-grid { flex: 1; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); grid-auto-rows: minmax(190px, 1fr); align-items: stretch; }
+#view-dashboard.home .tcardx { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+#view-dashboard.home .tc-rows { flex: 1; min-height: 0; overflow-y: auto; }
+#view-dashboard.home .tc-row { padding: 5px 4px; }
+
+/* WorkHub's own question box (instead of the browser's prompt) */
+.askbox { position: fixed; z-index: 10001; width: min(380px, 92vw); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.2); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.askbox label { font-weight: 600; font-size: calc(13px * var(--ui-scale)); }
+.askbox input { width: 100%; box-sizing: border-box; }
+
+/* Files page: column headings can be resized by their right edge */
+.fhead span { position: relative; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fhead .fgrip { position: absolute; top: 0; bottom: 0; right: 0; width: 8px; cursor: col-resize; z-index: 2; }
+.fhead .fgrip:hover, .fhead .fgrip:active { background: color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 3px; }
+.listing { overflow-x: auto; }
+
+/* bottom left: version, then ✨ What's new */
+.ver-row { display: flex; align-items: center; gap: 6px; }
+.ver-row #whatsNewTop { width: 24px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.ver-row #whatsNewTop svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.ver-row #whatsNewTop:hover { color: var(--accent); }
+/* 🎨 a connection's own background colour in the trees */
+.tnode.item.tinted { background: color-mix(in srgb, var(--rowbg) 28%, transparent); border-radius: 6px; }
+.tnode.item.tinted:hover { background: color-mix(in srgb, var(--rowbg) 40%, transparent); }
+.tnode.item.tinted.sel { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* the left menu slides open and closed */
+body.side-anim:not(.side-top) .side { transition: width .22s ease, padding .22s ease; }
+@media (prefers-reduced-motion: reduce) { body.side-anim .side { transition: none !important; } }
+
+/* the Assistant starts below the search bar and can be resized by its left edge */
+#chat .chat-grip { position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 2; }
+#chat .chat-grip:hover, #chat .chat-grip.on { background: color-mix(in srgb, var(--accent) 35%, transparent); }

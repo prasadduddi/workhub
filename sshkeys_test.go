@@ -17,8 +17,8 @@ import (
 // The keys are listed with a GitHub-ready line, the config hosts are read —
 // and nothing in the folder changes.
 func TestSSHKeysReadOnly(t *testing.T) {
-	if sshOff || sshKeysOff {
-		t.Skip("the SSH keys window is switched off (sshswitch.go)")
+	if sshOff {
+		t.Skip("SSH is switched off (sshswitch.go)")
 	}
 	dir := t.TempDir()
 	pub, _, _ := ed25519.GenerateKey(rand.Reader)
@@ -43,8 +43,12 @@ func TestSSHKeysReadOnly(t *testing.T) {
 	sshDirFunc = func() string { return dir }
 	defer func() { sshDirFunc = old }()
 
+	s, _ := OpenStore(t.TempDir())
+	st := s.Settings()
+	st.SSHKeys = true // Settings → Security → Show my SSH keys
+	s.SetSettings(st)
 	w := httptest.NewRecorder()
-	(&App{}).handleSSHKeys(w, httptest.NewRequest("GET", "/api/sshkeys", nil))
+	(&App{store: s}).handleSSHKeys(w, httptest.NewRequest("GET", "/api/sshkeys", nil))
 	var out struct {
 		Keys  []sshKeyInfo
 		Hosts []sshHost

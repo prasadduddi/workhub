@@ -14,7 +14,7 @@ async function api(method, url, body) {
   if (r.status === 423) { if (typeof Lock !== 'undefined') Lock.show(); throw new Error('WorkHub is locked'); }
   if (r.status === 401) {
     // after a restart or quit the page already says so; otherwise cover it (its timers keep running)
-    if (!document.querySelector('.stopped')) stoppedScreen('<h2>Session expired.</h2><p>Start <b>WorkHub</b> again to open a fresh window.</p>');
+    if (!document.querySelector('.stopped')) stoppedScreen('<h2>This window is signed out of WorkHub.</h2><p>Open WorkHub from its icon (Start menu, desktop or tray) — it opens a signed-in window. You can close this one.</p>');
     throw new Error('unauthorized');
   }
   const data = await r.json().catch(() => ({}));
@@ -82,6 +82,32 @@ async function deleteEntries(list) {
   });
 }
 
+// WorkHub's own question box (instead of the browser's prompt(), which shows
+// "127.0.0.1 says"): it opens just to the right of where you clicked (kept on
+// screen; centred when opened from the keyboard). Enter = OK, Esc / click outside = cancel.
+let lastClick = null;
+document.addEventListener('mousedown', e => { lastClick = { x: e.clientX, y: e.clientY, t: Date.now() }; }, true);
+function askText(label, value = '', ok = 'OK') {
+  return new Promise(done => {
+    document.querySelector('.askbox')?.dispatchEvent(new Event('cancel'));
+    const box = Object.assign(document.createElement('div'), { className: 'askbox' });
+    box.innerHTML = `<label>${esc(label)}</label><input type="text"><div class="row end"><button type="button" data-ask="no">Cancel</button><button type="button" class="primary" data-ask="ok">${esc(ok)}</button></div>`;
+    const input = box.querySelector('input'); input.value = value;
+    document.body.append(box);
+    const r = box.getBoundingClientRect(), near = lastClick && Date.now() - lastClick.t < 1500;
+    const x = near ? lastClick.x + 14 : (innerWidth - r.width) / 2, y = near ? lastClick.y - 12 : innerHeight / 3;
+    box.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
+    box.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
+    const finish = v => { document.removeEventListener('mousedown', outside, true); box.remove(); done(v); };
+    const outside = e => { if (!box.contains(e.target)) finish(null); };
+    setTimeout(() => document.addEventListener('mousedown', outside, true), 0);
+    box.addEventListener('cancel', () => finish(null));
+    box.addEventListener('click', e => { const b = e.target.closest('[data-ask]'); if (b) finish(b.dataset.ask === 'ok' ? input.value : null); });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); finish(input.value); } if (e.key === 'Escape') { e.preventDefault(); finish(null); } });
+    input.focus(); input.select();
+  });
+}
+
 async function copyText(text, what = 'Copied') {
   try {
     await navigator.clipboard.writeText(text);
@@ -133,6 +159,9 @@ const S = {
   groupBy: localStorage.getItem('groupBy') || 'project',
   layout: localStorage.getItem('layout') || 'cards',
 };
+// UAT and PROD (also UAT1, UAT2…, PRODDR…): hidden unless picked at the top (EnvSwitch)
+const GUARDED_ENVS = ['UAT', 'PROD'];
+const guardedEnv = e => GUARDED_ENVS.find(x => (e.env || '').toUpperCase().startsWith(x)) || '';
 const byId = id => (S.allEntries || S.entries).find(e => e.id === id);
 
 // ---------- URL labels ----------
@@ -361,9 +390,16 @@ CodeMirror.commands.duplicateLine = cm => {
 // and Captured bring it back. Clicking the current page's icon again switches
 // it either way on any page (» too).
 const WORK_VIEWS = ['terminal', 'files', 'sql', 'tasks', 'ref', 'jira', 'groups', 'notes', 'git', 'cal', 'api'];
+// The left menu slides between full size and the icon rail (not while you drag its edge).
+let sideAnimT;
+function animateSide() {
+  document.body.classList.add('side-anim');
+  clearTimeout(sideAnimT); sideAnimT = setTimeout(() => { document.body.classList.remove('side-anim'); fitActiveTerm?.(); }, 260);
+}
 function roomForWork() {
   if (document.body.classList.contains('side-top')) return; // a bar across the top takes no room from the tree
   if (S.userSide || document.body.classList.contains('side-collapsed')) return;
+  animateSide();
   document.body.classList.add('side-collapsed'); S.autoSide = true;
   $('#sideToggle').textContent = '»';
   setTimeout(() => { fitActiveTerm(); window.dispatchEvent(new Event('resize')); }, 50);
@@ -372,6 +408,7 @@ function show(view) {
   if (WORK_VIEWS.includes(view)) roomForWork();
   else if (S.userSide) S.userSide = false;
   else if (S.autoSide) { // put the sidebar back as it was
+    animateSide();
     S.autoSide = false;
     applySide();
   }
@@ -412,6 +449,7 @@ $('#nav').addEventListener('click', e => {
   // sidebar between icons only and full size.
   if (b.classList.contains('active') && !document.body.classList.contains('side-top')) {
     const collapsed = document.body.classList.contains('side-collapsed');
+    animateSide();
     if (collapsed) { document.body.classList.remove('side-collapsed'); S.autoSide = false; S.userSide = WORK_VIEWS.includes(b.dataset.view); $('#sideToggle').textContent = '«'; } // "keep it open" only matters on the tree pages
     else {
       S.userSide = false; roomForWork();
@@ -434,18 +472,23 @@ document.addEventListener('keydown', e => {
 // ---------- environment switch (beside the search) ----------
 // All · UAT · PROD: shows only that environment's connections, bookmarks and
 // databases everywhere in WorkHub (UAT also covers UAT1, UAT2…). Remembered.
+// Others (default) · UAT · PROD · All: UAT and PROD servers and databases are
+// left out of every list, tree and search unless picked here (UAT also covers
+// UAT1, UAT2…). The UAT / PROD buttons show how many are left out.
 const EnvSwitch = {
   v: (() => { try { return localStorage.getItem('envSwitch') || ''; } catch { return ''; } })(),
-  ok(e) { return !this.v || (e.env || '').toUpperCase().startsWith(this.v); },
+  ok(e) { return this.v === 'ALL' || (this.v ? (e.env || '').toUpperCase().startsWith(this.v) : !guardedEnv(e)); },
   paint() {
     $$('#envSwitch [data-envsw]').forEach(b => b.classList.toggle('active', b.dataset.envsw === this.v));
     $('#envSwitch').dataset.on = this.v;
+    const n = g => (S.allEntries || []).filter(e => !e.hidden && guardedEnv(e) === g).length;
+    for (const g of GUARDED_ENVS) { const c = $(`#envSwitch [data-envsw="${g}"] .envn`); if (c) c.textContent = !this.v && n(g) ? ' ' + n(g) : ''; }
   },
   set(v) {
     this.v = v; this.paint();
     try { localStorage.setItem('envSwitch', v); } catch { /* ignore */ }
     if (S.allEntries) redrawAll();
-    toast(v ? `Showing only ${v} — everywhere in WorkHub (All shows everything again)` : 'Showing every environment');
+    toast(v === 'ALL' ? 'Showing every environment' : v ? `Showing only ${v} — everywhere in WorkHub` : 'UAT and PROD are hidden — pick them at the top to see them');
   },
 };
 EnvSwitch.paint();
@@ -481,6 +524,7 @@ async function refreshAll() {
 async function redrawAll() {
   // hidden = removed by the user, kept so it isn't re-imported
   S.entries = S.allEntries.filter(e => !e.hidden && EnvSwitch.ok(e));
+  EnvSwitch.paint(); // the counts on UAT / PROD
   // Each part draws on its own so one failure can't blank the rest of the app.
   for (const [name, fn] of [['settings', renderSettings], ['filters', renderFilters], ['dashboard', renderBoard], ['captured', renderClips],
     ['outlook', () => Mail.render()], ['tree', () => Tree.render()], ['groups', () => Groups.render()], ['tabs', () => renderAllTabs()], ['bookmarks', () => Bookmarks.render()], ['notes', () => Notes.renderLists()]]) {
@@ -666,7 +710,7 @@ function parseQuery(q) {
 const squash = s => s.replace(/[-_.:/\s]+/g, '');
 function searchText(e) {
   return [e.name, e.host, e.url, linkLabel(e.url), e.username, e.project, e.env, e.protocol, e.port, e.notes, ruleLabel(e.host) || ruleLabel(e.url),
-    serverType(e), dbKindOf(e), ...(e.tags || []), ...Object.entries(e.extra || {}).flat()].filter(Boolean).join(' ').toLowerCase();
+    serverType(e), dbKindOf(e), ...(e.tags || []), ...Object.entries(e.extra || {}).filter(([k]) => k !== 'color').flat()].filter(Boolean).join(' ').toLowerCase();
 }
 const isConn = e => canSSH(e) || canDB(e) || canFiles(e);
 // What's missing or wrong with an entry: [key, text].
@@ -817,11 +861,9 @@ function sortEntries(list) {
   return [...list].sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * d; });
 }
 
-// Searching with the switch on All leaves UAT and PROD servers out: they show
-// only when picked at the top (or with View → Show only, or env:prod typed).
-const GUARDED_ENVS = ['UAT', 'PROD'];
-const guardedEnv = e => GUARDED_ENVS.find(x => (e.env || '').toUpperCase().startsWith(x)) || '';
-const searchGuard = q => !!(q || '').trim() && !EnvSwitch.v && !$('#fEnv').value && !/(^|\s)-?env:/i.test(q);
+// With Others picked at the top, UAT and PROD are left out (see EnvSwitch); a
+// search still says how many of them match, with Show UAT / Show PROD.
+const searchGuard = q => !!(q || '').trim() && !EnvSwitch.v;
 function filtered() {
   let q = $('#search').value.trim().toLowerCase();
   const guard = searchGuard(q);
@@ -838,7 +880,7 @@ function filtered() {
       if (list.length) { S.fixes = fixes; q = q2; }
     }
   }
-  if (guard) list = list.filter(e => { const g = guardedEnv(e); if (g) S.guarded[g] = (S.guarded[g] || 0) + 1; return !g; });
+  if (guard) for (const e of S.allEntries) { const g = !e.hidden && guardedEnv(e); if (g && matches(e, q)) S.guarded[g] = (S.guarded[g] || 0) + 1; } // left out by Others
   S.ranked = !S.view.sort && parseQuery(q).words.some(w => !w.neg); // searching: best match first
   if (!S.ranked) return sortEntries(list);
   const score = new Map(list.map(e => [e, searchScore(e, q)]));
@@ -1058,15 +1100,15 @@ const Today = {
     if (!home) { el.innerHTML = ''; return; } // searching, filtering or the full list: results only
     const end = new Date(); end.setHours(23, 59, 59, 999);
     const byUse = (a, b) => new Date(b.last_used) - new Date(a.last_used);
-    const recent = S.entries.filter(e => e.last_used && isConn(e)).sort(byUse).slice(0, 6);
-    const links = S.entries.filter(e => e.url && !isConn(e) && e.last_used).sort(byUse).slice(0, 6);
+    const recent = S.entries.filter(e => e.last_used && isConn(e)).sort(byUse).slice(0, 20);
+    const links = S.entries.filter(e => e.url && !isConn(e) && e.last_used).sort(byUse).slice(0, 20);
     const threads = typeof Work === 'undefined' ? [] : Work.list.filter(w => w.status !== 'done' && !w.archived)
-      .sort((a, b) => (b.unread > 0) - (a.unread > 0) || (b.starred - a.starred) || new Date(b.updated) - new Date(a.updated)).slice(0, 6);
-    const due = this.rem.filter(r => r.post.remind_at && new Date(r.post.remind_at) <= end).sort((a, b) => new Date(a.post.remind_at) - new Date(b.post.remind_at)).slice(0, 6);
-    const jira = typeof Jira === 'undefined' ? [] : Jira.issues.filter(j => !j.done).slice(0, 6);
+      .sort((a, b) => (b.unread > 0) - (a.unread > 0) || (b.starred - a.starred) || new Date(b.updated) - new Date(a.updated)).slice(0, 20);
+    const due = this.rem.filter(r => r.post.remind_at && new Date(r.post.remind_at) <= end).sort((a, b) => new Date(a.post.remind_at) - new Date(b.post.remind_at)).slice(0, 20);
+    const jira = typeof Jira === 'undefined' ? [] : Jira.issues.filter(j => !j.done).slice(0, 20);
     const pins = S.entries.filter(e => e.favorite).sort(byUsage).slice(0, 14);
     const snip = p => (p.text || (p.html || '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim().slice(0, 70);
-    const card = (icon, title, n, rows, empty, go) => `<div class="tcardx"><div class="tc-head">${icon} <b>${title}</b>${n ? `<span class="n">${n}</span>` : ''}<span class="spacer"></span>${go ? `<a href="#" data-tgo="${go}" class="tiny">All →</a>` : ''}</div>${rows.join('') || `<div class="muted tiny tc-empty">${empty}</div>`}</div>`;
+    const card = (icon, title, n, rows, empty, go) => `<div class="tcardx"><div class="tc-head">${icon} <b>${title}</b>${n ? `<span class="n">${n}</span>` : ''}<span class="spacer"></span>${go ? `<a href="#" data-tgo="${go}" class="tiny">All →</a>` : ''}</div><div class="tc-rows">${rows.join('') || `<div class="muted tiny tc-empty">${empty}</div>`}</div></div>`;
     const kind = e => canDB(e) ? '<span class="dbic-s">SQL</span>' : canSSH(e) ? '<span class="dbic-s">SSH</span>' : canFiles(e) ? '<span class="dbic-s">FTP</span>' : '';
     const host = u => { try { return new URL(u).host; } catch { return ''; } };
     el.innerHTML = `<div class="today-head">📅 <b>Today</b> <span class="muted tiny">${new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span></div><div class="today-grid">
@@ -1101,6 +1143,7 @@ function renderBoard() {
   renderViewChips();
   const home = Home.on();
   $('#view-dashboard .viewwrap').hidden = home; // View (layout, grouping) is about the full list
+  $('#view-dashboard').classList.toggle('home', home); // the overview stretches to fill the window
   Today.render(home);
   viewSummary();
   const list = filtered();
@@ -1168,40 +1211,52 @@ function threadMatches(q) {
   if (!words.length || filters.length || typeof Work === 'undefined') return [];
   return Work.list.filter(w => words.every(x => (w.title.toLowerCase() + ' ' + w.search).includes(x)));
 }
+// Search words highlighted in HTML that is already escaped (not inside tags).
+function markWords(htmlText, words) {
+  const ws = words.filter(w => w.length > 1).map(w => esc(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!ws.length) return htmlText;
+  const re = new RegExp(`(${ws.join('|')})`, 'gi');
+  return htmlText.split(/(<[^>]+>)/).map(part => part.startsWith('<') ? part : part.replace(re, '<mark>$1</mark>')).join('');
+}
+// 🧵 Tasks in the search: full width, with the messages that matched — who,
+// when and a few lines around the match — each opening the thread right there.
 function threadResultsHTML(list) {
   if (!list.length) return '';
   const words = parseQuery($('#search').value.trim().toLowerCase()).words.filter(w => !w.neg).map(w => w.v);
-  // A few words around the first match, passwords dotted out.
-  const snippet = w => {
+  const who = h => h.kind === 'capture' ? ['📋', 'Clipboard'] : h.kind === 'entry' ? ['🖥', 'Server'] : h.from === 'Outlook' || h.from === 'Email' ? ['✉', 'Email'] : h.from === 'Word' ? ['📄', 'Document'] : ['🧑', 'You'];
+  const hitHTML = (w, h) => { const [ic, name] = who(h); return `<div class="thit" data-thread="${w.id}" data-tpost="${esc(h.post)}" title="Open the thread at this message">
+      <div class="thit-who"><span>${ic}</span><b>${name}</b>${h.from && !['Outlook', 'Email', 'Word'].includes(h.from) ? `<span class="muted tiny">from ${esc(h.from)}</span>` : ''}${h.reply ? '<span class="muted tiny">reply</span>' : ''}<span class="muted tiny">${esc(fmtTime(h.at))}</span></div>
+      <div class="thit-text">${markWords(maskedText(h.snip), words)}</div></div>`; };
+  const fallback = w => { // before the server's answer: a few words from the thread
     const t = w.search.replace(/\s+/g, ' '), i = Math.max(0, ...words.map(x => t.indexOf(x)).filter(i => i >= 0).slice(0, 1));
-    if (w.title.toLowerCase().includes(words[0]) && !t.includes(words[0])) return '';
-    return (i > 50 ? '…' : '') + t.slice(Math.max(0, i - 50), i + 110) + '…';
+    return (i > 80 ? '…' : '') + t.slice(Math.max(0, i - 80), i + 240) + '…';
   };
-  const st = w => threadStatusHTML(w);
-  return `<div class="group"><div class="group-head"><h3>🧵 Tasks</h3><span class="n">${list.length}</span></div><div class="cards">${list.map(w =>
-    `<div class="card tcard" data-thread="${w.id}" title="Open the thread"><div class="card-head">${st(w)} <b>${esc(w.title)}</b><span class="spacer"></span><span class="muted tiny">${fmtTime(w.updated)} · ${w.posts || 0} posts</span></div>
-      ${snippet(w) ? `<div class="muted tiny tsnip">${maskedText(snippet(w))}</div>` : ''}</div>`).join('')}</div></div>`;
+  return `<div class="group"><div class="group-head"><h3>🧵 Tasks</h3><span class="n">${list.length}</span></div><div class="tresults">${list.map(w => {
+    const hits = Everything.thits?.[w.id];
+    return `<div class="card tresult"><div class="card-head tres-head" data-thread="${w.id}" title="Open the thread">${threadStatusHTML(w)} <b>${markWords(esc(w.title), words)}</b><span class="spacer"></span><span class="muted tiny">${fmtTime(w.updated)} · ${w.posts || 0} messages</span></div>
+      ${hits ? (hits.length ? hits.map(h => hitHTML(w, h)).join('') : '<div class="muted tiny">Found in the thread\'s name.</div>') : `<div class="thit-text muted">${markWords(maskedText(fallback(w)), words)}</div>`}</div>`;
+  }).join('')}</div></div>`;
 }
 
 // The rest of "search everything": notes, Folders files, files in threads and captured text.
 // Notes and files come from the server, so they arrive a moment later and the
 // board is drawn again.
 const Everything = {
-  key: null, notes: [], files: [], tfiles: [], timer: null,
+  key: null, notes: [], files: [], tfiles: [], thits: null, timer: null,
   words(q) { const { words, filters } = parseQuery(q.trim().toLowerCase()); return filters.length ? [] : words.filter(w => !w.neg).map(w => w.v); },
   refresh(q) {
     const ws = this.words(q), key = ws.join(' ');
     if (key === this.key) return;
     this.key = key; clearTimeout(this.timer);
-    this.notes = []; this.files = []; this.tfiles = [];
+    this.notes = []; this.files = []; this.tfiles = []; this.thits = null;
     if (!ws.length) return;
     this.timer = setTimeout(async () => {
-      const [notes, files, tfiles] = await Promise.all([api('GET', '/api/notes').catch(() => []), api('GET', '/api/ref/search?full=1&q=' + encodeURIComponent(key)).catch(() => []),
-        api('GET', '/api/work/files?q=' + encodeURIComponent(key)).catch(() => [])]);
+      const [notes, files, tfiles, thits] = await Promise.all([api('GET', '/api/notes').catch(() => []), api('GET', '/api/ref/search?full=1&q=' + encodeURIComponent(key)).catch(() => []),
+        api('GET', '/api/work/files?q=' + encodeURIComponent(key)).catch(() => []), api('GET', '/api/work/search?q=' + encodeURIComponent(key)).catch(() => null)]);
       if (this.key !== key) return; // typed on meanwhile
       this.notes = (notes || []).filter(n => ws.every(w => `${n.title || ''} ${n.body || ''}`.toLowerCase().includes(w)));
-      this.files = files || []; this.tfiles = tfiles || [];
-      if ((this.notes.length || this.files.length || this.tfiles.length) && $('#view-dashboard').classList.contains('active')) renderBoard();
+      this.files = files || []; this.tfiles = tfiles || []; this.thits = thits;
+      if ((this.notes.length || this.files.length || this.tfiles.length || Object.keys(thits || {}).length) && $('#view-dashboard').classList.contains('active')) renderBoard();
     }, 200);
   },
   clips(q) {
@@ -1302,7 +1357,7 @@ function whyMatched(es) {
     if (es.some(e => `${e.host || ''} ${e.name || ''} ${e.url || ''}`.toLowerCase().includes(w))) continue;
     for (const e of es) {
       const fields = [['user', e.username], ['project', e.project], ['env', e.env], ['app', ruleLabel(e.host) || ruleLabel(e.url)], ['tag', (e.tags || []).join(', ')],
-        ...Object.entries(e.extra || {}).filter(([k]) => !/pass|secret|token/i.test(k)), ['notes', e.notes]];
+        ...Object.entries(e.extra || {}).filter(([k]) => !/pass|secret|token/i.test(k) && k !== 'color'), ['notes', e.notes]];
       const f = fields.find(([, v]) => v && String(v).toLowerCase().includes(w));
       if (f) {
         let v = String(f[1]).replace(/\s+/g, ' ');
@@ -1343,7 +1398,7 @@ function svcHTML(e) {
   if (e.has_password) rows.push(['Password', pwHTML(e.password)]);
   if (e.key_file) rows.push(['Key', esc(e.key_file)]);
   if (e.last_dir) rows.push(['Last folder', `<span class="copy" data-copy="${esc(e.last_dir)}">${esc(e.last_dir)}</span>`]);
-  Object.entries(e.extra || {}).filter(([k]) => k !== 'run_macros').forEach(([k, v]) => rows.push([esc(EXTRA_LABELS[k] || k) + (k === 'commands' ? (e.extra.run_macros === '1' ? ' ▶' : ' (off)') : ''), `<span class="copy" data-copy="${esc(v)}" style="white-space:pre-wrap">${esc(v)}</span>`]));
+  Object.entries(e.extra || {}).filter(([k]) => k !== 'run_macros' && k !== 'color').forEach(([k, v]) => rows.push([esc(EXTRA_LABELS[k] || k) + (k === 'commands' ? (e.extra.run_macros === '1' ? ' ▶' : ' (off)') : ''), `<span class="copy" data-copy="${esc(v)}" style="white-space:pre-wrap">${esc(v)}</span>`]));
   if (e.tags?.length) rows.push(['Tags', `<span class="tag">${e.tags.map(esc).join(', ')}</span>`]);
   if (e.notes) rows.push(['Notes', `<span class="muted">${esc(e.notes)}</span>`]);
   // where it was captured from is in Details (click the card)
@@ -1522,7 +1577,7 @@ function detailRows(e) {
     [svc?.sid ? 'SID' : dbKindOf(e) === 'postgres' ? 'Database' : 'Service name', svc?.name],
     ['Username', e.username], ['Password', e.password], [e.status === 'ok' ? 'Other passwords' : 'Previous passwords', (e.prev_passwords || []).join('\n')],
     ['Key file', e.key_file], ['Last folder', e.last_dir],
-    ...Object.entries(e.extra || {}).filter(([k]) => !DB_KEYS.includes(k)).map(([k, v]) => EXTRA_LABELS[k] ? [EXTRA_LABELS[k], k === 'run_macros' ? 'yes' : k === 'auth' ? 'key / SSO (no password needed)' : v] : [k, v]),
+    ...Object.entries(e.extra || {}).filter(([k]) => !DB_KEYS.includes(k) && k !== 'color').map(([k, v]) => EXTRA_LABELS[k] ? [EXTRA_LABELS[k], k === 'run_macros' ? 'yes' : k === 'auth' ? 'key / SSO (no password needed)' : v] : [k, v]),
     ['Tags', (e.tags || []).join(', ')], ['Notes', e.notes],
     ['Last used', when(e.last_used)],
     ...(e.captures?.length ? e.captures.slice().reverse().map((c, i) => [i ? 'Also captured' : 'Captured', `${when(c.at)} · ${sourceName(c)}`]) : [['Captured', captureText(e)]]),
@@ -1798,6 +1853,22 @@ for (const [id, key] of [['#groupBy', 'groupBy'], ['#layout', 'layout']]) {
 }
 
 // ---------- entry dialog ----------
+// 🎨 A background colour for a connection in the server trees (right-click →
+// Background colour…): the system colour picker opens where you clicked.
+async function setEntryColor(e, color) {
+  const extra = { ...(e.extra || {}) };
+  if (color) extra.color = color; else delete extra.color;
+  try { await api('POST', '/api/entries', { ...entryInput(e), extra, password: e.password }); await poll(); }
+  catch (err) { toast(err.message, true); }
+}
+function pickEntryColor(e) {
+  const inp = Object.assign(document.createElement('input'), { type: 'color', value: /^#[0-9a-f]{6}$/i.test(e.extra?.color || '') ? e.extra.color : '#ffd54f' });
+  Object.assign(inp.style, { position: 'fixed', left: (lastClick?.x || 200) + 'px', top: (lastClick?.y || 200) + 'px', width: '1px', height: '1px', opacity: 0 });
+  document.body.append(inp);
+  inp.addEventListener('change', () => { setEntryColor(e, inp.value); inp.remove(); });
+  inp.addEventListener('blur', () => setTimeout(() => inp.remove(), 300));
+  inp.click();
+}
 const entryInput = e => ({
   id: e.id, project: e.project, name: e.name, host: e.host, port: e.port || 0, protocol: e.protocol, url: e.url,
   username: e.username, key_file: e.key_file, env: e.env, tags: e.tags || [], extra: e.extra || {}, notes: e.notes, favorite: !!e.favorite,
@@ -1826,6 +1897,7 @@ async function openEntryDialog(e) {
   delete ex.commands; delete ex.run_macros; delete ex.auth;
   f.is_sid.checked = !!ex.sid && !(ex.service || ex.service_name || ex.database);
   for (const k of DB_KEYS) delete ex[k];
+  delete ex.color; // the tree colour: kept on save, not shown as a field
   f.extra.value = Object.entries(ex).map(([k, x]) => `${k}=${x}`).join('\n');
   $('#testResult').textContent = ''; $('#testResult').className = 'test-result';
   dbFieldsVisible();
@@ -1864,6 +1936,7 @@ function entryFormBody() {
   const f = $('#entryForm');
   const extra = {};
   f.extra.value.split('\n').forEach(l => { const i = l.indexOf('='); if (i > 0) extra[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
+  if (editing?.extra?.color) extra.color = editing.extra.color; // the tree colour (set by right-click)
   if (f.tunnels.value.trim()) extra.tunnels = f.tunnels.value.trim();
   if (!f.tunnels_on.checked && f.tunnels.value.trim()) extra.tunnels_off = '1';
   if (f.tunnels_auto.checked && f.tunnels.value.trim()) extra.tunnels_auto = '1';
@@ -2156,8 +2229,8 @@ function makePane(root, loader) {
     },
     render() {
       const { key, dir } = pane.sortBy;
-      const col = (k, label) => `<span class="${k === key ? 'on' : ''}" data-sort="${k}">${label}${k === key ? (dir < 0 ? ' ▼' : ' ▲') : ''}</span>`;
-      const head = `<div class="fhead">${col('name', 'Name')}${col('type', 'Type')}${col('size', 'Size')}${col('mtime', 'Modified')}</div>`;
+      const col = (k, label, i) => `<span class="${k === key ? 'on' : ''}" data-sort="${k}">${label}${k === key ? (dir < 0 ? ' ▼' : ' ▲') : ''}${i < 3 ? `<i class="fgrip" data-fcol="${i}" title="Drag to resize · double-click: default widths"></i>` : ''}</span>`;
+      const head = `<div class="fhead">${col('name', 'Name', 0)}${col('type', 'Type', 1)}${col('size', 'Size', 2)}${col('mtime', 'Modified', 3)}</div>`;
       $('.listing', root).innerHTML = head + (pane.sorted().map(f => `<div class="frow ${f.dir ? 'dir' : 'file'} ${pane.sel.has(f.name) ? 'sel' : ''}" data-n="${esc(f.name)}">
         <span class="nm" title="${esc(f.name)}">${esc(f.name)}</span><span class="ty">${esc(fileType(f))}</span><span class="sz">${f.dir ? '' : fmtSize(f.size)}</span><span class="mt">${fmtDateTime(f.mtime)}</span></div>`).join('') || '<div class="empty">Empty folder</div>');
       xferHint();
@@ -2567,7 +2640,7 @@ const Tree = {
     // Database connections expand like SQL Developer: ▸ connects, ▾ shows the objects.
     const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
     const dbOpen = isDb && SQL.expanded.has(e.id);
-    out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
+    out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''} ${e.extra?.color ? 'tinted' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px${/^#[0-9a-f]{6}$/i.test(e.extra?.color || '') ? `;--rowbg:${e.extra.color}` : ''}" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
       <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? pm(dbOpen) : ''}</span>${STATE_DOT[connState(e)]} ${canDB(e) ? dbIcon(e) : ''}<span class="nm">${label || (canDB(e) ? dbLabel(e) : withCopyTag(cardName(e) || esc(e.host || e.name), e))}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) ? `<small class="dbaddr">${esc(dbKindOf(e) === 'oracle' ? jdbcURL(e) : e.host)}</small>` : cardName(e) ? `<small>${esc(target)}</small>` : e.username || port !== def ? `<small>${esc(e.username || '')}${port !== def ? ':' + port : ''}</small>` : ''}${connState(e) === 'dropped' ? '<span class="droptag">disconnected</span>' : ''}${lastSeen(e)}</div>`;
     if (dbOpen) {
       const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
@@ -2581,7 +2654,7 @@ const Tree = {
   render() {
     for (const host of $$('.tree-host')) {
       if (!host.firstChild) {
-        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷 Names</button><button data-tool="new" title="New connection">+ New</button>${host.dataset.mode === 'ssh' ? (S.sshKeysOff ? '' : '<button data-tool="sshkeys" title="My SSH keys: copy your public key for GitHub (read-only — nothing in .ssh is changed)">🔑 Keys</button>') : ''}</div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
+        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="new" title="New connection">+ New</button>${host.dataset.mode === 'ssh' ? ('<button data-tool="sshkeys" ' + (S.sshKeysOff ? 'hidden ' : '') + 'title="My SSH keys: copy your public key for GitHub (read-only — nothing in .ssh is changed)">🔑 Keys</button>') : ''}</div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
         this.wire(host);
       }
       $('select[data-tool=groupby]', host).value = this.groupMode(host.dataset.mode);
@@ -2846,6 +2919,8 @@ const Tree = {
         ['Copy all', () => copyText(detailsText(e), 'All details copied')]);
       if (e.username && isConn(e)) items.push([`🔑 Change ${e.username}'s password everywhere…`, () => PwAll.open(e.username)]);
       items.push('-',
+        ['🎨 Background colour…', () => pickEntryColor(e)],
+        ...(e.extra?.color ? [['Remove the colour', () => setEntryColor(e, '')]] : []),
         ['Edit…', () => openEntryDialog(e)],
         ['Duplicate', async () => {
           try { const c = await api('POST', '/api/entries', { ...entryInput(e), id: '', name: copyName(e.name, new Set(S.entries.map(x => x.name))), password: e.password }); await poll(); toast('Copy made — change what differs and Save'); openEntryDialog(byId(c.id) || c); }
@@ -2893,11 +2968,19 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#ctxMenu'
 const Chat = {
   cards: [],
 
+  // below the search bar at the top (it is never covered), as wide as you last made it
+  place() {
+    const g = $('#gsearch')?.getBoundingClientRect();
+    document.documentElement.style.setProperty('--chat-top', (g && g.bottom > 0 ? Math.round(g.bottom + 6) : 0) + 'px');
+    const w = store.get('chatW', 0); if (w) document.documentElement.style.setProperty('--chat-w', w + 'px');
+  },
   toggle(force) {
     const c = $('#chat');
     c.hidden = force === undefined ? !c.hidden : !force;
+    if (!c.hidden) this.place();
     $('#chatFab').classList.toggle('on', !c.hidden); // highlighted while the assistant is open
     if (!c.hidden) { $('#chatText').focus(); if (!$('#chatLog').children.length) this.help(true); }
+    if (typeof AsstCapture !== 'undefined') AsstCapture.sync(); // while open: copies are offered here first
   },
 
   say(html, who = 'bot') {
@@ -2911,7 +2994,7 @@ const Chat = {
 
   help(short) {
     this.say(short
-      ? 'Tell me what you want in plain English — e.g. <code>show prod servers in payments as a table</code>, <code>bookmarks by folder</code>, <code>password for app01</code>, <code>save this view as Prod</code>. Or paste connection details and say <code>putty</code>, <code>filezilla</code> or <code>sql</code>. Type <code>help</code> for more.'
+      ? '📋 While I\'m open, anything you copy (server details, a JDBC URL, a screenshot) shows up here first — I ask before adding it. You can paste it here too.<br><br>Tell me what you want in plain English — e.g. <code>show prod servers in payments as a table</code>, <code>bookmarks by folder</code>, <code>password for app01</code>, <code>save this view as Prod</code>. Or paste connection details and say <code>putty</code>, <code>filezilla</code> or <code>sql</code>. Type <code>help</code> for more.'
       : `Things you can say:
 • <code>putty</code> / <code>ssh</code> / <code>terminal</code> + details → PuTTY (SSH session)
 • <code>filezilla</code>, <code>ftp</code>, <code>ftps</code>, <code>sftp</code> + details → FileZilla (file transfer)
@@ -2919,6 +3002,8 @@ const Chat = {
 • <code>save</code> + details → store without connecting
 • <code>find prod</code>, <code>find oracle</code> → search saved connections
 • <code>yes</code> to confirm the suggestion, <code>no</code> to dismiss
+• <code>clear</code> → empty this conversation
+• paste server details, a JDBC URL or a screenshot and press Send → I offer to add each connection
 
 Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@host:port</code>, URLs, a pasted email…`);
   },
@@ -2946,6 +3031,8 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
 
   async send(text) {
     text = text.trim();
+    if (/^(clear|cls|clear chat)$/i.test(text)) { $('#chatLog').innerHTML = ''; this.cards = []; return; } // empty the conversation
+    if (typeof AsstCapture !== 'undefined' && AsstCapture.img) { await AsstCapture.sendImage(); if (!text) return; } // a pasted screenshot, read on Send
     if (!text) return;
     this.say(esc(text), 'me');
     const intent = this.intent(text);
@@ -2973,7 +3060,15 @@ Details can be in any form: <code>host: x user: y pass: z</code>, <code>user@hos
 
     // Plain-English view commands ("show prod servers as a table"), unless the
     // message carries connection details (key: value, user@host, URLs, IPs).
-    const looksLikeDetails = /\n|[:=]\s*\S|@\S+\.|:\/\/|\b\d{1,3}(\.\d{1,3}){3}\b/.test(text) && !/\b(password|user|url|host)\s+(for|of)\b/i.test(text);
+    const looksLikeDetails = (/\n|[:=]\s*\S|@\S+\.|:\/\/|\b\d{1,3}(\.\d{1,3}){3}\b/.test(text) || /^[\w.-]+\.[a-z]{2,}(:\d+)?$/i.test(text)) && !/\b(password|user|url|host)\s+(for|of)\b/i.test(text);
+    // Details on their own (no "ssh", "ftp", "sql"…): offer to add each connection found
+    // a command only when the message starts with one ("ssh …", "ftp …", "sql …"): words inside pasted
+    // details (jdbc:oracle:…, sftp://…) are not commands
+    const asked = /^(ssh|putty|terminal|shell|console|connect|login|ftps?|sftp|filezilla|winscp|scp|sql|query|oracle|postgres(ql)?|psql|sqlplus|sqldeveloper|db|database|open)\b/i.test(text);
+    if (!asked && looksLikeDetails && typeof AsstCapture !== 'undefined') {
+      const found = await api('POST', '/api/parse', { text }).catch(() => []);
+      if (found.length) return AsstCapture.offer({ id: 'local-' + (++AsstCapture.n), source: 'paste', text, findings: found }, true);
+    }
     if (!looksLikeDetails || !['terminal', 'files', 'db', 'save'].includes(intent)) {
       try {
         const reply = await runCommand(text);
@@ -4468,7 +4563,8 @@ function applySideTop(top) {
   document.body.classList.toggle('side-top', top);
   (top ? $('.side') : $('.appbar')).append($('#gsearch')); // search stays at the top right
   // left: 💬 and ✨ sit in the title row (☰ and the layout switch are in the menu bar); top: all in the tools row
-  for (const id of ['chatFab', 'whatsNewTop']) { const b = $('#' + id); if (b) (top ? $('.brand-tools') : $('.brand')).insertBefore(b, top ? $('#mainMenuBtn') : $('#sideToggle')); }
+  { const b = $('#whatsNewTop'); if (b) top ? $('.brand-tools').insertBefore(b, $('#mainMenuBtn')) : $('.ver-row').append(b); } // left: after the version, bottom left
+  $('#gsearch').prepend($('#chatFab')); // 💬 Assistant: at the top, next to ● Capturing (it asks before saving what you copy)
   const b = $('#sideFlip');
   b.title = top ? 'Move this menu back to the left' : 'Move this menu to the top of the window';
   b.innerHTML = top ? '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>' : '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>';
@@ -4498,6 +4594,7 @@ dragBar($('#sideSplit'), {
   done: () => store.set('sideW', parseInt(getComputedStyle(root).getPropertyValue('--side-w'))),
 });
 function toggleSide() {
+  animateSide();
   const c = document.body.classList.toggle('side-collapsed');
   S.autoSide = false; S.userSide = !c; // expanded by hand: leave it open until the user collapses it or goes back to the dashboard
   if (!narrowWin.matches) store.set('sideCollapsed', c); // on a narrow window: just for now
@@ -4506,6 +4603,12 @@ function toggleSide() {
 }
 $('#sideToggle').textContent = document.body.classList.contains('side-collapsed') ? '»' : '«';
 $('#sideToggle').onclick = toggleSide;
+// Double-click on empty space in the left menu: full menu ⇄ narrow icon rail (not on pages, buttons or boxes)
+$('.side').addEventListener('dblclick', e => {
+  if (document.body.classList.contains('side-top') || e.target.closest('button, a, input, select, textarea, label, summary, details, [contenteditable], .navrow')) return;
+  getSelection()?.removeAllRanges(); // a double-click selects a word
+  toggleSide();
+});
 // Ctrl+B hides / shows the sidebar — except where you are writing text, where
 // it means bold (message boxes) or belongs to that box.
 document.addEventListener('keydown', e => {
@@ -4663,3 +4766,39 @@ $('#backupNow').onclick = async () => {
   try { const r = await api('POST', '/api/backups'); toast('Backup made: ' + r.name); await showBackups(); } catch (err) { toast(err.message, true); }
   $('#backupNow').disabled = false;
 };
+
+// ---- Files page: drag a column heading's right edge to resize (per pane, remembered) ----
+{
+  const key = pane => 'fcols.' + pane.id;
+  const apply = (pane, w) => { if (w) pane.style.setProperty('--fcols', `${w[0]}px ${w[1]}px ${w[2]}px minmax(${Math.max(90, w[3] || 0)}px, 1fr)`); else pane.style.removeProperty('--fcols'); };
+  for (const id of ['localPane', 'remotePane']) { const p = $('#' + id); if (p) apply(p, store.get(key(p), null)); }
+  let dragging = false;
+  document.addEventListener('mousedown', e => {
+    const g = e.target.closest?.('.fgrip'); if (!g || e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const pane = g.closest('.pane'), head = g.closest('.fhead'), i = +g.dataset.fcol;
+    const w = [...head.children].map(c => Math.round(c.getBoundingClientRect().width)); // the widths as shown now
+    const x0 = e.clientX, w0 = w[i];
+    dragging = true;
+    const move = ev => { w[i] = Math.max(i === 0 ? 120 : 50, Math.min(900, w0 + ev.clientX - x0)); apply(pane, w); };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); store.set(key(pane), w); setTimeout(() => { dragging = false; }, 0); };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  }, true);
+  document.addEventListener('click', e => { if (dragging || e.target.closest?.('.fgrip')) { e.stopPropagation(); e.preventDefault(); } }, true); // a resize is not a sort
+  document.addEventListener('dblclick', e => { const g = e.target.closest?.('.fgrip'); if (!g) return; const pane = g.closest('.pane'); store.set(key(pane), null); apply(pane, null); }, true);
+}
+
+// ---- the Assistant: drag its left edge to resize (remembered); it follows the top bar ----
+{
+  const c = $('#chat'), grip = Object.assign(document.createElement('div'), { className: 'chat-grip', title: 'Drag to resize' });
+  c.prepend(grip);
+  grip.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault(); grip.classList.add('on');
+    const move = ev => { const w = Math.max(280, Math.min(innerWidth - 120, innerWidth - ev.clientX)); document.documentElement.style.setProperty('--chat-w', w + 'px'); };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); grip.classList.remove('on'); store.set('chatW', Math.round(c.getBoundingClientRect().width)); };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  });
+  grip.addEventListener('dblclick', () => { store.set('chatW', 0); document.documentElement.style.removeProperty('--chat-w'); });
+  window.addEventListener('resize', () => { if (!c.hidden) Chat.place(); });
+}

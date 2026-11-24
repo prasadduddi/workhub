@@ -2,10 +2,11 @@ package main
 
 // SSH switches.
 //
-// sshKeysOff (on): the 🔑 My SSH keys window doesn't read ~/.ssh — it is
-// the only part of WorkHub that looks there (WorkHub's own SSH uses only a
-// key file set on a connection, and keeps its known_hosts in its own data
-// folder). Its menu items are hidden. Set it to false to bring the window back.
+// The 🔑 My SSH keys window — the only part of WorkHub that looks in ~/.ssh
+// (WorkHub's own SSH uses only a key file set on a connection, and keeps its
+// known_hosts in its own data folder) — is off unless "Show my SSH keys" is
+// ticked in Settings → Security (Settings.SSHKeys); off, ~/.ssh isn't read and
+// its menu items are hidden.
 //
 // sshOff (off): when true WorkHub uses no SSH at all: no SSH terminals, SFTP,
 // tunnels, log tailing, remote compare or SSH logins in tests, and git
@@ -18,10 +19,7 @@ import (
 	"strings"
 )
 
-const (
-	sshKeysOff = true
-	sshOff     = false
-)
+const sshOff = false
 
 var errSSHOff = errors.New("SSH is switched off in this version of WorkHub")
 
@@ -43,3 +41,6 @@ func gitSSHHint(out string) string {
 	}
 	return out
 }
+
+// sshKeysOff: the SSH keys window may not read ~/.ssh (not ticked in Settings, or all SSH off).
+func (a *App) sshKeysOff() bool { return sshOff || a.store == nil || !a.store.Settings().SSHKeys }

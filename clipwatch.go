@@ -159,6 +159,7 @@ func (a *App) captureClipboard(last *string) bool {
 		}
 		if len(png) < maxAttachment {
 			a.postShot(png, from, false, time.Now())
+			go a.captureShotText(png, from) // the capture window offers what the picture shows
 		}
 		return true
 	}
@@ -174,7 +175,7 @@ func (a *App) captureClipboard(last *string) bool {
 	if t == "" || len(t) > 50000 || a.store.IsKnownValue(t) {
 		return true
 	}
-	a.store.IngestFrom(txt, "clipboard", from, "")
+	a.captureText(txt, from) // the capture window asks first while it is open
 	return true
 }
 

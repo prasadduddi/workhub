@@ -94,7 +94,7 @@ func main() {
 		dataDir:   dir,
 		workspace: ws,
 		addr:      ln.Addr().String(),
-		token:     randomHex(16),
+		token:     browserKey(dir), // the same after a restart: open tabs stay signed in
 		sftp:      newSFTPManager(),
 		dbs:       newDBManager(),
 		tunnels:   &tunnelManager{},
@@ -472,6 +472,34 @@ func (a *App) cookieName() string {
 	return "wh" + port
 }
 
+// signedOutPage: this browser has no WorkHub cookie (another browser or
+// profile, cookies cleared, or a different data folder). Starting WorkHub
+// opens a signed-in window; nothing here can sign in by itself.
+const signedOutPage = `<!doctype html><meta charset="utf-8"><title>WorkHub</title>
+<body style="font:15px/1.5 Segoe UI,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f4f5f7;color:#1d2330">
+<div style="max-width:440px;background:#fff;border:1px solid #dde1e6;border-radius:12px;padding:24px 28px">
+<h2 style="margin:0 0 8px">Open WorkHub from its icon</h2>
+<p style="margin:0 0 6px">This browser window isn't signed in to WorkHub — for example after clearing cookies, or in another browser.</p>
+<p style="margin:0;color:#555d69">Start WorkHub (Start menu, desktop or tray icon): it opens a signed-in window. You can close this one.</p></div></body>`
+
+// browserKey is the key the browser's WorkHub cookie carries. It is kept in
+// the data folder (only you can read it; not in backups) so a restart — an
+// update, File → Restart, a reboot — doesn't sign open tabs and bookmarks out.
+func browserKey(dir string) string {
+	p := filepath.Join(dir, "browser.key")
+	if b, err := os.ReadFile(p); err == nil {
+		if k := strings.TrimSpace(string(b)); len(k) == 32 {
+			if _, err := hex.DecodeString(k); err == nil {
+				return k
+			}
+		}
+	}
+	k := randomHex(16)
+	_ = os.MkdirAll(dir, 0o700)
+	_ = os.WriteFile(p, []byte(k), 0o600)
+	return k
+}
+
 func randomHex(n int) string {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
@@ -494,15 +522,21 @@ func (a *App) guard(next http.Handler) http.Handler {
 			w.Write([]byte(pingReply(a.dataDir)))
 			return
 		}
+		if r.Host == "localhost:"+port && r.Method == http.MethodGet { // the cookie lives on 127.0.0.1: go there
+			http.Redirect(w, r, "http://"+a.addr+r.URL.RequestURI(), http.StatusFound)
+			return
+		}
 		if t := r.URL.Query().Get("t"); t != "" && subtle.ConstantTimeCompare([]byte(t), []byte(a.token)) == 1 {
-			http.SetCookie(w, &http.Cookie{Name: a.cookieName(), Value: a.token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+			// kept for 400 days (the most browsers allow): closing the browser or a reboot doesn't sign you out
+			http.SetCookie(w, &http.Cookie{Name: a.cookieName(), Value: a.token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 400 * 24 * 3600})
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}
 		c, err := r.Cookie(a.cookieName())
 		if err != nil || subtle.ConstantTimeCompare([]byte(c.Value), []byte(a.token)) != 1 {
 			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte("Session expired. Start WorkHub again to open a fresh window."))
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write([]byte(signedOutPage))
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
@@ -543,6 +577,10 @@ func (a *App) routes() http.Handler {
 
 	mux.HandleFunc("POST /api/ingest", a.handleIngest)
 	mux.HandleFunc("POST /api/parse", a.handleParse)
+	mux.HandleFunc("GET /api/capture/proposals", a.handleCaptureProposals)
+	mux.HandleFunc("POST /api/capture/ocr", a.handleCaptureOCR)
+	mux.HandleFunc("POST /api/capture/accept", a.handleCaptureAccept)
+	mux.HandleFunc("POST /api/capture/dismiss", a.handleCaptureDismiss)
 	mux.HandleFunc("GET /api/clips", a.handleListClips)
 	mux.HandleFunc("DELETE /api/clips/{id}", a.handleDeleteClip)
 
@@ -637,6 +675,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/work/{id}/import", a.handleWorkDocxInto)
 	mux.HandleFunc("GET /api/work/saved", a.handleMarked(false))
 	mux.HandleFunc("GET /api/work/files", a.handleWorkFileSearch)
+	mux.HandleFunc("GET /api/work/search", a.handleThreadSearch)
 	mux.HandleFunc("GET /api/work/reminders", a.handleMarked(true))
 	mux.HandleFunc("POST /api/work/{id}/blocks", a.handleWorkAdd)
 	mux.HandleFunc("PUT /api/work/{id}/doc", a.handleWorkDoc)

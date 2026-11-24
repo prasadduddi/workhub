@@ -103,6 +103,7 @@ type Settings struct {
 	Workspace     string          `json:"workspace"`
 	Watch         bool            `json:"watch"`
 	CaptureAll    bool            `json:"capture_all"`
+	SSHKeys       bool            `json:"ssh_keys,omitempty"` // the 🔑 SSH keys window may read ~/.ssh (off unless ticked in Settings)
 	Project       string          `json:"project"`
 	OpenTabs      []string        `json:"open_tabs"`
 	NoBrowserSync bool            `json:"no_browser_sync"`

@@ -14,20 +14,28 @@ import (
 	"testing"
 )
 
-// The SSH keys window, switched off, never looks at ~/.ssh.
-func TestSSHKeysNotRead(t *testing.T) {
-	if !sshKeysOff && !sshOff {
-		t.Skip("the SSH keys window is on")
+// The SSH keys window is off unless ticked in Settings; off, it never looks at ~/.ssh.
+func TestSSHKeysNotReadUnlessTicked(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	a := &App{store: s}
+	if !a.sshKeysOff() {
+		t.Fatal("the SSH keys window must be off by default")
 	}
 	old := sshDirFunc
 	sshDirFunc = func() string { t.Fatal("~/.ssh was looked up"); return "" }
-	defer func() { sshDirFunc = old }()
 	rec := httptest.NewRecorder()
-	(&App{}).handleSSHKeys(rec, httptest.NewRequest("GET", "/api/sshkeys", nil))
+	a.handleSSHKeys(rec, httptest.NewRequest("GET", "/api/sshkeys", nil))
+	sshDirFunc = old
 	var got map[string]any
 	json.Unmarshal(rec.Body.Bytes(), &got)
 	if got["off"] != true || len(got["keys"].([]any)) != 0 || len(got["hosts"].([]any)) != 0 {
 		t.Fatalf("ssh keys: %s", rec.Body.String())
+	}
+	st := s.Settings()
+	st.SSHKeys = true
+	s.SetSettings(st)
+	if a.sshKeysOff() != sshOff {
+		t.Fatal("ticking Show my SSH keys didn't turn the window on")
 	}
 }
 

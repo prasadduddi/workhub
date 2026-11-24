@@ -4,6 +4,21 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.15.7', title: 'Add connections by copying — the Assistant asks first', items: [
+    ['💬', 'The Assistant asks before saving what you copy', 'Open the 💬 Assistant (Ctrl+J). While it is open, anything you copy is offered there instead of being saved by itself: “I found an SSH server ops@app-01:22 — Add it?” (or an Oracle/Postgres database from a JDBC URL, an FTP/SFTP server, a link). Yes creates it and says ✅ Connection created. Paste server details, a JDBC URL or a screenshot into its message box and press Send — text in pictures is read with the OCR built into Windows. Type clear to empty the conversation. Close the Assistant and capture works as before.', ''],
+    ['🔐', 'No more “Session expired”', 'Open WorkHub tabs and bookmarks stay signed in after an update, a restart, closing the browser or a reboot, and localhost links work too.', ''],
+    ['🔑', 'SSH keys window: your choice', 'The 🔑 My SSH keys window is off by default (WorkHub doesn\'t look in ~/.ssh); ⚙ Settings → Security → Show my SSH keys turns it on.', ''],
+    ['🔒', 'UAT and PROD hidden until you pick them', 'The switch at the top is now Others · UAT · PROD · All. Others (the default) hides UAT and PROD servers and databases everywhere — lists, server trees, search; the UAT / PROD buttons show how many are hidden. Pick them to see them; All shows everything.', ''],
+    ['📋', 'Copy text and pictures; resize pictures', 'In threads, 📋 Copy (right-click or ⋯) copies a message\'s text and pictures together; right-click a picture → 🖼 Copy image. Drag a picture\'s bottom-right corner to make it bigger or smaller.', 'tasks'],
+    ['🔎', 'Clearer task results in search', 'Threads found by a search are full width and show the messages that matched — who, when and a few lines with your words highlighted; click one to open the thread right there.', 'dashboard'],
+    ['📅', 'The Dashboard fills the screen', 'The overview stretches to your monitor: cards share the width and grow to the bottom, listing more on a big screen.', 'dashboard'],
+    ['💬', 'Assistant: next to Capturing, below the search', 'The 💬 button is at the top next to ● Capturing; the Assistant opens below the search bar and can be resized by its left edge.', ''],
+    ['🎨', 'Colour a connection in the trees', 'Right-click a server or database in the SSH / SQL / FTP tree → 🎨 Background colour… to pick a colour for its row.', ''],
+    ['↔', 'Resizable file columns', 'On the Files page, drag a column heading\'s right edge (Name, Type, Size) to resize it; double-click it for the default widths.', 'files'],
+    ['🧵', 'New thread asks in WorkHub', '+ New thread asks for the name in WorkHub\'s own box, next to where you clicked.', 'tasks'],
+    ['⚙', 'Naming rules in Settings; ✨ at the bottom left', 'Naming rules moved to ⚙ Settings → Connections. ✨ What\'s new is at the bottom left, after the version. The left menu now slides open and closed.', ''],
+    ['↔', 'Double-click the left menu', 'Double-click empty space in the left menu to switch between the full menu and the narrow icon rail.', ''],
+  ] },
   { v: '1.15.6', title: 'Lighter menu and Settings, bigger text, safer search, FTP tabs', items: [
     ['🔒', 'UAT and PROD stay out of search', 'With All at the top, searching leaves UAT and PROD servers out — pick UAT or PROD (or type env:prod) to see them. A note says how many matched, with Show UAT / Show PROD.', 'dashboard'],
     ['🔠', 'Bigger text', 'Everything is a little larger by default; ⚙ Settings → Appearance → Text size: Small, Normal, Large or Larger. Terminal, editor and SQL start at 14 px (A− / A+ there as before).', ''],

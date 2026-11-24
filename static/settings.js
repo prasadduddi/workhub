@@ -50,12 +50,16 @@ const Settings = {
         row('Your profile', 'Name, email (where recovery codes are sent), team', btn('profile', 'Edit…')),
         row('PIN lock', lock.enabled ? `On — locks after ${lock.minutes ? lock.minutes + ' idle minutes' : 'start-up and Lock only'}` : 'Off — lock WorkHub when you step away', btn('pin', lock.enabled ? 'Change…' : 'Set up…')),
         row('Master password', master.on ? 'On' : 'Off — protects your data if the data folder is copied', btn('master', master.on ? 'Change…' : 'Turn on…')),
+        row('Show my SSH keys', 'The 🔑 SSH keys window reads your public keys and ~/.ssh/config (read-only) — off: WorkHub never looks in ~/.ssh', sw('sshkeys', !S.sshKeysOff)),
       ]],
       ['data', '🗂', 'Data & backups', [
         row('Data folder', `<code class="set-path">${esc(S.dataDir || '')}</code>`, btn('dataopen', 'Open') + btn('datacopy', 'Copy path') + btn('dataloc', 'Change…')),
         row('Backups', `${latest ? 'Latest ' + esc(fmtDateTime(latest.when)) : 'None yet'}${backups.copy_to ? ` · also copied to <code class="set-path">${esc(backups.copy_to)}</code>` : ''}`, btn('backups', 'Manage…')),
         row('Save SSH session text', 'What each terminal shows, per server and day, searchable', sw('slog', !!S.settings.session_log) + btn('slogopen', 'Logs…')),
         row('Import data', 'From an older WorkHub data folder or a file', btn('import', 'Import…')),
+      ]],
+      ['connections', '🏷', 'Connections', [
+        row('Naming rules', 'Name servers and links by what their host name contains (e.g. -BAT- → Batch); this workspace only', btn('namerules', 'Edit…')),
       ]],
       ['programs', '↗', 'Programs', [
         row('Programs for “Open in”', 'PuTTY, FileZilla, SQL Developer, DBeaver…', btn('ext', 'Choose…')),
@@ -94,6 +98,7 @@ $('#settingsBody').addEventListener('click', async e => {
     case 'ext': click('#extBtn'); break;
     case 'install': Settings.install(); break;
     case 'mail': $('#settingsDlg').close(); show('inbox'); $('#mailPanel').open = true; break;
+    case 'namerules': openNameRules(); break;
     case 'updcheck': $('#settingsDlg').close(); Update.check(true); break;
     case 'whatsnew': $('#settingsDlg').close(); click('#whatsNewBtn'); break;
   }
@@ -124,6 +129,7 @@ $('#settingsBody').addEventListener('change', async e => {
     case 'updfetch': await saveSettings({ no_update_fetch: !t.checked }); toast(t.checked ? 'New versions download in the background — you choose when to install' : 'New versions are no longer downloaded until you ask'); break;
     case 'watch': if ($('#watchToggle').checked !== t.checked) $('#watchToggle').click(); break; // same as ● Capturing at the top
     case 'capall': await saveSettings({ capture_all: t.checked }); break;
+    case 'sshkeys': await saveSettings({ ssh_keys: t.checked }); await poll(); toast(t.checked ? '🔑 SSH keys window on — Tools → My SSH keys' : 'SSH keys window off — ~/.ssh is not read'); break;
     case 'shots': await saveSettings({ no_shots: !t.checked }); toast(t.checked ? 'Copied screenshots go into the capture thread' : 'Screenshots are no longer captured'); break;
     case 'inst-desktop': case 'inst-startup': if (Settings.inst?.installed) Settings.install(); break; // not installed yet: used by Install
   }

@@ -107,7 +107,7 @@ const Menubar = {
         ['🔎 Search everything\tCtrl+K', () => { $('#search').focus(); $('#search').select(); }],
         ['⌘ Command palette…\tCtrl+Shift+P', () => Palette.open()],
         ['🔑 Change a password everywhere…', () => PwAll.open()],
-        ['🏷 Naming rules…', () => openNameRules()],
+        ['🏷 Naming rules…', () => { Settings.tab = 'connections'; Settings.open(); }], // they live in ⚙ Settings → Connections
         '-',
         ['⚙ Settings…\tCtrl+,', () => Settings.open()],
       ],
