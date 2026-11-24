@@ -96,3 +96,17 @@ v1.6 checks
   [ ] Jump server → Edit → tick "Start when WorkHub starts": tunnel opens at start-up (green ⇄ in the tree) and comes back if the network drops
   [ ] Most used / most recent first: Dashboard, search results, Bookmarks, Groups; ★ Most used at the top of PuTTY/FileZilla/SQL trees; SQL tree shows service names
   [ ] 🛟 Backups…: a dated zip appears next to the data folder at start-up (when data changed); Back up now; Open backup folder
+
+Word documents into a thread, search, UAT/PROD, capture switch
+  [ ] Open a thread, drop a real work .docx on it (or ⋯ -> 📄 Add a Word document to this thread)
+      -> one message: headings, bold/italic, numbered + bulleted lists (nested), tables (merged cells),
+         links, pictures; the .docx is attached under it. Long documents fold: "Show the whole document"
+  [ ] Try a document with an embedded Excel sheet / equation -> "[embedded Excel sheet …]" / "[equation]"
+  [ ] Open in Word on that thread -> the same lists, tables and highlights in the Word copy
+  [ ] An old .doc file -> message asks to save it as .docx first; nothing is added
+  [ ] Search (top) for a word inside that document -> "📎 Files in threads" lists it; click -> opens the thread
+  [ ] All · UAT · PROD beside the search -> PROD shows only PROD connections in Dashboard, SSH/SQL trees, Bookmarks
+  [ ] "● Capturing" at the top -> click -> "⏸ Capture off"; copy/paste in other programs works normally;
+      copy a host -> NOT captured; click again -> capturing; the copy made while paused is not captured
+  [ ] Close WorkHub to the tray -> right-click the tray icon -> Pause / Resume clipboard capture works
+  [ ] Dashboard: a NEW SSH connection -> 🔌 Test -> green dot if it logs in, red "⚠ Needs attention" if not

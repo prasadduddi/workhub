@@ -216,19 +216,57 @@ func (m *mdWriter) inlineNode(n *html.Node) string {
 
 func (m *mdWriter) table(b *strings.Builder, n *html.Node) {
 	var rows [][]string
+	type carry struct{ rows, cols int }
+	down := map[int]carry{} // column → rows still covered by a merged cell above
+	pad := func(row []string, col *int) []string {
+		for {
+			c, ok := down[*col]
+			if !ok {
+				return row
+			}
+			for k := 0; k < c.cols; k++ {
+				row = append(row, "")
+			}
+			if c.rows--; c.rows <= 0 {
+				delete(down, *col)
+			} else {
+				down[*col] = c
+			}
+			*col += c.cols
+		}
+	}
+	span := func(c *html.Node, k string) int {
+		v := 1
+		fmt.Sscan(attr(c, k), &v)
+		return min(max(v, 1), 63)
+	}
 	var walk func(*html.Node)
 	walk = func(x *html.Node) {
 		if x.Type == html.ElementNode && x.Data == "tr" {
 			var cells []string
+			col := 0
 			for c := x.FirstChild; c != nil; c = c.NextSibling {
 				if c.Type == html.ElementNode && (c.Data == "td" || c.Data == "th") {
-					cells = append(cells, strings.ReplaceAll(strings.TrimSpace(m.inline(c)), "|", "\\|"))
+					cells = pad(cells, &col)
+					cols, rs := span(c, "colspan"), span(c, "rowspan")
+					cells = append(cells, m.cell(c))
+					for k := 1; k < cols; k++ { // a merged cell: its other columns left empty
+						cells = append(cells, "")
+					}
+					if rs > 1 {
+						down[col] = carry{rs - 1, cols}
+					}
+					col += cols
 				}
 			}
+			cells = pad(cells, &col)
 			rows = append(rows, cells)
 			return
 		}
 		for c := x.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "table" { // a table in a cell is part of that cell
+				continue
+			}
 			walk(c)
 		}
 	}
@@ -250,6 +288,70 @@ func (m *mdWriter) table(b *strings.Builder, n *html.Node) {
 		}
 	}
 	b.WriteString("\n")
+}
+
+// cell renders a table cell on one line (Markdown tables can't break lines):
+// lines, list items and the rows of a table inside it are joined with <br>.
+func (m *mdWriter) cell(c *html.Node) string {
+	var lines []string
+	cur := ""
+	esc := func(s string) string { return strings.ReplaceAll(s, "|", "\\|") }
+	end := func() {
+		if t := strings.TrimSpace(cur); t != "" {
+			lines = append(lines, t)
+		}
+		cur = ""
+	}
+	var each func(*html.Node)
+	each = func(n *html.Node) {
+		for k := n.FirstChild; k != nil; k = k.NextSibling {
+			switch {
+			case k.Type == html.ElementNode && k.Data == "br":
+				end()
+			case k.Type == html.ElementNode && (k.Data == "ul" || k.Data == "ol"):
+				end()
+				i := 0
+				for li := k.FirstChild; li != nil; li = li.NextSibling {
+					if li.Type == html.ElementNode && li.Data == "li" {
+						i++
+						mark := "• "
+						if k.Data == "ol" {
+							mark = fmt.Sprintf("%d. ", i)
+						}
+						lines = append(lines, mark+esc(collapseSpace(strings.TrimSpace(mdText(li)))))
+					}
+				}
+			case k.Type == html.ElementNode && k.Data == "table":
+				end()
+				var tr func(*html.Node)
+				tr = func(x *html.Node) {
+					for y := x.FirstChild; y != nil; y = y.NextSibling {
+						if y.Type == html.ElementNode && y.Data == "tr" {
+							var cs []string
+							for td := y.FirstChild; td != nil; td = td.NextSibling {
+								if td.Type == html.ElementNode && (td.Data == "td" || td.Data == "th") {
+									cs = append(cs, esc(collapseSpace(strings.TrimSpace(mdText(td)))))
+								}
+							}
+							lines = append(lines, strings.Join(cs, " / "))
+						} else if y.Type == html.ElementNode {
+							tr(y)
+						}
+					}
+				}
+				tr(k)
+			case k.Type == html.ElementNode && (k.Data == "p" || k.Data == "div" || k.Data == "pre"):
+				end()
+				each(k)
+				end()
+			default:
+				cur += esc(strings.ReplaceAll(m.inlineNode(k), "\n", " "))
+			}
+		}
+	}
+	each(c)
+	end()
+	return strings.Join(lines, "<br>")
 }
 
 func mdText(n *html.Node) string {

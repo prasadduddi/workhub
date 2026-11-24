@@ -56,7 +56,7 @@
 <div id="sideSplit" class="vsplit" title="Drag to resize"></div>
 <main>
   <header class="appbar"><span id="pageTitle" class="apptitle"></span><span class="spacer"></span>
-    <div id="gsearch" class="gsearch"><input id="search" type="search" placeholder="Search everything…  (Ctrl+K)"><button id="saveSearchBtn" hidden title="Keep this search in the sidebar, with a live count">☆</button>
+    <div id="gsearch" class="gsearch"><button id="capBtn" class="capbtn" title="Clipboard capture">Capture</button><div id="envSwitch" class="seg envsw" title="Show one environment only, everywhere in WorkHub (connections, bookmarks, databases)"><button data-envsw="" class="active">All</button><button data-envsw="UAT">UAT</button><button data-envsw="PROD">PROD</button></div><input id="search" type="search" placeholder="Search everything…  (Ctrl+K)"><button id="saveSearchBtn" hidden title="Keep this search in the sidebar, with a live count">☆</button>
       <div id="searchHint" class="muted tiny search-hint" hidden><div id="recentSearches" hidden></div><b>↵</b> connect / open the highlighted one · <b>Shift+↵</b> details · <b>↑↓</b> choose · <b>Alt+P</b> password · <b>Alt+U</b> user · <b>Alt+H</b> host · <b>Alt+J</b> JDBC/URL &nbsp;|&nbsp; Filters: <code>env:prod</code> <code>type:db</code> <code>user:ops</code> <code>app:batch</code> <code>port:1521</code> <code>has:password</code> <code>no:env</code> <code>is:fail</code> <code>needs:attention</code> <code>is:stale</code> <code>is:unsorted</code> <code>db:name</code> <code>added:today</code> <code>used:7d</code> <code>used:never</code> <code>-word</code> &nbsp;|&nbsp; Desktop: <b>Ctrl+Alt+W</b> anywhere opens this search</div></div>
   </header>
   <!-- DASHBOARD -->

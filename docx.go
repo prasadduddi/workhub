@@ -22,14 +22,14 @@ import (
 )
 
 type docxWriter struct {
-	body   strings.Builder
-	rels   []string // extra relationships (hyperlinks, images)
+	body   *strings.Builder // swapped while a table cell is written
+	rels   []string         // extra relationships (hyperlinks, images)
 	media  map[string][]byte
 	nextID int
 	store  *Store
 }
 
-type runStyle struct{ b, i, u, s, code, link bool }
+type runStyle struct{ b, i, u, s, code, link, mark, sup, sub bool }
 
 func xmlEsc(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
@@ -68,6 +68,12 @@ func (d *docxWriter) run(text string, st runStyle) string {
 	}
 	if st.code {
 		p.WriteString(`<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>`)
+	}
+	if st.mark {
+		p.WriteString(`<w:highlight w:val="yellow"/>`)
+	}
+	if st.sup || st.sub {
+		p.WriteString(`<w:vertAlign w:val="` + map[bool]string{true: "superscript", false: "subscript"}[st.sup] + `"/>`)
 	}
 	return fmt.Sprintf(`<w:r><w:rPr>%s</w:rPr><w:t xml:space="preserve">%s</w:t></w:r>`, p.String(), xmlEsc(text))
 }
@@ -124,6 +130,14 @@ func (d *docxWriter) inline(n *html.Node, st runStyle) string {
 				s.s = true
 			case "code":
 				s.code = true
+			case "mark":
+				s.mark = true
+			case "sup":
+				s.sup = true
+			case "sub":
+				s.sub = true
+			case "ul", "ol", "table": // written as blocks of their own (lists in lists, tables in cells)
+				continue
 			case "br":
 				out.WriteString("<w:r><w:br/></w:r>")
 				continue
@@ -165,6 +179,15 @@ var blockTags = map[string]bool{"p": true, "div": true, "h1": true, "h2": true, 
 func (d *docxWriter) blocks(n *html.Node) {
 	var pending []*html.Node
 	flush := func() {
+		isBr := func(c *html.Node) bool { return c.Type == html.ElementNode && c.Data == "br" }
+		for len(pending) > 0 && isBr(pending[0]) { // a break next to a list or table: the paragraph already breaks
+			n.RemoveChild(pending[0])
+			pending = pending[1:]
+		}
+		for len(pending) > 0 && isBr(pending[len(pending)-1]) {
+			n.RemoveChild(pending[len(pending)-1])
+			pending = pending[:len(pending)-1]
+		}
 		if len(pending) == 0 {
 			return
 		}
@@ -196,18 +219,7 @@ func (d *docxWriter) block(c *html.Node) {
 	case "h1", "h2", "h3", "h4":
 		d.para("Heading"+c.Data[1:], d.inline(c, runStyle{}))
 	case "ul", "ol":
-		i := 0
-		for li := c.FirstChild; li != nil; li = li.NextSibling {
-			if li.Type != html.ElementNode || li.Data != "li" {
-				continue
-			}
-			i++
-			mark := "•\t"
-			if c.Data == "ol" {
-				mark = fmt.Sprintf("%d.\t", i)
-			}
-			d.para("ListParagraph", d.run(mark, runStyle{})+d.inline(li, runStyle{}))
-		}
+		d.list(c, 0)
 	case "pre":
 		for _, line := range strings.Split(textOf(c), "\n") {
 			d.para("Code", d.run(line, runStyle{code: true}))
@@ -233,6 +245,28 @@ func (d *docxWriter) block(c *html.Node) {
 	}
 }
 
+// list writes a list, its nested lists indented one level further.
+func (d *docxWriter) list(c *html.Node, lvl int) {
+	i := 0
+	for li := c.FirstChild; li != nil; li = li.NextSibling {
+		if li.Type != html.ElementNode || li.Data != "li" {
+			continue
+		}
+		i++
+		mark := "•\t"
+		if c.Data == "ol" {
+			mark = fmt.Sprintf("%d.\t", i)
+		}
+		left := 720 * (lvl + 1)
+		d.body.WriteString(fmt.Sprintf(`<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:ind w:left="%d" w:hanging="360"/></w:pPr>%s</w:p>`, left, d.run(mark, runStyle{})+d.inline(li, runStyle{})))
+		for k := li.FirstChild; k != nil; k = k.NextSibling {
+			if k.Type == html.ElementNode && (k.Data == "ul" || k.Data == "ol") {
+				d.list(k, lvl+1)
+			}
+		}
+	}
+}
+
 func (d *docxWriter) table(t *html.Node) {
 	var rows []*html.Node
 	var walk func(*html.Node)
@@ -240,19 +274,87 @@ func (d *docxWriter) table(t *html.Node) {
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			if c.Type == html.ElementNode && c.Data == "tr" {
 				rows = append(rows, c)
-			} else if c.Type == html.ElementNode {
+			} else if c.Type == html.ElementNode && c.Data != "table" { // a table in a cell is written inside that cell
 				walk(c)
 			}
 		}
 	}
 	walk(t)
+	span := func(c *html.Node, k string) int {
+		n := 1
+		fmt.Sscan(attr(c, k), &n)
+		return min(max(n, 1), 63)
+	}
+	cont := func(cols int) string { // the lower part of a cell merged downwards
+		gs := ""
+		if cols > 1 {
+			gs = fmt.Sprintf(`<w:gridSpan w:val="%d"/>`, cols)
+		}
+		return `<w:tc><w:tcPr>` + gs + `<w:vMerge/></w:tcPr><w:p/></w:tc>`
+	}
+	type merge struct{ rows, cols int }
+	down := map[int]merge{} // column → rows still covered by a cell above
 	d.body.WriteString(`<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/></w:tblPr>`)
 	for _, r := range rows {
 		d.body.WriteString("<w:tr>")
-		for c := r.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.ElementNode && (c.Data == "td" || c.Data == "th") {
-				d.body.WriteString(`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p>` + d.inline(c, runStyle{b: c.Data == "th"}) + `</w:p></w:tc>`)
+		col := 0
+		fill := func(upTo int) { // continuation cells for merges from above, up to a column
+			for {
+				m, ok := down[col]
+				if !ok || (upTo >= 0 && col >= upTo) {
+					return
+				}
+				d.body.WriteString(cont(m.cols))
+				if m.rows--; m.rows <= 0 {
+					delete(down, col)
+				} else {
+					down[col] = m
+				}
+				col += m.cols
 			}
+		}
+		for c := r.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type != html.ElementNode || (c.Data != "td" && c.Data != "th") {
+				continue
+			}
+			fill(-1)
+			cols, rs := span(c, "colspan"), span(c, "rowspan")
+			pr := `<w:tcW w:w="0" w:type="auto"/>`
+			if cols > 1 {
+				pr += fmt.Sprintf(`<w:gridSpan w:val="%d"/>`, cols)
+			}
+			if rs > 1 {
+				pr += `<w:vMerge w:val="restart"/>`
+				down[col] = merge{rs - 1, cols}
+			}
+			// the cell's own paragraphs, lists and tables
+			outer := d.body
+			d.body = &strings.Builder{}
+			if c.Data == "th" {
+				d.para("", d.inline(c, runStyle{b: true}))
+			} else {
+				d.blocks(c)
+			}
+			inner := d.body.String()
+			d.body = outer
+			if !strings.HasSuffix(inner, "</w:p>") && !strings.HasSuffix(inner, "<w:p/>") {
+				inner += "<w:p/>" // a cell ends with a paragraph
+			}
+			d.body.WriteString(`<w:tc><w:tcPr>` + pr + `</w:tcPr>` + inner + `</w:tc>`)
+			col += cols
+		}
+		for len(down) > 0 { // merges below the end of this row
+			next := -1
+			for k := range down {
+				if k >= col && (next < 0 || k < next) {
+					next = k
+				}
+			}
+			if next < 0 {
+				break
+			}
+			col = next
+			fill(-1)
 		}
 		d.body.WriteString("</w:tr>")
 	}
@@ -293,7 +395,7 @@ func textOf(n *html.Node) string {
 
 // buildDocx turns a work item into .docx bytes.
 func buildDocx(s *Store, w WorkItem) ([]byte, error) {
-	d := &docxWriter{media: map[string][]byte{}, store: s}
+	d := &docxWriter{body: &strings.Builder{}, media: map[string][]byte{}, store: s}
 	d.para("Title", d.run(w.Title, runStyle{}))
 	meta := "Status: " + map[string]string{"todo": "To do", "doing": "In progress", "blocked": "Blocked", "done": "Done"}[w.Status]
 	if len(w.Tags) > 0 {

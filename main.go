@@ -138,6 +138,14 @@ func main() {
 				app.setLocked(true) // a PIN is set: start locked (the master password already asked)
 			}
 			go app.watchClipboard()
+			captureSwitch = func(flip bool) bool {
+				st := app.store.Settings()
+				if flip {
+					st.Watch = !st.Watch
+					app.store.SetSettings(st)
+				}
+				return st.Watch
+			}
 			go app.watchScreenshots()
 			go app.watchUpdates()
 			go app.syncBrowserBookmarks()
@@ -364,6 +372,10 @@ func copyDir(src, dst string) error {
 	}
 	return nil
 }
+
+// captureSwitch reads "Watch clipboard" (flip: turns it over first), for the
+// tray menu: capture can be paused without opening or closing WorkHub.
+var captureSwitch func(flip bool) bool
 
 // beforeExit runs just before WorkHub quits (e.g. removing the tray icon).
 var beforeExit []func()
@@ -612,7 +624,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/work/{id}/read", a.handleWorkRead)
 	mux.HandleFunc("POST /api/work/{id}/star", a.handleWorkStar)
 	mux.HandleFunc("POST /api/work/{id}/email", a.handleWorkEmail)
+	mux.HandleFunc("POST /api/work/{id}/import", a.handleWorkDocxInto)
 	mux.HandleFunc("GET /api/work/saved", a.handleMarked(false))
+	mux.HandleFunc("GET /api/work/files", a.handleWorkFileSearch)
 	mux.HandleFunc("GET /api/work/reminders", a.handleMarked(true))
 	mux.HandleFunc("POST /api/work/{id}/blocks", a.handleWorkAdd)
 	mux.HandleFunc("PUT /api/work/{id}/doc", a.handleWorkDoc)

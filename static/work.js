@@ -144,14 +144,14 @@ const Work = {
     if (!this.current) {
       let sel = ''; try { sel = localStorage.getItem('workSel') || ''; } catch { /* ignore */ }
       const id = this.list.some(w => w.id === sel) ? sel : this.list[0]?.id;
-      if (id) await this.open(id); else this.render();
+      if (id) await this.open(id, undefined, true); else this.render(); // stay: the page may have been left meanwhile
     }
   },
 
-  async open(id, pid) {
+  async open(id, pid, stay) {
     try { this.current = await api('GET', '/api/work/' + id); } catch (err) { return toast(err.message, true); }
     try { localStorage.setItem('workSel', id); } catch { /* ignore */ }
-    if (!$('#view-tasks').classList.contains('active')) show('tasks');
+    if (!stay && !$('#view-tasks').classList.contains('active')) show('tasks');
     const li = this.list.find(x => x.id === id);
     this.readMark = li?.unread ? this.current.read_at : ''; // the "New" line goes above what came since
     if (this.panel && !this.current.posts?.some(p => p.id === this.panel)) this.panel = '';
@@ -264,7 +264,7 @@ const Work = {
           <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
           <div class="tcompose">
             <div class="tcol">${FMT_BAR}
-              <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Message ${esc(w.title)} — *bold* _italic_ \`code\` :emoji: · paste screenshots, drop files or Outlook emails · Enter posts · ↑ edits your last post"></div>
+              <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Message ${esc(w.title)} — *bold* _italic_ \`code\` :emoji: · paste screenshots, drop files, Outlook emails or Word documents · Enter posts · ↑ edits your last post"></div>
             </div>
             <button id="tsend" class="primary" title="Post (Enter)">Post</button>
           </div>
@@ -313,17 +313,19 @@ const Work = {
   // One message. prev: the message just above (to run on from the same sender).
   msgHTML(p, prev, rs = [], inPanel = false) {
     const at = new Date(p.at), time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const [name, icon] = p.kind === 'note' && (p.from === 'Outlook' || p.from === 'Email') ? ['Email', '✉'] : SENDERS[p.kind] || SENDERS.note;
+    const [name, icon] = p.kind === 'note' && (p.from === 'Outlook' || p.from === 'Email') ? ['Email', '✉'] : p.kind === 'note' && p.from === 'Word' ? ['Document', '📄'] : SENDERS[p.kind] || SENDERS.note;
     const cont = prev && prev.kind === p.kind && !p.pinned && !p.via && at - new Date(prev.at) < 5 * 60e3 && (p.kind !== 'capture' || prev.from === p.from);
     const remind = p.remind_at ? `<span class="tflag" title="Reminder ${esc(new Date(p.remind_at).toLocaleString())}">⏰</span>` : '';
     const head = cont ? '' : `<div class="thdr"><b class="tname">${name}</b><span class="ttime" title="${esc(at.toLocaleString())}">${time}</span>${p.from ? `<span class="tfrom" title="Copied from">from ${esc(p.from)}</span>` : ''}${p.via ? `<span class="tfrom" title="${esc(p.via)}">↪ ${esc(p.via.split(' · ')[0])}</span>` : ''}${p.edited ? '<span class="muted tiny">(edited)</span>' : ''}${p.pinned ? '<span class="tflag" title="Pinned">📌</span>' : ''}${p.saved ? '<span class="tflag" title="Saved for later">🔖</span>' : ''}${remind}</div>`;
+    // a long Word document shows its start until opened out
+    const fold = p.kind === 'note' && p.from === 'Word' && (p.html || '').length > 6000 ? (this.expanded?.has(p.id) ? 'open' : 'fold') : '';
     const reacts = p.reactions?.length ? `<div class="treact">${p.reactions.map(e => `<button class="rchip" data-pact="react" data-emoji="${esc(e)}" title="Remove ${esc(e)}">${esc(e)}</button>`).join('')}<button class="rchip add" data-pact="emoji" title="Add a reaction">😀＋</button></div>` : '';
     const last = rs.length ? new Date(rs[rs.length - 1].at) : null;
     const thread = !inPanel && rs.length ? `<a href="#" class="tthread" data-pact="thread">💬 ${rs.length} repl${rs.length > 1 ? 'ies' : 'y'} <span class="muted">Last reply ${esc(last.toDateString() === new Date().toDateString() ? last.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : last.toLocaleDateString())}</span></a>` : '';
     const tools = `<div class="thover">${QUICK_REACTS.map(e => `<button class="icon" data-pact="react" data-emoji="${e}" title="React ${e}">${e}</button>`).join('')}<button class="icon" data-pact="emoji" title="More reactions">😀</button>${inPanel && p.parent ? '' : `<button class="icon" data-pact="thread" title="Reply in thread">💬</button>`}<button class="icon" data-pact="save" title="${p.saved ? 'Remove from Saved' : 'Save for later'}">${p.saved ? '🔖✓' : '🔖'}</button>${p.kind === 'note' ? '<button class="icon" data-pact="edit" title="Edit">✎</button>' : ''}<button class="icon more" data-pact="more" title="More: pin, remind me, copy link, delete">⋯</button></div>`;
     return `<div class="tmsg k-${p.kind} ${cont ? 'cont' : ''} ${p.pinned ? 'pinned' : ''} ${p.parent ? 'reply' : ''}" data-post="${p.id}">
       <div class="tav">${cont ? `<span class="tmini" title="${esc(at.toLocaleString())}">${time}</span>` : `<span class="avatar k-${p.kind}">${icon}</span>`}</div>
-      <div class="tcontent">${head}<div class="tbody">${this.postBody(p)}</div>${this.previews(p)}${reacts}${thread}</div>${tools}</div>`;
+      <div class="tcontent">${head}<div class="tbody${fold === 'fold' ? ' long' : ''}">${this.postBody(p)}</div>${fold ? `<button class="tmore" data-pact="${fold === 'fold' ? 'expand' : 'fold'}">${fold === 'fold' ? 'Show the whole document ▾' : 'Show less ▴'}</button>` : ''}${this.previews(p)}${reacts}${thread}</div>${tools}</div>`;
   },
 
   // The reply panel on the right: the message and its replies, and a box.
@@ -538,6 +540,26 @@ Work.importWord = async files => {
   else toast(`Imported ${made.length} document(s) as task threads`);
 };
 
+// Word documents → messages in the open thread (one each), formatting kept.
+Work.importInto = async files => {
+  const w = Work.current; if (!w) return;
+  files = [...files].filter(f => /\.docx?$/i.test(f.name));
+  if (!files.length) return toast('Pick Word documents (.docx)', true);
+  const fd = new FormData(); files.forEach(f => fd.append('file', f, f.name));
+  toast(`Adding ${files.length} document(s) to the thread…`);
+  const r = await fetch(`/api/work/${w.id}/import`, { method: 'POST', body: fd }).then(x => x.json()).catch(err => ({ problems: [err.message] }));
+  const n = r.posts?.length || 0;
+  if (n && Work.current?.id === w.id) { Work.current = await api('GET', '/api/work/' + w.id); Work.render(true); }
+  if (n) Work.loadList();
+  if (r.problems?.length) toast(`${n ? `Added ${n}. ` : ''}${r.problems.join(' · ')}`, true);
+  else toast(`📄 Added ${n} document${n > 1 ? 's' : ''} to the thread`);
+};
+Work.pickInto = () => {
+  const inp = Object.assign(document.createElement('input'), { type: 'file', multiple: true, accept: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  inp.onchange = () => Work.importInto(inp.files);
+  inp.click();
+};
+
 // ---- events ----
 $('#workNew').onclick = () => Work.create();
 $('#workImport').onclick = () => $('#workImportFile').click();
@@ -628,6 +650,8 @@ page.addEventListener('click', async e => {
   if (act === 'more') {
     const r = e.target.closest('[data-tact]').getBoundingClientRect();
     return setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
+      ['📄 Add a Word document to this thread…', () => Work.pickInto()],
+      '-',
       ['⬇ Export as Markdown (.md, screenshots beside it)', async () => {
         try { const r = await api('POST', `/api/work/${w.id}/markdown`); toast(`Saved ${r.path.split(/[\\/]/).pop()}${r.files ? ` and ${r.files} file(s)` : ''} in the work-items folder`); }
         catch (err) { toast(err.message, true); }
@@ -664,6 +688,7 @@ page.addEventListener('click', async e => {
     if (pact === 'thread') return Work.openPanel(p.parent || p.id);
     if (pact === 'save') return Work.save(p);
     if (pact === 'edit') return Work.editPost(p.id);
+    if (pact === 'expand' || pact === 'fold') { (Work.expanded ||= new Set())[pact === 'expand' ? 'add' : 'delete'](p.id); Work.render(); return pact === 'fold' && Work.flash(p.id); }
     if (pact === 'cancel') return Work.render();
     if (pact === 'save-edit') {
       const html = slackBlocks(sanitizeHTML(postEl.querySelector('.tbody').innerHTML));
@@ -760,7 +785,8 @@ page.addEventListener('dragleave', e => { if (e.target === page) page.classList.
 page.addEventListener('drop', async e => {
   if (!e.dataTransfer.files.length || !Work.current) return;
   e.preventDefault(); page.classList.remove('dragover');
-  const all = [...e.dataTransfer.files], mails = all.filter(f => /\.(msg|eml)$/i.test(f.name)), rest = all.filter(f => !mails.includes(f));
+  const all = [...e.dataTransfer.files], mails = all.filter(f => /\.(msg|eml)$/i.test(f.name)), docs = all.filter(f => /\.docx$/i.test(f.name)), rest = all.filter(f => !mails.includes(f) && !docs.includes(f));
+  if (docs.length) await Work.importInto(docs); // Word documents: their contents, formatting kept
   if (mails.length) { // emails dragged from Outlook: one message each (subject, sender, text, attachments)
     const fd = new FormData(); mails.forEach(f => fd.append('file', f, f.name));
     toast(`Adding ${mails.length} email(s)…`);

@@ -430,12 +430,37 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ---------- environment switch (beside the search) ----------
+// All · UAT · PROD: shows only that environment's connections, bookmarks and
+// databases everywhere in WorkHub (UAT also covers UAT1, UAT2…). Remembered.
+const EnvSwitch = {
+  v: (() => { try { return localStorage.getItem('envSwitch') || ''; } catch { return ''; } })(),
+  ok(e) { return !this.v || (e.env || '').toUpperCase().startsWith(this.v); },
+  paint() {
+    $$('#envSwitch [data-envsw]').forEach(b => b.classList.toggle('active', b.dataset.envsw === this.v));
+    $('#envSwitch').dataset.on = this.v;
+  },
+  set(v) {
+    this.v = v; this.paint();
+    try { localStorage.setItem('envSwitch', v); } catch { /* ignore */ }
+    if (S.allEntries) redrawAll();
+    toast(v ? `Showing only ${v} — everywhere in WorkHub (All shows everything again)` : 'Showing every environment');
+  },
+};
+EnvSwitch.paint();
+$('#envSwitch').addEventListener('click', e => { const b = e.target.closest('[data-envsw]'); if (b && b.dataset.envsw !== EnvSwitch.v) EnvSwitch.set(b.dataset.envsw); });
+
 // ---------- sync ----------
 async function refreshAll() {
   const [entries, clips, settings] = await Promise.all([api('GET', '/api/entries'), api('GET', '/api/clips'), api('GET', '/api/settings')]);
   S.allEntries = entries || [];
-  S.entries = S.allEntries.filter(e => !e.hidden); // hidden = removed by the user, kept so it isn't re-imported
   S.clips = clips || []; S.settings = settings;
+  await redrawAll();
+}
+// Draws every list again from S.allEntries, through the environment switch.
+async function redrawAll() {
+  // hidden = removed by the user, kept so it isn't re-imported
+  S.entries = S.allEntries.filter(e => !e.hidden && EnvSwitch.ok(e));
   // Each part draws on its own so one failure can't blank the rest of the app.
   for (const [name, fn] of [['settings', renderSettings], ['filters', renderFilters], ['dashboard', renderBoard], ['captured', renderClips],
     ['outlook', () => Mail.render()], ['tree', () => Tree.render()], ['groups', () => Groups.render()], ['tabs', () => renderAllTabs()], ['bookmarks', () => Bookmarks.render()], ['notes', () => Notes.renderLists()]]) {
@@ -461,6 +486,10 @@ function renderSettings() {
   document.title = `WorkHub — ${S.settings.workspace || 'Default'}`;
   if (window.whSetTitle && document.title !== window.lastTitle) { window.lastTitle = document.title; window.whSetTitle(document.title); }
   $('#watchToggle').checked = !!S.settings.watch;
+  const cap = $('#capBtn'), on = !!S.settings.watch;
+  cap.classList.toggle('on', on);
+  cap.innerHTML = on ? '<span class="capdot"></span>Capturing' : '⏸ Capture off';
+  cap.title = on ? 'WorkHub is watching the clipboard. Click to pause it — e.g. if copy and paste in Windows misbehaves; WorkHub keeps running.' : 'Clipboard capture is paused: nothing you copy is read. Click to start it again.';
   $('#captureAll').checked = !!S.settings.capture_all;
   $('#bmSync').checked = !S.settings.no_browser_sync;
   if (document.activeElement !== $('#captureProject')) $('#captureProject').value = S.settings.project || 'General';
@@ -475,6 +504,7 @@ $('#wsName').onclick = () => {
   const n = prompt('Workspace name (e.g. the client this laptop is for)', S.settings.workspace || '');
   if (n && n.trim()) saveSettings({ workspace: n.trim() });
 };
+$('#capBtn').onclick = () => $('#watchToggle').click(); // the same switch, always in reach at the top
 $('#watchToggle').onchange = e => saveSettings({ watch: e.target.checked }).then(() => toast(e.target.checked ? 'Watching clipboard' : 'Clipboard watch paused'));
 $('#captureAll').onchange = e => saveSettings({ capture_all: e.target.checked });
 $('#captureProject').onchange = e => saveSettings({ project: e.target.value.trim() || 'General' });
@@ -880,12 +910,14 @@ function renderStats(list) {
     ['PROD', list.filter(e => e.env === 'PROD').length, 'env:PROD'],
   ];
   const fix = S.entries.filter(e => problems(e).length).length;
+  $('#inboxCount').textContent = capturedToday || '';
+  const line = `<div class="stat-line">${counts.filter(([, v], i) => v || i < 2).map(([k, v, f]) => f ? `<a href="#" data-find="${f}">${v} ${k}</a>` : `<span>${v} ${k}</span>`).join(' · ')}</div>`;
+  if ($('#search').value.trim()) { $('#stats').innerHTML = list.length ? line : ''; return; } // searching: just what was found
   $('#stats').innerHTML = (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing (user, password, environment, service name) or a failed login — click to list them"><b>⚠ ${fix}</b><span>Need attention</span></button>` : '')
     + ((n => n ? `<button class="stat inbox" data-find="is:unsorted" title="New captures you haven't looked at yet — each with a suggested folder"><b>📥 ${n}</b><span>New to sort</span></button>` : '')(S.entries.filter(e => e.unsorted).length))
     + (capturedToday ? `<button class="stat" data-view-go="inbox" title="Open Captured"><b>${capturedToday}</b><span>Captured today</span></button>` : '')
     + `<button class="stat act" id="retestBtn" title="Try every connection shown (SSH, SFTP/FTP, databases) with its saved login and update ✓ / ✗"><b>↻</b><span>Re-test ${list.filter(isConn).length} connections</span></button>`
-    + `<div class="stat-line">${counts.map(([k, v, f]) => f ? `<a href="#" data-find="${f}">${v} ${k}</a>` : `<span>${v} ${k}</span>`).join(' · ')}</div>`;
-  $('#inboxCount').textContent = capturedToday || '';
+    + line;
 }
 
 // ---------- organising ----------
@@ -902,8 +934,10 @@ function suggestPlace(e) {
 }
 function unsortedRow(e) {
   const sg = suggestPlace(e);
-  return `<span class="inboxrow">📥 New capture${sg ? ` — belongs in <b>${esc(sg.project)}</b>${sg.env ? ' · ' + esc(sg.env) : ''}?` : ''}
-    <button class="icon primary" data-act="accept" data-id="${e.id}">${sg ? '✓ Move there' : '✓ Looks right'}</button>${sg ? `<button class="icon" data-act="keep" data-id="${e.id}">Keep in ${esc(e.project)}</button>` : ''}<button class="icon" data-act="edit" data-id="${e.id}">Edit…</button></span>`;
+  return `<span class="inboxrow"><span class="newpill">NEW</span>${sg ? `<span>belongs in <b>${esc(sg.project)}</b>${sg.env ? ' · ' + esc(sg.env) : ''}?</span>` : ''}
+    ${sg ? `<button class="icon primary" data-act="accept" data-id="${e.id}" title="Move it there">✓ Move</button><button class="icon" data-act="keep" data-id="${e.id}" title="Keep in ${esc(e.project)}">Keep</button>` : ''}${isConn(e)
+      ? `<button class="icon ${sg ? '' : 'primary'}" data-act="trytest" data-id="${e.id}" title="Try connecting once with the saved login: a green dot if it works, ⚠ Needs attention if it doesn't">🔌 Test</button>`
+      : sg ? '' : `<button class="icon primary" data-act="accept" data-id="${e.id}" title="It is right where it is: stop marking it new">✓ OK</button>`}</span>`;
 }
 async function sortEntry(e, accept) {
   const sg = accept && suggestPlace(e);
@@ -1065,31 +1099,32 @@ function threadResultsHTML(list) {
       ${snippet(w) ? `<div class="muted tiny tsnip">${maskedText(snippet(w))}</div>` : ''}</div>`).join('')}</div></div>`;
 }
 
-// The rest of "search everything": notes, Folders files and captured text.
+// The rest of "search everything": notes, Folders files, files in threads and captured text.
 // Notes and files come from the server, so they arrive a moment later and the
 // board is drawn again.
 const Everything = {
-  key: null, notes: [], files: [], timer: null,
+  key: null, notes: [], files: [], tfiles: [], timer: null,
   words(q) { const { words, filters } = parseQuery(q.trim().toLowerCase()); return filters.length ? [] : words.filter(w => !w.neg).map(w => w.v); },
   refresh(q) {
     const ws = this.words(q), key = ws.join(' ');
     if (key === this.key) return;
     this.key = key; clearTimeout(this.timer);
-    this.notes = []; this.files = [];
+    this.notes = []; this.files = []; this.tfiles = [];
     if (!ws.length) return;
     this.timer = setTimeout(async () => {
-      const [notes, files] = await Promise.all([api('GET', '/api/notes').catch(() => []), api('GET', '/api/ref/search?full=1&q=' + encodeURIComponent(key)).catch(() => [])]);
+      const [notes, files, tfiles] = await Promise.all([api('GET', '/api/notes').catch(() => []), api('GET', '/api/ref/search?full=1&q=' + encodeURIComponent(key)).catch(() => []),
+        api('GET', '/api/work/files?q=' + encodeURIComponent(key)).catch(() => [])]);
       if (this.key !== key) return; // typed on meanwhile
       this.notes = (notes || []).filter(n => ws.every(w => `${n.title || ''} ${n.body || ''}`.toLowerCase().includes(w)));
-      this.files = files || [];
-      if ((this.notes.length || this.files.length) && $('#view-dashboard').classList.contains('active')) renderBoard();
+      this.files = files || []; this.tfiles = tfiles || [];
+      if ((this.notes.length || this.files.length || this.tfiles.length) && $('#view-dashboard').classList.contains('active')) renderBoard();
     }, 200);
   },
   clips(q) {
     const ws = this.words(q);
     return ws.length ? S.clips.filter(c => ws.every(w => (c.text || '').toLowerCase().includes(w))).slice(0, 12) : [];
   },
-  count(q) { this.refresh(q); return this.notes.length + this.files.length + this.clips(q).length; },
+  count(q) { this.refresh(q); return this.notes.length + this.files.length + this.tfiles.length + this.clips(q).length; },
   // A few words around the first match, passwords dotted out.
   snip(text, ws) {
     const t = (text || '').replace(/\s+/g, ' '), low = t.toLowerCase(), i = Math.max(0, ...ws.map(w => low.indexOf(w)).filter(i => i >= 0).slice(0, 1));
@@ -1101,6 +1136,9 @@ const Everything = {
     return group('📝', 'Notes', this.notes.map(n => `<div class="card tcard" data-gonote="${esc(n.id)}" title="Open the note"><div class="card-head"><b>${esc(n.title || 'Untitled')}</b><span class="spacer"></span><span class="muted tiny">${fmtTime(n.updated)}</span></div>
         <div class="muted tiny tsnip">${maskedText(this.snip(n.body, ws))}</div></div>`))
       + group('📁', 'Folders', this.files.map(f => `<div class="card tcard" data-goref="${esc(f.path)}" title="Show in Folders"><div class="card-head"><b>${esc(f.path.split('/').pop())}</b><span class="spacer"></span><span class="muted tiny">${esc(f.path.split('/').slice(0, -1).join(' / '))}</span></div>
+        ${f.snip ? `<div class="muted tiny tsnip">${maskedText(f.snip)}</div>` : ''}</div>`))
+      + group('📎', 'Files in threads', this.tfiles.map(f => `<div class="card tcard" data-thread="${esc(f.thread)}" data-tpost="${esc(f.post || '')}" title="Open the thread at this file"><div class="card-head"><b>${f.image ? '🖼' : '📄'} ${esc(f.name)}</b><span class="spacer"></span><a class="icon btnlike tiny" href="/api/props/files/${esc(f.id)}?download=1" data-fdl title="Download">⬇</a></div>
+        <div class="muted tiny">🧵 ${esc(f.thread_title)}${f.archived ? ' (archived)' : ''} · ${fmtSize(f.size)} · ${esc(fmtTime(f.added))}</div>
         ${f.snip ? `<div class="muted tiny tsnip">${maskedText(f.snip)}</div>` : ''}</div>`))
       + group('📋', 'Captured text', clips.map(c => `<div class="card tcard" data-goclip="${esc(c.id)}" title="Show on the Captured page"><div class="card-head"><b>${esc(fmtTime(c.created))}</b>${c.from ? `<span class="muted tiny">from ${esc(c.from)}</span>` : ''}<span class="spacer"></span><span class="muted tiny">${(c.entry_ids || []).length} item(s)</span></div>
         <div class="muted tiny tsnip">${maskedText(this.snip(c.text, ws))}</div></div>`));
@@ -1119,10 +1157,12 @@ const RecentCaps = {
     if (!clips.length) return '';
     const kind = e => this.untyped(e) ? 'no type yet' : canDB(e) ? `SQL · ${dbKindOf(e)}` : canSSH(e) && e.protocol ? 'SSH' : canFiles(e) ? 'Files' : /^https?:/i.test(e.url || '') ? 'Link' : e.host ? 'Host (no type)' : 'Login';
     const rows = clips.map(c => {
-      const es = (c.entry_ids || []).map(byId).filter(Boolean);
+      const es = (c.entry_ids || []).map(byId).filter(e => e && EnvSwitch.ok(e));
+      if (EnvSwitch.v && !es.length) return ''; // nothing of this environment in it
       const first = (c.text || '').trim().split('\n')[0];
-      const chips = es.map(e => `<span class="rc-item"><span class="chip" data-recent="${e.id}" title="Show details">${dot(e)} ${esc(ruleName(e).replace(/<[^>]*>/g, '') || e.host || e.url || e.username)} <span class="muted tiny">${esc(kind(e))}</span></span>${this.untyped(e)
-        ? `<span class="muted tiny">Is it</span>${[['oracle', 'Oracle'], ['postgres', 'Postgres'], ['ssh', 'SSH']].map(([v, t]) => `<button class="icon ghost" data-settype="${v}" data-id="${e.id}">${t}</button>`).join('')}<span class="muted tiny">?</span>` : ''}</span>`).join('');
+      const chips = es.slice(0, 3).map(e => `<span class="rc-item"><span class="chip" data-recent="${e.id}" title="${esc((e.host || e.url || e.username || '') + ' — ' + kind(e) + '. Show details')}">${dot(e)} ${esc(ruleName(e).replace(/<[^>]*>/g, '') || e.host || e.url || e.username)}</span>${this.untyped(e)
+        ? `<select class="rc-type" data-settype-sel data-id="${e.id}" title="What kind of server is it?"><option value="">type?</option><option value="oracle">Oracle</option><option value="postgres">Postgres</option><option value="ssh">SSH</option></select>` : `<span class="muted tiny">${esc(kind(e))}</span>`}</span>`).join('')
+        + (es.length > 3 ? `<span class="muted tiny rc-more" data-goclip="${esc(c.id)}" title="Show all on the Captured page">+${es.length - 3} more</span>` : '');
       return `<div class="rc-row"><span class="muted tiny rc-when">${esc(fmtTime(c.created))}</span><span class="rc-text" data-goclip="${esc(c.id)}" title="Show on the Captured page">${maskedText(first.length > 90 ? first.slice(0, 90) + '…' : first)}</span>
         <span class="rc-chips">${chips || '<span class="muted tiny">nothing recognised</span>'}</span></div>`;
     }).join('');
@@ -1194,7 +1234,8 @@ function whyMatched(es) {
 function warnChip(e) {
   const p = problems(e);
   // a missing password alone is common (keys, SSO): shown quietly
-  return p.length ? `<button class="warnchip${p.length === 1 && p[0][0] === 'password' ? ' soft' : ''}" data-act="edit" data-id="${e.id}" title="${esc(p.map(x => '• ' + x[1]).join('\n'))}\nClick to fill in${p.some(x => x[0] === 'password') ? ' (or tick “Logs in with a key / SSO”)' : ''}">⚠ ${p.length === 1 ? esc(p[0][1]) : p.length + ' to fix'}</button>` : '';
+  const failing = p.some(x => x[0] === 'failing'); // the last login failed: say so plainly
+  return p.length ? `<button class="warnchip${failing ? ' fail' : p.length === 1 && p[0][0] === 'password' ? ' soft' : ''}" data-act="edit" data-id="${e.id}" title="${esc(p.map(x => '• ' + x[1]).join('\n'))}\nClick to fill in${p.some(x => x[0] === 'password') ? ' (or tick “Logs in with a key / SSO”)' : ''}">⚠ ${failing ? 'Needs attention' : p.length === 1 ? esc(p[0][1]) : p.length + ' to fix'}</button>` : '';
 }
 
 // The name on a card without the host (the card's title) or the user (its own
@@ -1235,6 +1276,14 @@ function svcHTML(e) {
   return `<div class="svc" data-detail="${e.id}" title="Click for full details">${rows.map(([k, v]) => k ? `<span class="k">${k}</span><span class="v">${v}</span>` : `<div class="svc-line">${v}</div>`).join('')}<div class="svc-actions">${acts}</div></div>`;
 }
 
+// Recently captured: the "type?" menu on a host saved without a type.
+$('#board').addEventListener('change', async ev => {
+  const sel = ev.target.closest('[data-settype-sel]'); if (!sel?.value) return;
+  const label = sel.selectedOptions[0].textContent;
+  try { await api('POST', '/api/entries/bulk', { ids: [sel.dataset.id], op: 'type', value: sel.value }); toast(`Saved as ${label}` + (sel.value === 'ssh' ? '' : ' — it is now in SQL')); poll(); }
+  catch (err) { toast(err.message, true); sel.value = ''; }
+});
+
 // Table columns: drag a header edge to resize (shared by every group's table).
 const TABLE_COLS = [['Env', 95], ['Name', 170], ['Host', 190], ['Port', 64], ['Type', 80], ['URL', 280], ['User', 130], ['Password', 130], ['Captured', 170], ['', 110]];
 function tableHTML(items) {
@@ -1268,7 +1317,8 @@ $('#board').addEventListener('contextmenu', ev => {
 });
 $('#board').addEventListener('click', async ev => {
   const jo = ev.target.closest('[data-jopen]'); if (jo) return openExternal(jo.dataset.jopen);
-  const th = !ev.target.closest('[data-eye]') && ev.target.closest('[data-thread]'); if (th) return Work.open(th.dataset.thread);
+  if (ev.target.closest('[data-fdl]')) return; // download a thread file: the link does it
+  const th = !ev.target.closest('[data-eye]') && ev.target.closest('[data-thread]'); if (th) return Work.open(th.dataset.thread, th.dataset.tpost || undefined);
   const gn = ev.target.closest('[data-gonote]'); if (gn) { show('notes'); return Notes.open('note:' + gn.dataset.gonote); }
   const gr = ev.target.closest('[data-goref]');
   if (gr) { const p = gr.dataset.goref; for (let x = Ref.parent(p); x; x = Ref.parent(x)) Ref.open.add(x); Ref.sel = p; Ref.persist(); return show('ref'); }
@@ -1302,6 +1352,13 @@ $('#board').addEventListener('click', async ev => {
       case 'open': return openURL(e);
       case 'edit': return openEntryDialog(e);
       case 'accept': case 'keep': await sortEntry(e, b.dataset.act === 'accept'); return poll();
+      case 'trytest': { // a new capture: no longer new, then one login with its saved details
+        b.disabled = true; b.textContent = '🔌 Testing…';
+        await sortEntry(e, false);
+        const r = await api('POST', '/api/test', entryInput(e)).catch(err => ({ ok: false, message: err.message }));
+        await poll();
+        return toast(r.ok ? `✓ Connected: ${r.message}` : `Couldn't connect — ${r.message}. ⚠ Needs attention on the card opens it to fix.`, !r.ok);
+      }
       case 'del': return deleteEntries([e]);
       case 'more': { const r = b.getBoundingClientRect(); return setTimeout(() => Tree.menu({ clientX: r.left, clientY: r.bottom }, { dataset: { id: e.id } }, 'board')); }
       case 'fav': await api('POST', '/api/entries', { ...entryInput(e), favorite: !e.favorite }); return poll();
@@ -2952,7 +3009,8 @@ function openExternal(u) {
 // signed in. Also fixes links in posts saved by earlier versions.
 document.addEventListener('click', ev => {
   const a = ev.target.closest('a[href*="/api/props/files/"]');
-  if (!a || ev.button !== 0 || a.closest('[contenteditable="true"]')) return;
+  // a.download: the link made below (clicking it must not come back here)
+  if (!a || a.hasAttribute('download') || ev.button !== 0 || a.closest('[contenteditable="true"]')) return;
   const u = new URL(a.href, location.href);
   if (u.origin !== location.origin) return;
   ev.preventDefault(); ev.stopPropagation();

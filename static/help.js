@@ -100,6 +100,27 @@ const HELP_TOPICS = [
   { t: 'Add an Outlook email to a thread', k: 'email outlook msg eml drag drop mail message add', v: 'tasks', s: [
     'Drag the email from Outlook onto the thread (or drop a saved .msg / .eml file).',
     'It becomes one message with the subject, sender, recipients, date and text; its attachments are added too.'] },
+  { t: 'Find a file attached to a thread', k: 'find search file files attachment attached thread screenshot document log download', v: 'tasks', s: [
+    'Type part of its name — or words inside it (text files and Word documents) — in the search at the top.',
+    '📎 Files in threads lists them with their thread; click one to open the thread at that message, ⬇ to download it.'] },
+  { t: 'Stop or pause clipboard capture', k: 'stop pause capture clipboard watch copy paste interfere interfering windows resume start off', v: '', s: [
+    'Click “● Capturing” at the top (beside the search) — it turns into “⏸ Capture off”. Click again to start capturing.',
+    'While paused WorkHub doesn\'t touch the clipboard at all; what you copy meanwhile is not captured later. WorkHub (tunnels, terminals…) keeps running.',
+    'With WorkHub closed to the tray: right-click its icon → Pause / Resume clipboard capture.'] },
+  { t: 'Test a new capture (instead of “Looks right”)', k: 'looks right ok test new capture connect needs attention green dot check', v: 'dashboard', s: [
+    'New connections on the Dashboard are marked NEW with a 🔌 Test button.',
+    'Test logs in once with the saved details: a green dot means it worked; ⚠ Needs attention (red) means it didn\'t — click it to fix the user, password or host.',
+    'Web links have ✓ OK instead: it just stops marking them new.'] },
+  { t: 'Show only UAT or only PROD', k: 'uat prod production environment switch filter only hide show env all', v: '', s: [
+    'Use the All · UAT · PROD switch beside the search at the top.',
+    'UAT or PROD shows only that environment\'s connections, databases and bookmarks on every page (UAT also covers UAT1, UAT2…); entries without an environment are hidden too.',
+    'All shows everything again. The choice is remembered when WorkHub restarts.'] },
+  { t: 'Add a Word document to a thread', k: 'word docx document import contents paste into thread add format formatting keep', v: 'tasks', s: [
+    'Open the thread and drop the .docx on it, or ⋯ (top right) → 📄 Add a Word document to this thread….',
+    'Its contents become one message with the formatting kept: headings, bold / italic / underline, highlights, numbered and bullet lists (nested), links, tables (merged cells too), code and pictures. Long documents show their start — “Show the whole document” opens them out.',
+    'Colours and fonts are not copied (messages use WorkHub’s own look); equations and embedded files show as [equation] / [embedded …] — the attached .docx has them.',
+    'The document itself is attached to the message too. Older .doc files: save them as .docx in Word first.',
+    'To make a new thread from a document instead, use ⤓ Import Word… above the thread list.'] },
   { t: 'Which thread gets my captures', k: 'thread capture default general where clipboard copied goes capture here', v: 'tasks', s: [
     'Copied text that Watch clipboard captures goes to the General thread (marked default on the Tasks page).',
     'To send captures to another thread, open it and press 📥 Capture here; press it again to go back to General.',

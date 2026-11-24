@@ -370,3 +370,47 @@ func TestMoveCopyPost(t *testing.T) {
 		t.Fatal("moving into the same thread should be refused")
 	}
 }
+
+// A Word document dropped on an open thread becomes one message in it, its
+// formatting kept and the document attached.
+func TestImportDocxIntoThread(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	const W = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`
+	doc := `<?xml version="1.0"?><w:document ` + W + `><w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Prepare</w:t></w:r></w:p>
+<w:p><w:r><w:t xml:space="preserve">Run the </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>EOD batch</w:t></w:r></w:p>
+<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>stop app</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Deploy</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Server</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Owner</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+</w:body></w:document>`
+	var buf bytes.Buffer
+	z := zip.NewWriter(&buf)
+	f, _ := z.Create("word/document.xml")
+	f.Write([]byte(doc))
+	z.Close()
+	w := s.SaveWorkItem(WorkItem{Title: "CHG-9 release"})
+	s.AddPost(w.ID, Post{Kind: "note", HTML: "<p>before</p>"})
+	link := func(a Attachment) string { return "http://x/api/props/files/" + a.ID }
+	p, err := s.ImportDocxInto(w.ID, `C:\docs\Release plan.docx`, buf.Bytes(), link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetWorkItem(w.ID)
+	if len(got.Posts) != 2 || p.From != "Word" {
+		t.Fatalf("want the document as one added message, got %d posts, from %q", len(got.Posts), p.From)
+	}
+	for _, want := range []string{"<p>📄 <b>Release plan</b></p>", "<h1>Prepare</h1>", "<b>EOD batch</b>", "<ul><li>stop app</li></ul>", "<h1>Deploy</h1>", "<table><tr><td>Server</td><td>Owner</td></tr></table>", `>Release plan.docx</a>`} {
+		if !strings.Contains(p.HTML, want) {
+			t.Errorf("missing %s in %s", want, p.HTML)
+		}
+	}
+	if strings.Index(p.HTML, "Prepare") > strings.Index(p.HTML, "Deploy") {
+		t.Error("document order lost")
+	}
+	if _, err := s.ImportDocxInto(w.ID, "old.doc", []byte("not a zip"), link); err == nil {
+		t.Error("a .doc file should be refused with a hint")
+	}
+	if _, err := s.ImportDocxInto("nope", "x.docx", buf.Bytes(), link); err == nil {
+		t.Error("unknown thread accepted")
+	}
+}

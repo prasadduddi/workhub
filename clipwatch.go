@@ -89,8 +89,16 @@ func (a *App) watchClipboard() {
 	var pending uint32
 	var changedAt time.Time
 	tries, ticks := 0, 0
+	paused := false
 	for range time.Tick(clipTick) {
-		if !a.store.Settings().Watch {
+		if !a.store.Settings().Watch { // paused: the clipboard isn't touched at all
+			paused = true
+			continue
+		}
+		if paused { // resumed: what was copied while paused is left alone
+			paused, pending = false, 0
+			seen = clipboardSeq()
+			last, _ = readClipboard()
 			continue
 		}
 		seq := clipboardSeq()

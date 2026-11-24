@@ -149,6 +149,81 @@ with sync_playwright() as p:
         expect("Moved from" in moved["via"], "no 'Moved from' label")
         ev(f"api('POST', '/api/work/{dst}/posts/{moved['id']}/move', {{ to: '{src}' }})")
 
+    @check("add a Word document to a thread, formatting kept")
+    def _():
+        import io, zipfile
+        W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+        doc = (f'<?xml version="1.0"?><w:document {W}><w:body>'
+               '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Cutover steps</w:t></w:r></w:p>'
+               '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Stop</w:t></w:r><w:r><w:t xml:space="preserve"> the batch</w:t></w:r></w:p>'
+               '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>srv-01</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>ops</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+               '</w:body></w:document>')
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("word/document.xml", doc)
+        ev("show('tasks')")
+        ev("Work.open(Work.list.find(w => w.title.startsWith('PAY-205')).id)"); pg.wait_for_timeout(500)
+        n = ev("Work.current.posts.length")
+        pg.click("#taskMain [data-tact=more]")
+        with pg.expect_file_chooser() as fc:
+            pg.click("#ctxMenu button:has-text('Add a Word document to this thread')")
+        fc.value.set_files(files=[{"name": "Cutover plan.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "buffer": buf.getvalue()}])
+        pg.wait_for_function(f"Work.current.posts.length === {n + 1}", timeout=10000)
+        last = pg.locator("#tposts .tmsg").last
+        expect(last.locator("h1", has_text="Cutover steps").count() == 1, "heading lost")
+        expect(last.locator("b", has_text="Stop").count() == 1, "bold lost")
+        expect(last.locator("table td", has_text="srv-01").count() == 1, "table lost")
+        expect(last.locator("a", has_text="Cutover plan.docx").count() == 1, "document not attached")
+
+    @check("search lists files attached to threads")
+    def _():
+        ev("show('dashboard')")
+        ev("() => { const s = document.querySelector('#search'); s.value = 'cert-check'; s.dispatchEvent(new Event('input', { bubbles: true })); }")
+        pg.wait_for_selector("#board .card.tcard[data-tpost]", timeout=10000)
+        expect("cert-check.png" in pg.inner_text("#board"), "file not listed")
+        pg.click("#board .card.tcard[data-tpost]")
+        pg.wait_for_function("document.querySelector('#view-tasks').classList.contains('active') && Work.current?.title.startsWith('OPS-77')", timeout=10000)
+        ev("() => { const s = document.querySelector('#search'); s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })); }")
+
+    @check("UAT / PROD switch filters everywhere")
+    def _():
+        total = ev("S.entries.length")
+        pg.click("#envSwitch [data-envsw=PROD]")
+        pg.wait_for_timeout(300)
+        envs = ev("[...new Set(S.entries.map(e => e.env))]")
+        expect(envs == ["PROD"] and ev("S.entries.length") < total, f"PROD only expected, got {envs}")
+        pg.click("#envSwitch [data-envsw=UAT]")
+        pg.wait_for_timeout(300)
+        expect(all(e.upper().startswith("UAT") for e in ev("S.entries.map(e => e.env)")), "UAT only expected")
+        pg.click("#envSwitch [data-envsw='']")
+        pg.wait_for_timeout(300)
+        expect(ev("S.entries.length") == total, "All should show everything again")
+
+    @check("capture button at the top pauses and resumes clipboard capture")
+    def _():
+        was = ev("!!S.settings.watch")
+        pg.click("#capBtn"); pg.wait_for_timeout(500)
+        expect(ev("!!S.settings.watch") == (not was), "capture not switched")
+        expect(("Capture off" in pg.inner_text("#capBtn")) == was, "button label wrong")
+        expect(ev("api('GET', '/api/settings').then(s => !!s.watch)") == (not was), "not saved")
+        pg.click("#capBtn"); pg.wait_for_timeout(500)
+        expect(ev("!!S.settings.watch") == was, "capture not switched back")
+
+    @check("new capture: Test tries the connection, failure shows Needs attention")
+    def _():
+        ev("show('dashboard')")
+        eid = ev("(S.entries.find(e => e.unsorted && canSSH(e) && !suggestPlace(e)) || {}).id")
+        expect(eid, "no new SSH capture in the demo")
+        btn = f"#board [data-act=trytest][data-id='{eid}']"
+        pg.wait_for_selector(btn, timeout=5000)
+        pg.click(btn)
+        pg.wait_for_function(f"(e => e && !e.unsorted && e.status)(byId('{eid}'))", timeout=30000)
+        st = ev(f"byId('{eid}').status")
+        if st == "fail":
+            pg.wait_for_selector(f"#board .warnchip.fail[data-id='{eid}']", timeout=5000)
+        else:
+            expect(st == "ok", f"status {st}")
+
     @check("SQL snippets save and insert (stand-in session)")
     def _():
         ev("""() => { const e = S.entries.find(x => canDB(x)); const t = { sid: 'smoke', entry: e, kind: 'oracle', info: { user: 'x' }, sql: '', out: '', result: null, objects: [] };

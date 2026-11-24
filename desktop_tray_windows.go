@@ -34,16 +34,17 @@ var (
 )
 
 const (
-	wmTray       = 0x8000 + 1 // WM_APP+1
-	nimAdd       = 0
-	nimModify    = 1
-	nimDelete    = 2
-	nifMessage   = 0x1
-	nifIcon      = 0x2
-	nifTip       = 0x4
-	nifInfo      = 0x10
-	trayMenuOpen = 1
-	trayMenuQuit = 2
+	wmTray          = 0x8000 + 1 // WM_APP+1
+	nimAdd          = 0
+	nimModify       = 1
+	nimDelete       = 2
+	nifMessage      = 0x1
+	nifIcon         = 0x2
+	nifTip          = 0x4
+	nifInfo         = 0x10
+	trayMenuOpen    = 1
+	trayMenuQuit    = 2
+	trayMenuCapture = 3
 )
 
 type notifyIconData struct {
@@ -131,6 +132,14 @@ func trayMenu(hwnd uintptr) {
 	open, _ := syscall.UTF16PtrFromString("Open WorkHub")
 	quit, _ := syscall.UTF16PtrFromString("Quit WorkHub")
 	pAppendMenu.Call(m, 0, trayMenuOpen, uintptr(unsafe.Pointer(open)))
+	if captureSwitch != nil { // pause capture when it gets in the way of copy and paste
+		label := "Pause clipboard capture"
+		if !captureSwitch(false) {
+			label = "Resume clipboard capture"
+		}
+		c, _ := syscall.UTF16PtrFromString(label)
+		pAppendMenu.Call(m, 0, trayMenuCapture, uintptr(unsafe.Pointer(c)))
+	}
 	pAppendMenu.Call(m, 0x800 /* MF_SEPARATOR */, 0, 0)
 	pAppendMenu.Call(m, 0, trayMenuQuit, uintptr(unsafe.Pointer(quit)))
 	var pt struct{ X, Y int32 }
@@ -141,6 +150,10 @@ func trayMenu(hwnd uintptr) {
 	switch cmd {
 	case trayMenuOpen:
 		trayShowWindow(hwnd)
+	case trayMenuCapture:
+		if captureSwitch != nil {
+			captureSwitch(true)
+		}
 	case trayMenuQuit:
 		trayQuitting = true
 		pPostMessage.Call(hwnd, 0x0010, 0, 0) // WM_CLOSE
