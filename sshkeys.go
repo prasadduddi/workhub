@@ -200,7 +200,7 @@ func readSSHConfig(path string) []sshHost {
 }
 
 func (a *App) handleSSHKeys(w http.ResponseWriter, r *http.Request) {
-	if sshOff { // ~/.ssh is not read at all
+	if sshKeysOff || sshOff { // ~/.ssh is not read at all
 		writeJSON(w, map[string]any{"off": true, "keys": []sshKeyInfo{}, "hosts": []sshHost{}})
 		return
 	}

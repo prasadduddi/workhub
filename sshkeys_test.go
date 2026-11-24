@@ -17,8 +17,8 @@ import (
 // The keys are listed with a GitHub-ready line, the config hosts are read —
 // and nothing in the folder changes.
 func TestSSHKeysReadOnly(t *testing.T) {
-	if sshOff {
-		t.Skip("SSH is switched off (sshswitch.go)")
+	if sshOff || sshKeysOff {
+		t.Skip("the SSH keys window is switched off (sshswitch.go)")
 	}
 	dir := t.TempDir()
 	pub, _, _ := ed25519.GenerateKey(rand.Reader)

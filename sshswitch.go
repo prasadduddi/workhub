@@ -1,12 +1,16 @@
 package main
 
-// The SSH switch. While sshOff is true WorkHub uses no SSH at all: no SSH
-// terminals, SFTP, tunnels, log tailing, remote compare or SSH logins in
-// tests; the SSH keys window doesn't read ~/.ssh; and git (fetch, pull
-// request reviews) runs with SSH blocked, so it never starts ssh, which would
-// read ~/.ssh and could add to ~/.ssh/known_hosts. FTP, databases, web links
-// and everything else work as before. The SSH code is all still here: set
-// sshOff to false to bring it back.
+// SSH switches.
+//
+// sshKeysOff (on): the 🔑 My SSH keys window doesn't read ~/.ssh — it is
+// the only part of WorkHub that looks there (WorkHub's own SSH uses only a
+// key file set on a connection, and keeps its known_hosts in its own data
+// folder). Its menu items are hidden. Set it to false to bring the window back.
+//
+// sshOff (off): when true WorkHub uses no SSH at all: no SSH terminals, SFTP,
+// tunnels, log tailing, remote compare or SSH logins in tests, and git
+// (fetch, pull request reviews) runs with SSH blocked, so it never starts ssh,
+// which would read ~/.ssh and could add to ~/.ssh/known_hosts.
 
 import (
 	"errors"
@@ -14,7 +18,10 @@ import (
 	"strings"
 )
 
-const sshOff = true
+const (
+	sshKeysOff = true
+	sshOff     = false
+)
 
 var errSSHOff = errors.New("SSH is switched off in this version of WorkHub")
 

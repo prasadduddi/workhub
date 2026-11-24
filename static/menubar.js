@@ -131,7 +131,7 @@ const Menubar = {
         ['🔍 Review a pull request…', () => Review.open()],
         ['📜 Tail a log', null, [...this.recentConns(canSSH).map(e => [this.connName(e), () => LogView.open(e)]), ...(this.recentConns(canSSH).length ? ['-'] : []), ['Choose a server in SSH…', go('terminal')]]],
         ['🌐 API requests', go('api')],
-        ['🔑 My SSH keys (copy for GitHub)…', () => SSHKeys.open()],
+        ...(S.sshKeysOff ? [] : [['🔑 My SSH keys (copy for GitHub)…', () => SSHKeys.open()]]),
         '-',
         ['↗ Programs for “Open in”…', () => External.settings()],
         ['📌 Install for easy access…', () => this.install()],

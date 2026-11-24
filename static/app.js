@@ -490,7 +490,8 @@ async function redrawAll() {
 
 async function poll() {
   try {
-    const { v, data_dir, app_version, restarted, ssh_off } = await api('GET', '/api/version');
+    const { v, data_dir, app_version, restarted, ssh_off, ssh_keys_off } = await api('GET', '/api/version');
+    if (S.sshKeysOff !== !!ssh_keys_off) { S.sshKeysOff = !!ssh_keys_off; $$('[data-tool=sshkeys]').forEach(b => { b.hidden = S.sshKeysOff; }); }
     if (S.sshOff !== !!ssh_off) { S.sshOff = !!ssh_off; sshOffNotes(); }
     if (restarted) S.restarted = true; // WorkHub restarted itself (update / install): reopen the last session
     $('#dataDir').textContent = 'Data: ' + data_dir; S.dataDir = data_dir;
@@ -2511,7 +2512,7 @@ const Tree = {
   render() {
     for (const host of $$('.tree-host')) {
       if (!host.firstChild) {
-        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷 Names</button><button data-tool="new" title="New connection">+ New</button>${host.dataset.mode === 'ssh' ? '<button data-tool="sshkeys" title="My SSH keys: copy your public key for GitHub (read-only — nothing in .ssh is changed)">🔑 Keys</button>' : ''}</div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
+        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="rules" title="Naming rules: name servers by what their host name contains (e.g. -BAT- → Batch)">🏷 Names</button><button data-tool="new" title="New connection">+ New</button>${host.dataset.mode === 'ssh' ? (S.sshKeysOff ? '' : '<button data-tool="sshkeys" title="My SSH keys: copy your public key for GitHub (read-only — nothing in .ssh is changed)">🔑 Keys</button>') : ''}</div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
         this.wire(host);
       }
       $('select[data-tool=groupby]', host).value = this.groupMode(host.dataset.mode);

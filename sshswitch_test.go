@@ -14,6 +14,23 @@ import (
 	"testing"
 )
 
+// The SSH keys window, switched off, never looks at ~/.ssh.
+func TestSSHKeysNotRead(t *testing.T) {
+	if !sshKeysOff && !sshOff {
+		t.Skip("the SSH keys window is on")
+	}
+	old := sshDirFunc
+	sshDirFunc = func() string { t.Fatal("~/.ssh was looked up"); return "" }
+	defer func() { sshDirFunc = old }()
+	rec := httptest.NewRecorder()
+	(&App{}).handleSSHKeys(rec, httptest.NewRequest("GET", "/api/sshkeys", nil))
+	var got map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &got)
+	if got["off"] != true || len(got["keys"].([]any)) != 0 || len(got["hosts"].([]any)) != 0 {
+		t.Fatalf("ssh keys: %s", rec.Body.String())
+	}
+}
+
 // While SSH is switched off nothing SSH happens and nothing in ~/.ssh is read.
 func TestSSHSwitchedOff(t *testing.T) {
 	if !sshOff {

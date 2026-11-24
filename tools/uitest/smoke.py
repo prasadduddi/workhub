@@ -67,6 +67,7 @@ with sync_playwright() as p:
     pg.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
     ev = pg.evaluate
     ssh_off = lambda: bool(ev("S.sshOff"))
+    ssh_keys_off = lambda: bool(ev("S.sshKeysOff"))
     close_dialogs = lambda: ev("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
     pg.wait_for_timeout(9000)  # What's new opens a few seconds after a first start
     BEFORE.append(lambda: (close_dialogs(), pg.keyboard.press("Escape")))
@@ -326,10 +327,23 @@ with sync_playwright() as p:
         r = ev(f"api('POST', '/api/import/conns/read', {{ name: 'x.reg', content: '{base64.b64encode(reg.encode()).decode()}' }})")
         expect(r["source"] == "putty" and r["items"][0]["host"] == "smoke-jump.example.com", f"read: {r}")
 
+    @check("SSH keys window switched off: ~/.ssh not read, menu items hidden")
+    def _():
+        if not ssh_keys_off():
+            raise Skip("the SSH keys window is on")
+        expect(ev("api('GET', '/api/sshkeys').then(r => r.off === true && !r.keys.length && !r.hosts.length)"), "~/.ssh was read")
+        ev("SSHKeys.open()"); pg.wait_for_timeout(300)
+        expect(not pg.is_visible("#sshKeysDlg"), "the keys window opened")
+        ev("show('terminal')"); pg.wait_for_timeout(200)
+        expect(not pg.is_visible("#view-terminal [data-tool=sshkeys]"), "🔑 Keys button shown")
+        pg.click("#menubar [data-menu=Tools]"); pg.wait_for_timeout(200)
+        expect("SSH keys" not in pg.inner_text("#ctxMenu"), "SSH keys in the Tools menu")
+        pg.keyboard.press("Escape")
+
     @check("SSH keys window lists keys (read-only)")
     def _():
-        if ssh_off():
-            raise Skip("SSH is switched off")
+        if ssh_keys_off():
+            raise Skip("the SSH keys window is switched off")
         ev("SSHKeys.open()"); pg.wait_for_timeout(600)
         expect(pg.is_visible("#sshKeysDlg"), "keys window")
         close_dialogs()

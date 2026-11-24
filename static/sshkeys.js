@@ -5,7 +5,7 @@
 
 const SSHKeys = {
   async open() {
-    if (S.sshOff) return toast('SSH is switched off in this version of WorkHub — ~/.ssh is not read.', true);
+    if (S.sshKeysOff) return toast('The SSH keys window is switched off in this version of WorkHub — ~/.ssh is not read.', true);
     let d = $('#sshKeysDlg');
     if (!d) {
       d = Object.assign(document.createElement('dialog'), { id: 'sshKeysDlg', className: 'sshkeysdlg' });
