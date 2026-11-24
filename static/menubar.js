@@ -104,7 +104,7 @@ const Menubar = {
         ['🔑 Change a password everywhere…', () => PwAll.open()],
         ['🏷 Naming rules…', () => openNameRules()],
         '-',
-        ['⚙ Settings…', () => Settings.open()],
+        ['⚙ Settings…\tCtrl+,', () => Settings.open()],
       ],
       View: [
         ['Go to', null, PAGE_GROUPS.flatMap(([g, ic, , , vs], i) => [...(i ? ['-'] : []), ...vs.map(v => [`${$('.view.active')?.id === 'view-' + v ? '● ' : ''}${ic} ${this.label(v)}`, go(v)])])],
@@ -131,6 +131,7 @@ const Menubar = {
         ['🔍 Review a pull request…', () => Review.open()],
         ['📜 Tail a log', null, [...this.recentConns(canSSH).map(e => [this.connName(e), () => LogView.open(e)]), ...(this.recentConns(canSSH).length ? ['-'] : []), ['Choose a server in SSH…', go('terminal')]]],
         ['🌐 API requests', go('api')],
+        ['📧 Outlook monitoring…', () => { show('inbox'); const m = $('#mailPanel'); m.open = true; m.scrollIntoView({ block: 'start' }); }],
         ...(S.sshKeysOff ? [] : [['🔑 My SSH keys (copy for GitHub)…', () => SSHKeys.open()]]),
         '-',
         ['↗ Programs for “Open in”…', () => External.settings()],

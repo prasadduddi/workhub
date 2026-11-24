@@ -5,6 +5,13 @@
 // servers added from any right-click menu. A Word copy is kept up to date.
 
 const STATUSES = [['todo', 'To do'], ['doing', 'In progress'], ['blocked', 'Blocked'], ['done', 'Done']];
+// A thread's badge in lists: "Active" for the one you're working in (captures go
+// there); none for "To do" — the usual state, so it's left out; the others as set.
+function threadStatusHTML(w) {
+  if (typeof Work !== 'undefined' && w.id === Work.active()) return '<span class="wstatus active" title="Active: you\'re working in this thread — copied text is added here"><span class="recdot"></span>Active</span>';
+  if (!w.status || w.status === 'todo') return '';
+  return `<span class="wstatus ${esc(w.status)}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>`;
+}
 
 // ---- keep pasted/saved HTML safe: only simple formatting survives ----
 const SAFE_TAGS = new Set(['P', 'DIV', 'BR', 'SPAN', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'H1', 'H2', 'H3', 'H4', 'UL', 'OL', 'LI',
@@ -99,7 +106,7 @@ const Work = {
     this.renderList();
     this.renderCapture();
     if ($('#search').value.trim() && $('#view-dashboard').classList.contains('active')) renderBoard(); // threads in the main search
-    else if ($('#view-dashboard').classList.contains('active') && typeof Today !== 'undefined') Today.render(); // 📅 Today's open threads
+    else if ($('#view-dashboard').classList.contains('active') && typeof Today !== 'undefined') Today.render(Home.on()); // 📅 Today's open threads
   },
   // The thread captures go to: the one with "Capture here", else General ("off" = none).
   active() {
@@ -113,7 +120,7 @@ const Work = {
     const archived = this.list.filter(w => w.archived).length;
     const items = [...this.list].sort((a, b) => (b.general && !b.archived) - (a.general && !a.archived) || new Date(b.updated) - new Date(a.updated)).filter(w => (this.showArchived || !w.archived || w.id === this.current?.id) && (!q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t))));
     const item = w => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''} ${w.unread ? 'unread' : ''}" data-work="${w.id}">
-      <div class="tli-top"><span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.general ? '<span class="tgen" title="Copied text goes here when no other thread has 📥 Capture here on">default</span>' : ''}${w.id === this.active() ? '<span class="tcap" title="Captures are being added here"><span class="recdot"></span>capturing</span>' : ''}<span class="spacer"></span>${w.unread ? `<span class="tunread" title="New since you last looked">${w.unread}</span>` : ''}<button class="tli-star ${w.starred ? 'on' : ''}" data-star="${w.id}" title="${w.starred ? 'Unstar' : 'Star'}">${w.starred ? '★' : '☆'}</button></div>
+      <div class="tli-top">${threadStatusHTML(w)}${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.general ? '<span class="tgen" title="Copied text goes here when no other thread has 📥 Capture here on">default</span>' : ''}<span class="spacer"></span>${w.unread ? `<span class="tunread" title="New since you last looked">${w.unread}</span>` : ''}<button class="tli-star ${w.starred ? 'on' : ''}" data-star="${w.id}" title="${w.starred ? 'Unstar' : 'Star'}">${w.starred ? '★' : '☆'}</button></div>
       <b>${esc(w.title)}</b><small>${w.jira && !w.title.toUpperCase().includes(w.jira) ? `◆ ${esc(w.jira)} · ` : ''}${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} message${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`;
     // Slack-like sections: ⭐ Starred, Threads, Done
     const sec = (title, list, key) => list.length ? `<div class="tsec" data-sec="${key}"><span>${title}</span><span class="muted tiny">${list.length}</span></div>${this.collapsed?.has(key) ? '' : list.map(item).join('')}` : '';

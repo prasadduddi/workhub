@@ -58,7 +58,7 @@ const HELP_TOPICS = [
     'Click “Saving to …” under the switch to choose the project new captures go to.',
     'Everything captured is listed on the Captured page; copying the same text twice is ignored.'] },
   { t: 'Protect WorkHub with a master password', k: 'master password protect encrypt data start startup secure copy stolen laptop access recovery code forgot', v: '', s: [
-    '☰ → ⚙ Settings → 🔐 Master password → type a password (8+ characters) twice and your email → Turn on.',
+    '⚙ Settings (top right) → 🔐 Master password → type a password (8+ characters) twice and your email → Turn on.',
     'The recovery code is emailed to you (through Outlook) — keep that email; it is the only way in if you forget the password.',
     'From then on WorkHub asks for the password the first time each new version starts (after an update); your data can\'t be opened without it, even from a copy of the data folder.',
     'Forgot it? On the start screen type the recovery code from the email instead, then choose a new password (a new code is emailed).',
@@ -71,22 +71,22 @@ const HELP_TOPICS = [
     'Type the new password. Every connection that logs in as that user is listed and ticked — untick any that keep the old one.',
     'Change password saves it (the old one stays in history) and, with the box ticked, tests them all.'] },
   { t: 'Install WorkHub for easy access', k: 'install start menu pin taskbar shortcut desktop startup start with windows where keep location downloads deleted', v: '', s: [
-    '☰ → ⚙ Settings → This PC → Install (tick Desktop shortcut / Start with Windows first if you want them).',
+    '⚙ Settings (top right) → This PC → Install (tick Desktop shortcut / Start with Windows first if you want them).',
     'WorkHub is copied to %LOCALAPPDATA%\\Programs\\WorkHub, added to the Start menu and restarted from there; the copy you ran (e.g. in Downloads) is deleted. Your data is not moved.',
     'Then type “WorkHub” in Start — right-click it → Pin to taskbar. The Desktop / Start with Windows switches can be changed any time in the same place.'] },
   { t: 'WorkHub in the tray (Desktop version)', k: 'tray close window minimise running background quit exit notification area icon clock', v: '', s: [
     'Closing the WorkHub window (✕) hides it to the tray, next to the clock — it keeps capturing, tunnels stay open, transfers finish.',
     'Click the WorkHub icon in the tray (or press Ctrl+Alt+W) to open it again.',
     'To stop WorkHub: right-click the tray icon → Quit WorkHub, or ☰ → Quit WorkHub.',
-    'Prefer ✕ to quit? ☰ → ⚙ Settings → switch off “Close button keeps WorkHub running”.'] },
+    'Prefer ✕ to quit? ⚙ Settings (top right) → switch off “Close button keeps WorkHub running”.'] },
   { t: 'Save and search SSH session text', k: 'session log logging history record save terminal output commands what did i run search putty log', v: 'terminal', s: [
-    '☰ → ⚙ Settings → switch on “Save SSH session text” (Logs… opens them).',
+    '⚙ Settings (top right) → switch on “Save SSH session text” (Logs… opens them).',
     'Sessions you open from then on are kept per server and day (plain text, in session-logs in your data folder); the terminal says when it is saving.',
     'Search all of them from the same window; click a result to open that day\'s log. Logs older than 180 days are removed.'] },
   { t: 'Back up to OneDrive', k: 'backup onedrive copy cloud restore new laptop lost safe', v: '', s: [
-    '☰ → ⚙ Settings → 🛟 Backups → Manage… → ☁ Use OneDrive (or Choose folder… for any folder).',
+    '⚙ Settings (top right) → 🛟 Backups → Manage… → ☁ Use OneDrive (or Choose folder… for any folder).',
     'Every automatic backup (at start-up and each morning, when something changed) is then copied there too; the newest 30 are kept.',
-    'To restore on a new laptop: unzip a backup into an empty folder and choose it with ☰ → ⚙ Settings → Data folder → Change…. With a master password it opens with that password; without one only on the same Windows login.'] },
+    'To restore on a new laptop: unzip a backup into an empty folder and choose it with ⚙ Settings (top right) → Data folder → Change…. With a master password it opens with that password; without one only on the same Windows login.'] },
   { t: 'Use threads like Slack', k: 'slack thread reply replies react reaction emoji save later remind reminder unread star switch ctrl+k code block bold italic draft edit', v: 'tasks', s: [
     'Reply: hover a message → 💬, or click “💬 N replies” — the conversation opens on the right (Esc closes).',
     'React: hover → ✅ 👀 👍 or 😀 for more; click a reaction again to remove it.',
@@ -97,6 +97,10 @@ const HELP_TOPICS = [
   { t: 'Quick note from anywhere', k: 'quick note ctrl+alt+n jot write anywhere', v: 'tasks', s: [
     'Press Ctrl+Alt+N (anywhere in Windows with the Desktop version, or in the WorkHub window).',
     'Pick the thread (the capture thread is chosen already), type, press Enter.'] },
+  { t: 'Watch Outlook for mail (email monitoring)', k: 'email mail outlook monitoring monitor watch senders inbox folder automatically incoming', v: 'inbox', s: [
+    'Tools → 📧 Outlook monitoring… (it is at the top of the Captured page, under 📚 Saved).',
+    'Switch on “Watch Outlook for mail from these senders”, add senders (bob@client.com, *@vendor.com or part of a name) and, if you like, a project to file into.',
+    'Choose the folder (Inbox or e.g. Inbox/Vendors) and how often to check; details in matching mails are captured like copied text.'] },
   { t: 'Add an Outlook email to a thread', k: 'email outlook msg eml drag drop mail message add', v: 'tasks', s: [
     'Drag the email from Outlook onto the thread (or drop a saved .msg / .eml file).',
     'It becomes one message with the subject, sender, recipients, date and text; its attachments are added too.'] },
@@ -190,7 +194,7 @@ const HELP_TOPICS = [
     'A database needs Type oracle/postgres and the service name / database in Edit; the port alone usually fills the type.'] },
   { t: 'Open in the real PuTTY, FileZilla, SQL Developer or DBeaver', k: 'open in putty filezilla dbeaver sql developer external program real', v: 'dashboard', s: [
     'Right-click a server (tree or search result) → Open in PuTTY / FileZilla / SQL Developer / DBeaver ↗, or use the buttons in Edit.',
-    'If a program isn’t found, ☰ → ⚙ Settings → Programs for “Open in” lets you point to it.'] },
+    'If a program isn’t found, ⚙ Settings (top right) → Programs for “Open in” lets you point to it.'] },
 
   // ---- Tasks ----
   { t: 'Start a task thread', k: 'task tasks thread threads new start create work item ticket change notes', v: 'tasks', s: [
@@ -263,19 +267,19 @@ const HELP_TOPICS = [
 
   // ---- WorkHub itself ----
   { t: 'Lock WorkHub with a PIN', k: 'lock pin security forgot reset idle', v: '', s: [
-    '☰ → ⚙ Settings → 🔒 PIN lock → Set up… to choose a PIN and the idle time (or right-click 🔒 at the bottom of the sidebar).',
+    '⚙ Settings (top right) → 🔒 PIN lock → Set up… to choose a PIN and the idle time (or right-click 🔒 at the bottom of the sidebar).',
     'Ctrl+L locks now. Forgot the PIN: use the recovery code, or have a code emailed to the address in your profile.'] },
   { t: 'Update WorkHub', k: 'update upgrade new version install check restart later next start', v: '', s: [
     '☰ → Check for updates & install (a green ⬆ button appears at the top when there is one).',
     'Update now tells you WorkHub will restart; choose ↻ Restart now, or Update at next start to keep working — the new version starts the next time you open WorkHub.',
     'Your data stays as it is. Until you restart, ☰ (and the ⬆ button) offer ↻ Restart to finish.'] },
   { t: 'Backups and data location', k: 'backup backups restore data location folder move', v: '', s: [
-    'WorkHub backs up at start-up and every morning (when something changed); ☰ → ⚙ Settings → Backups shows them.',
-    'To restore: quit, unzip a backup into an empty folder, start WorkHub and pick it with ☰ → ⚙ Settings → Data folder → Change…'] },
+    'WorkHub backs up at start-up and every morning (when something changed); ⚙ Settings (top right) → Backups shows them.',
+    'To restore: quit, unzip a backup into an empty folder, start WorkHub and pick it with ⚙ Settings (top right) → Data folder → Change…'] },
   { t: 'Menu on the left or at the top', k: 'menu sidebar top left layout move collapse icons room wide', v: '', s: [
-    'The ▭ button at the top of the menu (or ☰ → ⚙ Settings → Menu position) moves it into a bar across the top; again to move it back.',
+    'The ▭ button at the top of the menu (or ⚙ Settings (top right) → Menu position) moves it into a bar across the top; again to move it back.',
     'On SSH, FTP, SQL, Tasks and other tree pages the sidebar shrinks to icons; click that page’s icon again (or ») to bring it back to full size.'] },
-  { t: 'Light or dark theme', k: 'theme dark light mode colours', v: '', s: ['☰ → ⚙ Settings → Theme: follow Windows, light or dark.'] },
+  { t: 'Light or dark theme', k: 'theme dark light mode colours', v: '', s: ['⚙ Settings (top right) → Theme: follow Windows, light or dark.'] },
   { t: 'Keyboard shortcuts', k: 'keyboard shortcuts keys hotkey ctrl', v: '', s: [
     'Press ? (when not typing) for the full list of keyboard shortcuts.',
     'Ctrl+K search · Ctrl+J assistant · Ctrl+L lock · Ctrl+B sidebar · F1 help.',

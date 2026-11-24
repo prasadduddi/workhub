@@ -320,7 +320,7 @@ table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--
 #workSearch { width: 100%; margin-bottom: 4px; }
 #workList .li { white-space: normal; }
 .wstatus { font-size: 12px; font-weight: 700; border-radius: 4px; padding: 0 5px; color: #fff; background: var(--dr); }
-.wstatus.todo { background: #7a7f87; } .wstatus.doing { background: var(--dev); } .wstatus.blocked { background: var(--prod); } .wstatus.done { background: var(--ok); }
+.wstatus.todo { background: #7a7f87; } .wstatus.active { background: #1f9d55; display: inline-flex; align-items: center; gap: 4px; } .wstatus.active .recdot { background: #fff; width: 7px; height: 7px; margin-right: 0; } .wstatus.doing { background: var(--dev); } .wstatus.blocked { background: var(--prod); } .wstatus.done { background: var(--ok); }
 .workpage { display: flex; flex-direction: column; min-height: 0; overflow: auto; grid-column: 2; grid-row: 1; }
 .notes-layout > .editor-wrap { grid-column: 2; grid-row: 1; }
 .editor-wrap[hidden] { display: none; }
@@ -895,6 +895,8 @@ body.side-top main { min-height: 0; }
 .apptitle { font-size: 13px; font-weight: 600; color: var(--muted); }
 .gsearch { position: relative; display: flex; gap: 6px; align-items: center; width: min(720px, 62vw); }
 .envsw { flex: none; }
+.gearbtn { flex: none; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; min-height: 34px; color: var(--text); }
+.gearbtn:hover { color: var(--accent); }
 .capbtn { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px; font-weight: 600; white-space: nowrap; color: #8a6100; border-color: color-mix(in srgb, #c98a00 45%, var(--border)); background: color-mix(in srgb, #f5b100 12%, var(--panel)); }
 .capbtn.on { color: var(--text); border-color: var(--border); background: var(--panel); }
 .capdot { width: 8px; height: 8px; border-radius: 50%; background: #1f9d55; box-shadow: 0 0 0 0 rgba(31,157,85,.5); animation: cappulse 2s infinite; }
@@ -1469,3 +1471,13 @@ dialog.palettedlg { width: min(680px, 92vw); padding: 0; margin-top: 12vh; overf
 
 /* SSH switched off (sshswitch.go) */
 .sshoff-note { margin: 0 0 8px; padding: 6px 10px; border-radius: 8px; font-size: 13px; background: color-mix(in srgb, var(--prod) 10%, var(--panel)); border: 1px solid color-mix(in srgb, var(--prod) 35%, var(--border)); }
+
+/* Dashboard overview */
+.today-head { margin: 0 0 6px; font-size: 14px; }
+.today { margin-bottom: 12px; }
+.today .today-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; align-items: start; }
+.tc-host { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-pins { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.pinchip { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; padding: 3px 10px; border-radius: 14px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-all { display: flex; align-items: center; gap: 10px; margin: 6px 0 12px; }
+.home-all.top { margin-top: 0; }

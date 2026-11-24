@@ -527,6 +527,8 @@ $('#wsName').onclick = () => {
   if (n && n.trim()) saveSettings({ workspace: n.trim() });
 };
 $('#capBtn').onclick = () => $('#watchToggle').click(); // the same switch, always in reach at the top
+$('#settingsTop').onclick = () => Settings.open(); // ⚙ at the top right
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === ',' && !e.altKey) { e.preventDefault(); Settings.open(); } }); // Ctrl+, as in most apps
 $('#watchToggle').onchange = e => saveSettings({ watch: e.target.checked }).then(() => toast(e.target.checked ? 'Watching clipboard' : 'Clipboard watch paused'));
 $('#captureAll').onchange = e => saveSettings({ capture_all: e.target.checked });
 $('#captureProject').onchange = e => saveSettings({ project: e.target.value.trim() || 'General' });
@@ -860,6 +862,7 @@ function renderViewChips() {
     saveView(); renderBoard(); Bookmarks.render();
   };
   }
+  return chips.length;
 }
 
 const isFTP = e => ['ftp', 'ftps'].includes(e.protocol) || (!e.protocol && e.port === 21);
@@ -942,7 +945,7 @@ function dot(e) {
   return `<span class="dot ${e.status || 'none'}" title="${esc(title)}"></span>`;
 }
 
-function renderStats(list) {
+function renderStats(list, home) {
   const today = new Date().toDateString();
   const capturedToday = S.clips.filter(c => new Date(c.created).toDateString() === today).length;
   // Tiles only for what you can act on; the counts go in one line underneath.
@@ -957,6 +960,12 @@ function renderStats(list) {
   $('#inboxCount').textContent = capturedToday || '';
   const line = `<div class="stat-line">${counts.filter(([, v], i) => v || i < 2).map(([k, v, f]) => f ? `<a href="#" data-find="${f}">${v} ${k}</a>` : `<span>${v} ${k}</span>`).join(' · ')}</div>`;
   if ($('#search').value.trim()) { $('#stats').innerHTML = list.length ? line : ''; return; } // searching: just what was found
+  if (home) { // the overview: only what asks for something
+    const n = S.entries.filter(e => e.unsorted).length;
+    $('#stats').innerHTML = (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing or a failed login — click to list them"><b>⚠ ${fix}</b><span>need attention</span></button>` : '')
+      + (n ? `<button class="stat inbox" data-find="is:unsorted" title="New captures you haven't looked at yet"><b>📥 ${n}</b><span>new to sort</span></button>` : '');
+    return;
+  }
   $('#stats').innerHTML = (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing (user, password, environment, service name) or a failed login — click to list them"><b>⚠ ${fix}</b><span>Need attention</span></button>` : '')
     + ((n => n ? `<button class="stat inbox" data-find="is:unsorted" title="New captures you haven't looked at yet — each with a suggested folder"><b>📥 ${n}</b><span>New to sort</span></button>` : '')(S.entries.filter(e => e.unsorted).length))
     + (capturedToday ? `<button class="stat" data-view-go="inbox" title="Open Captured"><b>${capturedToday}</b><span>Captured today</span></button>` : '')
@@ -1036,31 +1045,44 @@ const Today = {
     this.rem = await api('GET', '/api/work/reminders').catch(() => []) || [];
     return this.rem;
   },
-  render() {
+  render(home) {
     const el = $('#today'); if (!el) return;
-    if ($('#search').value.trim()) { el.innerHTML = ''; return; }
+    if (!home) { el.innerHTML = ''; return; } // searching, filtering or the full list: results only
     const end = new Date(); end.setHours(23, 59, 59, 999);
-    const recent = S.entries.filter(e => e.last_used && isConn(e)).sort((a, b) => new Date(b.last_used) - new Date(a.last_used)).slice(0, 6);
+    const byUse = (a, b) => new Date(b.last_used) - new Date(a.last_used);
+    const recent = S.entries.filter(e => e.last_used && isConn(e)).sort(byUse).slice(0, 6);
+    const links = S.entries.filter(e => e.url && !isConn(e) && e.last_used).sort(byUse).slice(0, 6);
     const threads = typeof Work === 'undefined' ? [] : Work.list.filter(w => w.status !== 'done' && !w.archived)
       .sort((a, b) => (b.unread > 0) - (a.unread > 0) || (b.starred - a.starred) || new Date(b.updated) - new Date(a.updated)).slice(0, 6);
     const due = this.rem.filter(r => r.post.remind_at && new Date(r.post.remind_at) <= end).sort((a, b) => new Date(a.post.remind_at) - new Date(b.post.remind_at)).slice(0, 6);
     const jira = typeof Jira === 'undefined' ? [] : Jira.issues.filter(j => !j.done).slice(0, 6);
+    const pins = S.entries.filter(e => e.favorite).sort(byUsage).slice(0, 14);
     const snip = p => (p.text || (p.html || '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim().slice(0, 70);
     const card = (icon, title, n, rows, empty, go) => `<div class="tcardx"><div class="tc-head">${icon} <b>${title}</b>${n ? `<span class="n">${n}</span>` : ''}<span class="spacer"></span>${go ? `<a href="#" data-tgo="${go}" class="tiny">All →</a>` : ''}</div>${rows.join('') || `<div class="muted tiny tc-empty">${empty}</div>`}</div>`;
     const kind = e => canDB(e) ? '<span class="dbic-s">SQL</span>' : canSSH(e) ? '<span class="dbic-s">SSH</span>' : canFiles(e) ? '<span class="dbic-s">FTP</span>' : '';
-    el.innerHTML = `<details class="todayx" ${this.open ? 'open' : ''}><summary>📅 Today <span class="muted tiny">${new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span></summary><div class="today-grid">
-      ${card('🔌', 'Recent connections', '', recent.map(e => `<div class="tc-row" data-tconn="${e.id}" title="Connect · ${esc(e.host || e.url || '')}">${STATE_DOT[connState(e)]}${kind(e)}<span class="tc-t">${canDB(e) ? dbLabel(e) : esc(e.name || e.host)}</span>${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="muted tiny">${ago(e.last_used)}</span></div>`), 'Nothing used yet.', 'terminal')}
+    const host = u => { try { return new URL(u).host; } catch { return ''; } };
+    el.innerHTML = `<div class="today-head">📅 <b>Today</b> <span class="muted tiny">${new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span></div><div class="today-grid">
+      ${card('🔌', 'Recent connections', '', recent.map(e => `<div class="tc-row" data-tconn="${e.id}" title="Connect · ${esc(e.host || e.url || '')}">${STATE_DOT[connState(e)]}${kind(e)}<span class="tc-t">${canDB(e) ? dbLabel(e) : esc(e.name || e.host)}</span>${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="muted tiny">${ago(e.last_used)}</span></div>`), 'Servers and databases you connect to show here.', 'terminal')}
+      ${card('🔗', 'Recent links', '', links.map(e => `<div class="tc-row" data-tlink="${e.id}" title="Open · ${esc(e.url)}">${dot(e)}<span class="tc-t">${esc(e.name || linkLabel(e.url) || host(e.url) || e.url)}</span><span class="muted tiny tc-host">${esc(host(e.url))}</span><span class="muted tiny">${ago(e.last_used)}</span></div>`), 'Links you open show here.', 'bookmarks')}
       ${card('🧵', 'Open threads', threads.filter(w => w.unread).length ? threads.filter(w => w.unread).length + ' new' : '', threads.map(w => `<div class="tc-row ${w.unread ? 'unread' : ''}" data-tthread="${w.id}"><span class="tc-t">${w.starred ? '★ ' : ''}${esc(w.title)}</span>${w.unread ? `<span class="tunread">${w.unread}</span>` : ''}<span class="muted tiny">${fmtTime(w.updated)}</span></div>`), 'No open threads.', 'tasks')}
-      ${card('⏰', 'Reminders due', due.length, due.map(r => { const late = new Date(r.post.remind_at) < new Date(); return `<div class="tc-row" data-trem="${r.thread}" data-tpost="${r.post.id}"><span class="tc-t">${esc(snip(r.post) || '(a message)')}</span><span class="muted tiny ${late ? 'late' : ''}">${late ? 'due ' : ''}${new Date(r.post.remind_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>`; }), 'Nothing due today.', '')}
-      ${card('◆', 'My Jira issues', jira.length, jira.map(j => `<div class="tc-row" data-tjira="${esc(j.key)}" title="${esc(j.summary || '')}"><b class="jkey">${esc(j.key)}</b><span class="tc-t">${esc(j.summary || '')}</span><span class="jstat">${esc(j.status || '')}</span></div>`), 'No open issues (Jira page → My issues).', 'jira')}
-    </div></details>`;
-    this.reminders().then(r => { if (r !== this.lastRem) { this.lastRem = r; this.render(); } });
+      ${due.length ? card('⏰', 'Reminders due', due.length, due.map(r => { const late = new Date(r.post.remind_at) < new Date(); return `<div class="tc-row" data-trem="${r.thread}" data-tpost="${r.post.id}"><span class="tc-t">${esc(snip(r.post) || '(a message)')}</span><span class="muted tiny ${late ? 'late' : ''}">${late ? 'due ' : ''}${new Date(r.post.remind_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>`; }), '', '') : ''}
+      ${jira.length ? card('◆', 'My Jira issues', jira.length, jira.map(j => `<div class="tc-row" data-tjira="${esc(j.key)}" title="${esc(j.summary || '')}"><b class="jkey">${esc(j.key)}</b><span class="tc-t">${esc(j.summary || '')}</span><span class="jstat">${esc(j.status || '')}</span></div>`), '', 'jira') : ''}
+    </div>${pins.length ? `<div class="home-pins"><span class="muted tiny">★ Pinned</span>${pins.map(e => `<button class="pinchip" ${e.url && !isConn(e) ? `data-tlink="${e.id}"` : `data-tconn="${e.id}"`} title="${esc(e.url && !isConn(e) ? 'Open ' + e.url : 'Connect · ' + (e.host || ''))}">${dot(e)} ${esc(e.name || e.host || linkLabel(e.url) || e.url)}</button>`).join('')}</div>` : ''}`;
+    this.reminders().then(r => { if (r !== this.lastRem) { this.lastRem = r; this.render(Home.on()); } });
   },
 };
-$('#today').addEventListener('toggle', e => { if (e.target.classList?.contains('todayx')) { Today.open = e.target.open; try { localStorage.setItem('todayOpen', Today.open ? '1' : '0'); } catch { /* ignore */ } } }, true);
+// The Dashboard's overview shows what you use; the full list of saved
+// connections and links is one click away (and searching shows matches).
+const Home = {
+  all: (() => { try { return localStorage.getItem('boardAll') === '1'; } catch { return false; } })(),
+  set(v) { this.all = v; try { localStorage.setItem('boardAll', v ? '1' : '0'); } catch { /* ignore */ } renderBoard(); $('#view-dashboard').scrollTop = 0; },
+  filtering() { return !!($('#search').value.trim() || $('#fProject').value || $('#fEnv').value || $('#viewChips').children.length); },
+  on() { return !this.all && !this.filtering(); },
+};
 $('#today').addEventListener('click', e => {
   const g = e.target.closest('[data-tgo]'); if (g) { e.preventDefault(); return show(g.dataset.tgo); }
   const c = e.target.closest('[data-tconn]'); if (c) return connectEntry(byId(c.dataset.tconn));
+  const l = e.target.closest('[data-tlink]'); if (l) return openURL(byId(l.dataset.tlink));
   const t = e.target.closest('[data-tthread]'); if (t) return Work.open(t.dataset.tthread);
   const r = e.target.closest('[data-trem]'); if (r) return Work.open(r.dataset.trem, r.dataset.tpost);
   const j = e.target.closest('[data-tjira]');
@@ -1068,16 +1090,23 @@ $('#today').addEventListener('click', e => {
 });
 
 function renderBoard() {
-  Today.render();
   renderViewChips();
+  const home = Home.on();
+  $('#view-dashboard .viewwrap').hidden = home; // View (layout, grouping) is about the full list
+  Today.render(home);
   viewSummary();
   const list = filtered();
-  renderStats(list);
+  renderStats(list, home);
   const board = $('#board');
   if (!S.entries.length) {
     board.innerHTML = `<div class="empty">Nothing collected yet.<br><br>Turn on <b>Watch clipboard</b> and copy text that contains hosts, URLs or logins,<br>or paste it on the <b>Captured</b> page.</div>`;
     return;
   }
+  if (home) { // the overview: recent captures (folded) and the way to the full list
+    board.innerHTML = RecentCaps.html() + `<div class="home-all"><button data-homeall="1">All connections and links (${list.length}) ▾</button><span class="muted tiny">or type in the search above to find one</span></div>`;
+    S.kbList = []; Bulk.bar(); Saved.render(); return;
+  }
+  const back = Home.all && !Home.filtering() ? `<div class="home-all top"><button data-homeall="0">▴ Back to the overview</button><span class="muted tiny">All ${list.length} connections and links</span></div>` : '';
   const jira = jiraMatches($('#search').value), threads = threadMatches($('#search').value), more = Everything.count($('#search').value);
   if (!list.length && !jira.length && !threads.length && !more) { board.innerHTML = '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); Saved.render(); return; }
   const keyOf = {
@@ -1092,9 +1121,9 @@ function renderBoard() {
   const inbox = list.filter(e => e.unsorted), sortable = inbox.filter(suggestPlace).length;
   const inboxNote = /\bis:(unsorted|new)\b/.test($('#search').value) && inbox.length ? `<div class="fuzzy-note">📥 ${inbox.length} new capture(s) to sort. ${sortable ? `<button class="primary" data-acceptall>✓ Move all ${sortable} to their suggested folders</button>` : ''} <button data-keepall>Keep all where they are</button></div>` : '';
   const rest = threadResultsHTML(threads) + Everything.html($('#search').value) + jiraResultsHTML(jira), recent = RecentCaps.html();
-  if (S.layout === 'grid') { board.innerHTML = recent + fixNote + inboxNote + gridHTML(list) + rest; markKbSel(); Bulk.bar(); return; }
+  if (S.layout === 'grid') { board.innerHTML = back + recent + fixNote + inboxNote + gridHTML(list) + rest; markKbSel(); Bulk.bar(); return; }
   // Searching: the group holding the best match comes first (Object keys keep list order).
-  board.innerHTML = recent + fixNote + inboxNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
+  board.innerHTML = back + recent + fixNote + inboxNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
     const items = groups[g];
     const body = S.layout === 'table' ? tableHTML(items) : cardsHTML(items);
     return `<div class="group"><div class="group-head"><h3>${esc(g)}</h3><span class="n">${items.length}</span>
@@ -1137,7 +1166,7 @@ function threadResultsHTML(list) {
     if (w.title.toLowerCase().includes(words[0]) && !t.includes(words[0])) return '';
     return (i > 50 ? '…' : '') + t.slice(Math.max(0, i - 50), i + 110) + '…';
   };
-  const st = w => `<span class="wstatus ${w.status}">${esc((STATUSES.find(s => s[0] === w.status) || STATUSES[0])[1])}</span>`;
+  const st = w => threadStatusHTML(w);
   return `<div class="group"><div class="group-head"><h3>🧵 Tasks</h3><span class="n">${list.length}</span></div><div class="cards">${list.map(w =>
     `<div class="card tcard" data-thread="${w.id}" title="Open the thread"><div class="card-head">${st(w)} <b>${esc(w.title)}</b><span class="spacer"></span><span class="muted tiny">${fmtTime(w.updated)} · ${w.posts || 0} posts</span></div>
       ${snippet(w) ? `<div class="muted tiny tsnip">${maskedText(snippet(w))}</div>` : ''}</div>`).join('')}</div></div>`;
@@ -1192,7 +1221,7 @@ const Everything = {
 // The last few captures on the dashboard, with what each one became — a
 // paste that wasn't read as expected shows straight away and can be fixed.
 const RecentCaps = {
-  open: (() => { try { return localStorage.getItem('recentOpen') !== '0'; } catch { return true; } })(),
+  open: (() => { try { return localStorage.getItem('recentOpen') === '1'; } catch { return false; } })(), // folded unless you open it
   // Hosts saved without any type: offer the likely ones.
   untyped: e => !!e.host && !e.protocol && !dbKindOf(e) && !e.url,
   html() {
@@ -1369,6 +1398,7 @@ $('#board').addEventListener('click', async ev => {
   const gc = ev.target.closest('[data-goclip]');
   if (gc) { show('inbox'); return setTimeout(() => { const el = $(`#clips [data-clip="${gc.dataset.goclip}"]`); if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); } }, 50); }
   if (ev.target.closest('[data-allclips]')) { ev.preventDefault(); return show('inbox'); }
+  const ha = ev.target.closest('[data-homeall]'); if (ha) return Home.set(ha.dataset.homeall === '1');
   const st = ev.target.closest('[data-settype]');
   if (st) {
     try { await api('POST', '/api/entries/bulk', { ids: [st.dataset.id], op: 'type', value: st.dataset.settype }); toast(`Saved as ${st.textContent}` + (st.dataset.settype === 'ssh' ? '' : ' — it is now in SQL')); poll(); }

@@ -4,6 +4,12 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.15.5', title: 'A calmer Dashboard, Active thread, Settings at the top', items: [
+    ['📅', 'Dashboard: what you use', 'The Dashboard now shows your recent connections, recent links, open threads, reminders and Jira issues, your ★ pinned items and what needs doing — not every saved connection and bookmark. “All connections and links” opens the full list (▴ Back to the overview returns); searching works as before.', 'dashboard'],
+    ['🟢', 'The thread you work in says Active', 'In the thread list, the thread you\'re capturing into shows ● Active. Threads that are just “To do” no longer show a badge; In progress, Blocked and Done still do.', 'tasks'],
+    ['⚙', 'Settings at the top right', 'The ⚙ next to the search opens Settings from any page (or Ctrl+,).', ''],
+    ['📧', 'Outlook monitoring in the Tools menu', 'Tools → 📧 Outlook monitoring… opens the mail watcher (it lives at the top of the Captured page).', 'inbox'],
+  ] },
   { v: '1.15.4', title: 'Edit on every message', items: [
     ['✎', 'Edit clipboard captures and server cards too', '✎ Edit is now on every message, first on its bar: your messages and emails are edited in place; a clipboard capture opens its real text (passwords included) and stays a capture — still masked when shown; a server card opens the connection to edit.', 'tasks'],
   ] },

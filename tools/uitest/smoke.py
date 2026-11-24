@@ -293,7 +293,7 @@ with sync_playwright() as p:
 
     @check("new capture: Test tries the connection, failure shows Needs attention")
     def _():
-        ev("show('dashboard')")
+        ev("show('dashboard')"); ev("Home.set(true)")  # the cards are in the full list
         if ssh_off():  # new SSH captures just get ✓ OK; a new database is tested instead
             sid = ev("(S.entries.find(e => e.unsorted && canSSH(e) && !canDB(e) && !suggestPlace(e)) || {}).id")
             if sid:
@@ -314,6 +314,57 @@ with sync_playwright() as p:
             pg.wait_for_selector(f"#board .warnchip.fail[data-id='{eid}']", timeout=5000)
         else:
             expect(st == "ok", f"status {st}")
+        ev("Home.set(false)")
+
+    @check("Dashboard overview: recent connections and links, pinned, full list one click away")
+    def _():
+        ev("Home.set(false)"); ev("show('dashboard')")
+        ev("""async () => { const l = S.entries.find(e => e.url && !isConn(e)); await api('POST', '/api/entries/' + l.id + '/opened'); await poll(); }""")
+        pg.wait_for_timeout(600)
+        expect(pg.is_visible("#today [data-tlink]"), "no Recent links")
+        expect(pg.locator("#board .card").count() == 0, "the full list is on the overview")
+        expect(not pg.is_visible("#viewBtn"), "View button on the overview")
+        pg.click("[data-homeall='1']"); pg.wait_for_timeout(300)
+        expect(pg.locator("#board .card").count() > 10 and pg.inner_html("#today") == "", "full list didn't open")
+        pg.click("[data-homeall='0']"); pg.wait_for_timeout(300)
+        expect(pg.locator("#board .card").count() == 0, "didn't go back to the overview")
+        pg.fill("#search", "picasso"); pg.dispatch_event("#search", "input"); pg.wait_for_timeout(400)
+        expect(pg.locator("#board .card").count() > 0, "search shows no results")
+        pg.fill("#search", ""); pg.dispatch_event("#search", "input")
+
+    @check("Tools → Outlook monitoring opens the mail panel")
+    def _():
+        pg.click("#menubar [data-menu=Tools]"); pg.wait_for_timeout(200)
+        pg.click("#ctxMenu button:has-text('Outlook monitoring')"); pg.wait_for_timeout(300)
+        expect(ev("document.querySelector('.view.active').id") == "view-inbox" and ev("$('#mailPanel').open"), "mail panel not shown")
+        expect(pg.is_visible("label.switch:has(#mailOn)"), "the Watch Outlook switch isn't visible")
+
+    @check("⚙ at the top right opens Settings (both layouts) and Ctrl+, too")
+    def _():
+        try:
+            for top in (False, True):
+                ev(f"applySideTop({'true' if top else 'false'})"); pg.wait_for_timeout(300)
+                expect(pg.is_visible("#settingsTop"), f"⚙ not visible (menu {'top' if top else 'left'})")
+                box = pg.locator("#settingsTop").bounding_box()
+                expect(box["x"] + box["width"] <= 1400, "⚙ is cut off at the right")
+                pg.click("#settingsTop"); pg.wait_for_timeout(300)
+                expect(ev("!!document.querySelector('dialog[open]')"), "Settings didn't open")
+                close_dialogs()
+        finally:
+            ev("applySideTop(false)"); pg.wait_for_timeout(200)
+        ev("document.activeElement && document.activeElement.blur()")
+        pg.keyboard.press("Control+Comma"); pg.wait_for_timeout(300)
+        expect(ev("!!document.querySelector('dialog[open]')"), "Ctrl+, didn't open Settings")
+        close_dialogs()
+
+    @check("thread list: the capture thread says Active; no 'To do' badges")
+    def _():
+        ev("show('tasks')"); pg.wait_for_timeout(400)
+        act = ev("Work.active()")
+        expect(act, "no capture thread")
+        expect("Active" in pg.inner_text(f"#workList [data-work='{act}'] .tli-top"), "capture thread isn't Active")
+        expect(pg.locator("#workList .wstatus.todo").count() == 0, "To do badges shown")
+        expect(pg.locator("#workList .wstatus.active").count() == 1, "more than one Active")
 
     @check("SQL snippets save and insert (stand-in session)")
     def _():
