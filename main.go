@@ -138,6 +138,13 @@ func main() {
 				app.setLocked(true) // a PIN is set: start locked (the master password already asked)
 			}
 			go app.watchClipboard()
+			restartApp = func() {
+				if exe, err := os.Executable(); err == nil {
+					if exe, err = filepath.EvalSymlinks(exe); err == nil {
+						app.restartAs(exe)
+					}
+				}
+			}
 			captureSwitch = func(flip bool) bool {
 				st := app.store.Settings()
 				if flip {
@@ -372,6 +379,9 @@ func copyDir(src, dst string) error {
 	}
 	return nil
 }
+
+// restartApp restarts WorkHub, for the tray menu.
+var restartApp func()
 
 // captureSwitch reads "Watch clipboard" (flip: turns it over first), for the
 // tray menu: capture can be paused without opening or closing WorkHub.
@@ -654,6 +664,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/update", a.handleUpdateCheck)
 	mux.HandleFunc("POST /api/update", a.handleUpdateApply)
 	mux.HandleFunc("POST /api/update/restart", a.handleUpdateRestart)
+	mux.HandleFunc("POST /api/restart", a.handleRestart)
 	mux.HandleFunc("GET /api/install", a.handleInstallGet)
 	mux.HandleFunc("POST /api/install", a.handleInstall)
 	mux.HandleFunc("GET /api/master", a.handleMasterGet)

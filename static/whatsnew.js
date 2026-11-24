@@ -4,6 +4,9 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.15.1', title: 'Restart WorkHub from the menu', items: [
+    ['↻', 'Restart WorkHub', 'File → ↻ Restart WorkHub (also in ☰, the command palette and the tray icon\'s menu): WorkHub saves what you are typing, starts again and reconnects the SSH, SFTP and SQL tabs that were open. It asks first only when something would be lost (uncommitted SQL changes, an unsaved file in Folders).', ''],
+  ] },
   { v: '1.15.0', title: 'Word documents into threads, UAT / PROD switch, capture on/off', items: [
     ['📄', 'Word documents into a thread', 'Drop a .docx on an open thread (or ⋯ → 📄 Add a Word document to this thread…): its contents become a message with the formatting kept — headings, bold / italic, lists, links, tables and pictures — and the document is attached. ⤓ Import Word… still makes a new thread from a document.', 'tasks'],
     ['📎', 'Search finds files in threads', 'The search at the top now also lists files attached to task threads (screenshots, documents, logs, email attachments) by name, and by the words inside text files and Word documents. Click one to open its thread at that message; ⬇ downloads it.', ''],

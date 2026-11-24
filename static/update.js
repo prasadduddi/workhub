@@ -125,6 +125,7 @@ $('#mainMenuBtn').onclick = () => {
     ['🔑 My SSH keys (copy for GitHub)…', () => SSHKeys.open()],
     ['🔒 Lock (Ctrl+L)', click('#lockBtn')], '-',
     ['⚙ Settings…', () => Settings.open()], '-',
+    ['↻ Restart WorkHub', () => restartApp()],
     ['Quit WorkHub', click('#quitBtn')]]));
 };
 $('#updNow').onclick = () => Update.ready() ? Update.restartNow() : Update.asking ? Update.apply(false) : Update.confirm();

@@ -13,7 +13,8 @@ async function api(method, url, body) {
   });
   if (r.status === 423) { if (typeof Lock !== 'undefined') Lock.show(); throw new Error('WorkHub is locked'); }
   if (r.status === 401) {
-    document.body.innerHTML = '<div class="empty">Session expired. Start <b>WorkHub</b> again to open a fresh window.</div>';
+    // after a restart or quit the page already says so; otherwise cover it (its timers keep running)
+    if (!document.querySelector('.stopped')) stoppedScreen('<h2>Session expired.</h2><p>Start <b>WorkHub</b> again to open a fresh window.</p>');
     throw new Error('unauthorized');
   }
   const data = await r.json().catch(() => ({}));
@@ -573,10 +574,32 @@ const DataDir = {
   short: p => { const parts = (p || '').split(/[\\/]/).filter(Boolean); return parts.length > 3 ? '…' + (p.includes('\\') ? '\\' : '/') + parts.slice(-3).join(p.includes('\\') ? '\\' : '/') : p; },
   open: () => api('POST', '/api/datadir/open').catch(err => toast(err.message, true)),
 };
+// File → Restart WorkHub: saves what is being typed, remembers the open
+// connections (they reconnect after the restart) and starts WorkHub again.
+async function restartApp() {
+  const o = openSessions(), conns = o.ssh.length + o.ftp + o.sql;
+  const warn = [
+    ...SQL.tabs.filter(t => t.inTx).map(t => `${t.entry.name}: uncommitted SQL changes will be rolled back`),
+    ...(typeof Ref !== 'undefined' && Ref.dirty ? ['the file open in Folders has unsaved changes'] : []),
+  ];
+  if ((conns || warn.length) && !confirm(`Restart WorkHub?${conns ? `\n\nOpen connections (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && 'FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')}) reconnect by themselves afterwards.` : ''}${warn.length ? '\n\n⚠ ' + warn.join('\n⚠ ') : ''}`)) return;
+  for (const d of Notes.docs.filter(d => d.dirty)) await Notes.save(d).catch(() => {});
+  Session.save();
+  try { await api('POST', '/api/restart'); }
+  catch (err) { return toast(`Couldn't restart: ${err.message} — close WorkHub and open it again`, true); }
+  stoppedScreen(`<h2>↻ Restarting WorkHub…</h2><p>${window.WH_DESKTOP ? 'Its window opens again in a few seconds.' : 'A new tab opens in a few seconds — you can close this one.'}</p>`);
+}
+// Covers the page once WorkHub has stopped or is restarting (the page underneath
+// stays, so its timers don't trip over missing parts).
+function stoppedScreen(html) {
+  document.querySelectorAll('dialog[open]').forEach(d => d.close());
+  const d = document.createElement('div'); d.className = 'stopped'; d.innerHTML = `<div>${html}</div>`;
+  document.body.append(d);
+}
 $('#quitBtn').onclick = async () => {
   if (!confirm('Quit WorkHub? Open terminals and transfers will stop.')) return;
   await api('POST', '/api/quit').catch(() => {});
-  document.body.innerHTML = '<div class="empty">WorkHub has stopped. You can close this tab.</div>';
+  stoppedScreen('<h2>WorkHub has stopped.</h2><p>You can close this tab.</p>');
 };
 
 // ---------- dashboard ----------

@@ -103,6 +103,10 @@ const HELP_TOPICS = [
   { t: 'Find a file attached to a thread', k: 'find search file files attachment attached thread screenshot document log download', v: 'tasks', s: [
     'Type part of its name — or words inside it (text files and Word documents) — in the search at the top.',
     '📎 Files in threads lists them with their thread; click one to open the thread at that message, ⬇ to download it.'] },
+  { t: 'Restart WorkHub', k: 'restart reload relaunch start again stuck frozen slow reset reboot', v: '', s: [
+    'File → ↻ Restart WorkHub (or ☰ → ↻ Restart WorkHub, or right-click the tray icon → Restart WorkHub).',
+    'What you are typing in Notes is saved first; open SSH, SFTP and SQL tabs reconnect by themselves after the restart.',
+    'It asks first when something would be lost: uncommitted SQL changes are rolled back, an unsaved file in Folders is not kept.'] },
   { t: 'Stop or pause clipboard capture', k: 'stop pause capture clipboard watch copy paste interfere interfering windows resume start off', v: '', s: [
     'Click “● Capturing” at the top (beside the search) — it turns into “⏸ Capture off”. Click again to start capturing.',
     'While paused WorkHub doesn\'t touch the clipboard at all; what you copy meanwhile is not captured later. WorkHub (tunnels, terminals…) keeps running.',

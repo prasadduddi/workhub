@@ -1460,3 +1460,7 @@ dialog.palettedlg { width: min(680px, 92vw); padding: 0; margin-top: 12vh; overf
 .card.tcard .card-head > b { flex: 0 1 auto; }
 .card.tcard .card-head > .spacer { flex: 1; }
 .card.tcard .wstatus { white-space: nowrap; }
+
+/* WorkHub stopped or restarting: covers the page */
+.stopped { position: fixed; inset: 0; z-index: 10000; background: var(--bg); display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted); }
+.stopped h2 { color: var(--text); margin: 0 0 8px; }

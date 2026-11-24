@@ -201,6 +201,21 @@ func (a *App) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 	a.restartAs(exe)
 }
 
+// handleRestart restarts WorkHub (menu: File → Restart WorkHub): the same
+// program starts again and the page reopens the connections that were open.
+func (a *App) handleRestart(w http.ResponseWriter, r *http.Request) {
+	exe, err := os.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	if err != nil {
+		writeErr(w, 500, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+	a.restartAs(exe)
+}
+
 // handleUpdateRestart restarts now to finish an update installed for the next start.
 func (a *App) handleUpdateRestart(w http.ResponseWriter, r *http.Request) {
 	if updPending == "" {
@@ -223,6 +238,9 @@ func (a *App) handleUpdateRestart(w http.ResponseWriter, r *http.Request) {
 func (a *App) restartAs(exe string) {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
+		for _, f := range beforeExit { // e.g. the tray icon, which would otherwise linger
+			f()
+		}
 		if a.store != nil {
 			a.store.Flush()
 		}

@@ -95,6 +95,7 @@ const Menubar = {
         ['📁 Data folder', () => DataDir.open()],
         '-',
         ['🔒 Lock\tCtrl+L', click('#lockBtn')],
+        ['↻ Restart WorkHub', () => restartApp()],
         ['Quit WorkHub', click('#quitBtn')],
       ],
       Edit: [

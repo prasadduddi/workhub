@@ -110,3 +110,5 @@ Word documents into a thread, search, UAT/PROD, capture switch
       copy a host -> NOT captured; click again -> capturing; the copy made while paused is not captured
   [ ] Close WorkHub to the tray -> right-click the tray icon -> Pause / Resume clipboard capture works
   [ ] Dashboard: a NEW SSH connection -> 🔌 Test -> green dot if it logs in, red "⚠ Needs attention" if not
+  [ ] File -> Restart WorkHub with an SSH tab open -> asks first; WorkHub comes back (Desktop: its window; web: a new tab)
+      and the SSH tab reconnects; the tray icon is not left behind twice. Also from the tray icon's right-click menu.

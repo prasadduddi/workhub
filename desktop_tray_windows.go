@@ -45,6 +45,7 @@ const (
 	trayMenuOpen    = 1
 	trayMenuQuit    = 2
 	trayMenuCapture = 3
+	trayMenuRestart = 4
 )
 
 type notifyIconData struct {
@@ -141,6 +142,10 @@ func trayMenu(hwnd uintptr) {
 		pAppendMenu.Call(m, 0, trayMenuCapture, uintptr(unsafe.Pointer(c)))
 	}
 	pAppendMenu.Call(m, 0x800 /* MF_SEPARATOR */, 0, 0)
+	if restartApp != nil {
+		rs, _ := syscall.UTF16PtrFromString("Restart WorkHub")
+		pAppendMenu.Call(m, 0, trayMenuRestart, uintptr(unsafe.Pointer(rs)))
+	}
 	pAppendMenu.Call(m, 0, trayMenuQuit, uintptr(unsafe.Pointer(quit)))
 	var pt struct{ X, Y int32 }
 	pGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
@@ -150,6 +155,10 @@ func trayMenu(hwnd uintptr) {
 	switch cmd {
 	case trayMenuOpen:
 		trayShowWindow(hwnd)
+	case trayMenuRestart:
+		if restartApp != nil {
+			restartApp()
+		}
 	case trayMenuCapture:
 		if captureSwitch != nil {
 			captureSwitch(true)
