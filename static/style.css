@@ -1364,3 +1364,9 @@ dialog.palettedlg { width: min(680px, 92vw); padding: 0; margin-top: 12vh; overf
 .pal-ic { width: 20px; text-align: center; } .pal-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pal-d { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pal-foot { padding: 6px 12px; border-top: 1px solid var(--border); display: flex; gap: 4px; align-items: center; }
+
+/* Bookmarks table: app labels wrap inside their column; the table fits the page */
+.bm-tbl { width: 100%; }
+.bm-tbl .ulabel { white-space: normal; display: inline-block; max-width: 100%; margin-right: 0; }
+.bm-tbl td.bm-ttools { white-space: nowrap; text-align: right; }
+.bm-tbl th:last-child .colgrip { display: none; } /* nothing to resize after the last column */

@@ -3030,8 +3030,9 @@ function avatar(text) {
   return `<span class="av" style="background:hsl(${h} 55% 45%)">${esc((text.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</span>`;
 }
 
-// Bookmarks table: [heading, sort key, default width]
-const BM_COLS = [['Name', 'name', 240], ['App', 'app', 130], ['URL', 'url', 340], ['User', 'user', 110], ['Env', 'env', 70], ['Folder', 'folder', 170], ['Opened', 'opened', 80], ['Last opened', 'last', 120], ['', '', 120]];
+// Bookmarks table: [heading, sort key, default share of the width] — the URL
+// gets the most; a column you drag keeps your width.
+const BM_COLS = [['Name', 'name', '15%'], ['App', 'app', '12%'], ['URL', 'url', '29%'], ['User', 'user', '7%'], ['Env', 'env', '6%'], ['Folder', 'folder', '10%'], ['Opened', 'opened', '5%'], ['Last opened', 'last', '8%'], ['', '', '8%']];
 
 const Bookmarks = {
   mode: localStorage.getItem('bmGroup') || 'smart',
@@ -3090,7 +3091,7 @@ const Bookmarks = {
       items = [...items].sort((a, b) => { const x = this.sortVal(a, key), y = this.sortVal(b, key); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
     }
     const head = BM_COLS.map(([h, k], i) => `<th ${k ? `data-bmsort="${k}" title="Sort by ${h.toLowerCase()}"` : ''}>${h}${this.sort?.key === k && k ? (this.sort.dir > 0 ? ' ▲' : ' ▼') : ''}<span class="colgrip" data-bmcol="${i}" title="Drag to resize · double-click to reset"></span></th>`).join('');
-    return `<div class="tblwrap"><table class="tbl bm-tbl"><colgroup>${BM_COLS.map(([, , w], i) => `<col style="width:var(--b${i}, ${w}px)">`).join('')}</colgroup><thead><tr>${head}</tr></thead><tbody>`
+    return `<div class="tblwrap"><table class="tbl bm-tbl"><colgroup>${BM_COLS.map(([, , w], i) => `<col style="width:var(--b${i}, ${w})">`).join('')}</colgroup><thead><tr>${head}</tr></thead><tbody>`
       + items.map(e => `<tr class="env-${esc(e.env || '')}" data-bm="${e.id}" title="Click to open">
         <td class="bm-tname">${dot(e)} ${esc(e.name || e.host)}</td>
         <td>${urlLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(urlLabel(e.url))}</span>` : ''}</td>
@@ -3100,7 +3101,7 @@ const Bookmarks = {
         <td>${esc(e.folder ? e.folder.split(' › ').slice(1).join(' › ') || e.folder : '')}</td>
         <td>${e.open_count ? e.open_count + '×' : ''}</td>
         <td>${e.last_used ? esc(fmtTime(e.last_used)) : ''}</td>
-        <td class="bm-ttools">${this.tools(e)}</td></tr>`).join('') + '</tbody></table></div>';
+        <td class="bm-ttools"><button class="icon" data-bmcopy="${e.id}" title="Copy URL">URL</button><button class="icon more" data-bmmenu="${e.id}" title="More: edit, copy password, remove… (or right-click the row)">⋯</button></td></tr>`).join('') + '</tbody></table></div>';
   },
 
   section(title, items) {
@@ -3225,6 +3226,7 @@ $('#bmBoard').addEventListener('click', async ev => {
   if (t?.dataset.bmcopy) return copyText(byId(t.dataset.bmcopy).url);
   if (t?.dataset.bmpw) return copyText(byId(t.dataset.bmpw).password, 'Password copied');
   if (t?.dataset.bmedit) return openEntryDialog(byId(t.dataset.bmedit));
+  if (t?.dataset.bmmenu) { const r = t.getBoundingClientRect(); return setTimeout(() => Tree.menu({ clientX: r.left - 180, clientY: r.bottom }, { dataset: { id: t.dataset.bmmenu } }, 'board')); }
   const tile = ev.target.closest('[data-bm]');
   if (tile) openURL(byId(tile.dataset.bm));
 });
