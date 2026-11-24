@@ -123,6 +123,15 @@ const HELP_TOPICS = [
     'New connections on the Dashboard are marked NEW with a 🔌 Test button.',
     'Test logs in once with the saved details: a green dot means it worked; ⚠ Needs attention (red) means it didn\'t — click it to fix the user, password or host.',
     'Web links have ✓ OK instead: it just stops marking them new.'] },
+  { t: 'Why don\'t UAT or PROD servers show in search?', k: 'uat prod search missing hidden results not found where server env', v: 'dashboard', s: [
+    'With All picked at the top, search leaves UAT and PROD servers out, so you don\'t open one by accident.',
+    'Pick UAT or PROD in the switch at the top (or press Show UAT / Show PROD in the note above the results, or type env:prod).'] },
+  { t: 'Make the text bigger', k: 'text font size bigger larger small screen zoom readable scale', v: '', s: [
+    '⚙ Settings (top right) → Appearance → Text size: Small, Normal, Large or Larger.',
+    'Terminal, editor and SQL have their own A− / A+ (or Ctrl + mouse wheel over them).'] },
+  { t: 'Several FTP / SFTP servers at once', k: 'ftp sftp tabs several servers files two connections second', v: 'files', s: [
+    'On the Files page each server you open gets its own tab above the server side; opening one that is already open switches to its tab.',
+    'Each tab keeps its folder; ✕ on a tab (or ⏏ Disconnect) closes that connection.'] },
   { t: 'Show only UAT or only PROD', k: 'uat prod production environment switch filter only hide show env all', v: '', s: [
     'Use the All · UAT · PROD switch beside the search at the top.',
     'UAT or PROD shows only that environment\'s connections, databases and bookmarks on every page (UAT also covers UAT1, UAT2…); entries without an environment are hidden too.',
@@ -261,7 +270,8 @@ const HELP_TOPICS = [
     'Open Folders: + on a folder adds a sub-folder, a new file or a link to a folder/file anywhere.',
     'Drop files or whole folders in to keep a copy (older copies are kept).',
     'Right-click a file → ↗ Open to open it in its own program (Word, Excel, Notepad…).'] },
-  { t: 'Groups', k: 'group groups patterns gather application', v: 'groups', s: [
+  { t: 'Groups', k: 'group groups patterns gather application hidden where gone missing', v: 'groups', s: [
+    'Groups is hidden from the menu now — search at the top, ★ saved searches and projects do the same. To show it again: View → Pages in the sidebar → Groups.',
     'Groups gather everything matching some words: servers, links, open windows, notes, captures.',
     'Press + New group and give it patterns (server names, hosts, words).'] },
 

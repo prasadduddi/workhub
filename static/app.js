@@ -605,7 +605,7 @@ async function restartApp() {
     ...SQL.tabs.filter(t => t.inTx).map(t => `${t.entry.name}: uncommitted SQL changes will be rolled back`),
     ...(typeof Ref !== 'undefined' && Ref.dirty ? ['the file open in Folders has unsaved changes'] : []),
   ];
-  if ((conns || warn.length) && !confirm(`Restart WorkHub?${conns ? `\n\nOpen connections (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && 'FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')}) reconnect by themselves afterwards.` : ''}${warn.length ? '\n\n⚠ ' + warn.join('\n⚠ ') : ''}`)) return;
+  if ((conns || warn.length) && !confirm(`Restart WorkHub?${conns ? `\n\nOpen connections (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && o.ftp + ' FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')}) reconnect by themselves afterwards.` : ''}${warn.length ? '\n\n⚠ ' + warn.join('\n⚠ ') : ''}`)) return;
   for (const d of Notes.docs.filter(d => d.dirty)) await Notes.save(d).catch(() => {});
   Session.save();
   try { await api('POST', '/api/restart'); }
@@ -817,8 +817,15 @@ function sortEntries(list) {
   return [...list].sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * d; });
 }
 
+// Searching with the switch on All leaves UAT and PROD servers out: they show
+// only when picked at the top (or with View → Show only, or env:prod typed).
+const GUARDED_ENVS = ['UAT', 'PROD'];
+const guardedEnv = e => GUARDED_ENVS.find(x => (e.env || '').toUpperCase().startsWith(x)) || '';
+const searchGuard = q => !!(q || '').trim() && !EnvSwitch.v && !$('#fEnv').value && !/(^|\s)-?env:/i.test(q);
 function filtered() {
   let q = $('#search').value.trim().toLowerCase();
+  const guard = searchGuard(q);
+  S.guarded = {};
   const p = $('#fProject').value, env = $('#fEnv').value;
   const base = S.entries.filter(e => (!p || e.project === p) && (!env || e.env === env) && viewMatch(e));
   let list = base.filter(e => matches(e, q));
@@ -831,6 +838,7 @@ function filtered() {
       if (list.length) { S.fixes = fixes; q = q2; }
     }
   }
+  if (guard) list = list.filter(e => { const g = guardedEnv(e); if (g) S.guarded[g] = (S.guarded[g] || 0) + 1; return !g; });
   S.ranked = !S.view.sort && parseQuery(q).words.some(w => !w.neg); // searching: best match first
   if (!S.ranked) return sortEntries(list);
   const score = new Map(list.map(e => [e, searchScore(e, q)]));
@@ -919,7 +927,7 @@ function jdbcURL(e) {
 //    ✕ = the last try failed (hover for why and when it last worked).
 function connState(e) {
   const ssh = Term.tabs.filter(t => t.entry?.id === e.id && !t.local);
-  if (ssh.some(t => !t.closed) || (Remote.sid && Remote.entry?.id === e.id) || SQL.tabs.some(t => t.entry.id === e.id)) return 'live';
+  if (ssh.some(t => !t.closed) || Remote.tabs.some(t => t.entry.id === e.id) || SQL.tabs.some(t => t.entry.id === e.id)) return 'live';
   return ssh.length ? 'dropped' : '';
 }
 const STATE_DOT = {
@@ -1024,7 +1032,7 @@ const Saved = {
     const q = $('#search').value.trim().toLowerCase();
     $('#saveSearchBtn').hidden = !q || this.all().some(x => x.query.toLowerCase() === q);
     $('#savedSearches').innerHTML = this.all().length ? `<div class="saved-head nl">Saved searches</div>` + this.all().map((x, i) =>
-      `<button data-saved="${i}" class="${x.query.toLowerCase() === q ? 'active' : ''}" title="${esc(x.query)}"><span class="ni sv">★</span><span class="nl">${esc(x.name)}</span><span class="count">${S.entries.filter(e => matches(e, x.query.toLowerCase())).length || ''}</span></button>`).join('') : '';
+      `<button data-saved="${i}" class="${x.query.toLowerCase() === q ? 'active' : ''}" title="${esc(x.query)}"><span class="ni sv">★</span><span class="nl">${esc(x.name)}</span><span class="count">${S.entries.filter(e => matches(e, x.query.toLowerCase()) && !(searchGuard(x.query) && guardedEnv(e))).length || ''}</span></button>`).join('') : '';
   },
   async save() {
     const q = $('#search').value.trim(); if (!q) return;
@@ -1108,7 +1116,10 @@ function renderBoard() {
   }
   const back = Home.all && !Home.filtering() ? `<div class="home-all top"><button data-homeall="0">▴ Back to the overview</button><span class="muted tiny">All ${list.length} connections and links</span></div>` : '';
   const jira = jiraMatches($('#search').value), threads = threadMatches($('#search').value), more = Everything.count($('#search').value);
-  if (!list.length && !jira.length && !threads.length && !more) { board.innerHTML = '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); Saved.render(); return; }
+  const guarded = Object.entries(S.guarded || {});
+  // the buttons first: the search tips under the box can cover the right-hand side
+  const guardNote = guarded.length ? `<div class="fuzzy-note guard-note">🔒 ${guarded.map(([g, n]) => `<button data-guardenv="${g}">Show ${n} ${g}</button>`).join(' ')} <span>also match — UAT and PROD servers show in search only when picked at the top</span></div>` : '';
+  if (!list.length && !jira.length && !threads.length && !more) { board.innerHTML = guardNote || '<div class="empty">No matches.</div>'; S.kbList = []; Bulk.bar(); Saved.render(); return; }
   const keyOf = {
     env: e => e.env || 'No environment', protocol: e => e.protocol || 'other', status: e => ({ ok: 'Working', fail: 'Failed' }[e.status] || 'Not tried'),
     host: e => e.host || e.url || e.name, none: () => 'All', project: e => e.project || 'General',
@@ -1117,7 +1128,7 @@ function renderBoard() {
   list.forEach(e => (groups[keyOf(e)] ||= []).push(e));
   S.kbList = list; S.kbSel = Math.min(S.kbSel || 0, list.length - 1);
   Saved.render();
-  const fixNote = S.fixes ? `<div class="fuzzy-note">No exact match — showing ${Object.entries(S.fixes).map(([a, b]) => `<b>${esc(b)}</b> for “${esc(a)}”`).join(', ')}. <a href="#" data-usefix>Use this spelling</a></div>` : '';
+  const fixNote = guardNote + (S.fixes ? `<div class="fuzzy-note">No exact match — showing ${Object.entries(S.fixes).map(([a, b]) => `<b>${esc(b)}</b> for “${esc(a)}”`).join(', ')}. <a href="#" data-usefix>Use this spelling</a></div>` : '');
   const inbox = list.filter(e => e.unsorted), sortable = inbox.filter(suggestPlace).length;
   const inboxNote = /\bis:(unsorted|new)\b/.test($('#search').value) && inbox.length ? `<div class="fuzzy-note">📥 ${inbox.length} new capture(s) to sort. ${sortable ? `<button class="primary" data-acceptall>✓ Move all ${sortable} to their suggested folders</button>` : ''} <button data-keepall>Keep all where they are</button></div>` : '';
   const rest = threadResultsHTML(threads) + Everything.html($('#search').value) + jiraResultsHTML(jira), recent = RecentCaps.html();
@@ -1399,6 +1410,7 @@ $('#board').addEventListener('click', async ev => {
   if (gc) { show('inbox'); return setTimeout(() => { const el = $(`#clips [data-clip="${gc.dataset.goclip}"]`); if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); } }, 50); }
   if (ev.target.closest('[data-allclips]')) { ev.preventDefault(); return show('inbox'); }
   const ha = ev.target.closest('[data-homeall]'); if (ha) return Home.set(ha.dataset.homeall === '1');
+  const ge = ev.target.closest('[data-guardenv]'); if (ge) return EnvSwitch.set(ge.dataset.guardenv);
   const st = ev.target.closest('[data-settype]');
   if (st) {
     try { await api('POST', '/api/entries/bulk', { ids: [st.dataset.id], op: 'type', value: st.dataset.settype }); toast(`Saved as ${st.textContent}` + (st.dataset.settype === 'ssh' ? '' : ' — it is now in SQL')); poll(); }
@@ -2224,34 +2236,58 @@ $('#localPane').addEventListener('click', async e => {
   }
 });
 
+// Each server opened on the Files page gets its own tab (as in SQL); opening
+// one that is already open switches to its tab. The pane shows the active tab;
+// each tab keeps its folder. Transfers keep their own session.
+Remote.tabs = [];
+Remote.tab = null;
+Remote.renderTabs = () => {
+  let bar = $('#ftpTabs');
+  if (!bar) { bar = Object.assign(document.createElement('div'), { id: 'ftpTabs', className: 'ftptabs' }); $('#remotePane').prepend(bar); }
+  bar.hidden = !Remote.tabs.length;
+  bar.innerHTML = Remote.tabs.map((t, i) => `<button type="button" class="ftab ${t === Remote.tab ? 'on' : ''}" data-ftab="${i}" title="${esc(t.label)}">${t.entry.env ? `<span class="badge ${esc(t.entry.env)}">${esc(t.entry.env)}</span>` : ''}<span class="ftab-t">${esc(t.entry.name || t.entry.host)}</span><span class="x" data-fx="${i}" title="Disconnect">✕</span></button>`).join('');
+};
+Remote.show = t => {
+  if (Remote.tab && Remote.tab !== t) Remote.tab.path = Remote.path; // remember where the tab you leave was
+  Remote.tab = t; Remote.sid = t.sid; Remote.entry = t.entry;
+  Remote.sel.clear();
+  $$('#remotePane [data-needs-conn]').forEach(b => { b.disabled = false; b.title = ''; });
+  $('#sftpLabel').textContent = t.label;
+  $('#sftpDisconnect').hidden = false;
+  Remote.renderTabs(); Tree.render();
+  Remote.load(t.path);
+};
 Remote.connect = async e => {
   if (sshBlocked(e)) return; // FTP still connects
   show('files'); roomForWork();
+  const open = Remote.tabs.find(t => t.entry.id === e.id);
+  if (open) return Remote.show(open); // already connected: its tab
   let creds = {};
   if (needsCreds(e) && !(isFTP(e) && !e.username)) { creds = await askCreds(e); if (!creds) return; }
-  if (Remote.sid) api('POST', '/api/sftp/close', { sid: Remote.sid }).catch(() => {});
   $('.listing', Remote.root).innerHTML = `<div class="empty">Connecting to ${esc(e.host)}…</div>`;
   try {
     const r = await api('POST', '/api/sftp/open', { id: e.id, ...creds });
-    Remote.sid = r.sid;
-    Remote.entry = e;
-    $$('#remotePane [data-needs-conn]').forEach(b => { b.disabled = false; b.title = ''; });
-    $('#sftpLabel').textContent = `${r.protocol.toUpperCase()}  ${creds.username || e.username || 'anonymous'}@${e.host}`;
-    $('#sftpDisconnect').hidden = false;
-    Tree.render();
+    const t = { sid: r.sid, entry: e, path: r.home, label: `${r.protocol.toUpperCase()}  ${creds.username || e.username || 'anonymous'}@${e.host}` };
+    Remote.tabs.push(t);
+    Remote.show(t);
     toast('Connected to ' + e.host);
-    Remote.load(r.home);
   } catch (err) {
-    $('.listing', Remote.root).innerHTML = `<div class="empty">${esc(err.message)}</div>`;
     toast(err.message, true);
+    if (Remote.tab) Remote.show(Remote.tab); // the other tabs are still open
+    else $('.listing', Remote.root).innerHTML = `<div class="empty">${esc(err.message)}</div>`;
   }
 };
 
-// ⏏ Disconnect: close the FTP/SFTP session; the pane goes back to "Not connected".
-Remote.disconnect = () => {
-  if (!Remote.sid) return;
-  const host = Remote.entry?.host || '';
-  api('POST', '/api/sftp/close', { sid: Remote.sid }).catch(() => {});
+// ⏏ Disconnect / ✕ on a tab: close that session; the next tab shows, or "Not connected".
+Remote.disconnect = (t = Remote.tab, quiet) => {
+  if (!t) return;
+  api('POST', '/api/sftp/close', { sid: t.sid }).catch(() => {});
+  Remote.tabs = Remote.tabs.filter(x => x !== t);
+  if (!quiet) toast('Disconnected from ' + t.entry.host);
+  if (t !== Remote.tab) { Remote.renderTabs(); Tree.render(); return; }
+  Remote.tab = null;
+  const next = Remote.tabs[Remote.tabs.length - 1];
+  if (next) return Remote.show(next);
   Object.assign(Remote, { sid: null, entry: null, items: [], path: '', parent: '' });
   Remote.sel.clear();
   $('#sftpLabel').textContent = 'Not connected';
@@ -2259,22 +2295,25 @@ Remote.disconnect = () => {
   $$('#remotePane [data-needs-conn]').forEach(b => { b.disabled = true; b.title = 'Connect to a server first'; });
   $('.path', Remote.root).value = '';
   $('.listing', Remote.root).innerHTML = '<div class="empty">Double-click a server in the tree to connect.<br>Drop files here to upload.</div>';
-  xferHint(); Tree.render();
-  toast('Disconnected' + (host ? ' from ' + host : ''));
+  Remote.renderTabs(); xferHint(); Tree.render();
 };
 $('#sftpDisconnect').onclick = () => Remote.disconnect();
+$('#remotePane').addEventListener('click', e => {
+  const x = e.target.closest('[data-fx]'); if (x) { e.stopPropagation(); return Remote.disconnect(Remote.tabs[+x.dataset.fx]); }
+  const t = e.target.closest('[data-ftab]'); if (t) { const tab = Remote.tabs[+t.dataset.ftab]; if (tab && tab !== Remote.tab) Remote.show(tab); }
+});
 
 // ☰ → Disconnect all: every SSH terminal, FTP session and database (command
 // prompts on this PC stay open).
 function openSessions() {
-  return { ssh: Term.tabs.filter(t => !t.local && !t.closed), ftp: Remote.sid ? 1 : 0, sql: SQL.tabs.length };
+  return { ssh: Term.tabs.filter(t => !t.local && !t.closed), ftp: Remote.tabs.length, sql: SQL.tabs.length };
 }
 function disconnectAll() {
   const o = openSessions();
   o.ssh.forEach(t => Term.close(t));
-  if (o.ftp) Remote.disconnect();
+  [...Remote.tabs].forEach(t => Remote.disconnect(t, true));
   [...SQL.tabs].forEach(t => SQL.close(t));
-  toast(`Disconnected ${[o.ssh.length && `${o.ssh.length} SSH`, o.ftp && 'FTP', o.sql && `${o.sql} database${o.sql > 1 ? 's' : ''}`].filter(Boolean).join(', ')}`);
+  toast(`Disconnected ${[o.ssh.length && `${o.ssh.length} SSH`, o.ftp && o.ftp + ' FTP', o.sql && `${o.sql} database${o.sql > 1 ? 's' : ''}`].filter(Boolean).join(', ')}`);
 }
 
 $('#remotePane').addEventListener('click', e => {
@@ -2690,21 +2729,22 @@ const Tree = {
   sessionsFor(match) {
     return {
       ssh: Term.tabs.filter(t => !t.local && t.entry && match(t.entry)),
-      ftp: Remote.sid && Remote.entry && match(Remote.entry) ? 1 : 0,
+      ftp: Remote.tabs.filter(t => match(t.entry)),
       sql: SQL.tabs.filter(t => match(t.entry)),
       tun: S.entries.filter(e => match(e) && Tunnels.running[e.id]),
     };
   },
   hostSessions(host) { const h = (host || '').toLowerCase(); return this.sessionsFor(x => (x?.host || '').toLowerCase() === h); },
   entrySessions(list) { const ids = new Set(list.map(e => e.id)); return this.sessionsFor(x => ids.has(x?.id)); },
-  sessionCount(o) { return o.ssh.length + o.ftp + o.sql.length + o.tun.length; },
+  sessionCount(o) { return o.ssh.length + o.ftp.length + o.sql.length + o.tun.length; },
   hostSessionCount(host) { return this.sessionCount(this.hostSessions(host)); },
   disconnectHost(host) { return this.disconnectSessions(this.hostSessions(host), host); },
   async disconnectSessions(o, where) {
     const parts = [];
     o.ssh.forEach(t => Term.close(t));
     if (o.ssh.length) parts.push(`${o.ssh.length} SSH`);
-    if (o.ftp) { Remote.disconnect(); parts.push('FTP'); }
+    o.ftp.forEach(t => Remote.disconnect(t, true));
+    if (o.ftp.length) parts.push(`${o.ftp.length} FTP`);
     o.sql.forEach(t => SQL.close(t));
     if (o.sql.length) parts.push(`${o.sql.length} SQL`);
     for (const e of o.tun) await api('POST', `/api/tunnels/${e.id}/stop`).catch(() => {});
@@ -2777,7 +2817,7 @@ const Tree = {
       const tabs = Term.tabs.filter(t => t.entry?.id === e.id && !t.local && !t.closed);
       if (canSSH(e) || tabs.length) items.push([`⏏ Disconnect SSH${tabs.length > 1 ? ` (${tabs.length} terminals)` : ''}`, tabs.length ? () => tabs.forEach(t => Term.close(t)) : null]);
       if (canFiles(e)) items.push([`Open in FTP (${isFTP(e) ? (e.protocol || 'ftp').toUpperCase() : 'SFTP'})`, () => Remote.connect(e)]);
-      if (Remote.sid && Remote.entry?.id === e.id) items.push(['⏏ Disconnect FTP', () => Remote.disconnect()]);
+      { const ft = Remote.tabs.find(t => t.entry.id === e.id); if (ft) items.push(['⏏ Disconnect FTP', () => Remote.disconnect(ft)]); }
       if (e.host && isConn(e)) { const n = this.hostSessionCount(e.host); items.push([`⏏ Disconnect all on ${e.host}${n ? ` (${n})` : ''}`, n ? () => this.disconnectHost(e.host) : null]); }
       if (External.items(e).length) items.push('-', ...External.items(e));
       if (canSSH(e) && e.extra?.tunnels) {
@@ -4387,14 +4427,18 @@ const root = document.documentElement;
 // Text size per pane: A−/A+ buttons or Ctrl + mouse wheel. (Ctrl +/− in the
 // browser still zooms the whole app.)
 const Fonts = {
-  sizes: store.get('fonts', { term: 13, editor: 13, sql: 13 }), // terminal 13px ≈ PuTTY's Courier New 10pt
-  size(k) { return this.sizes[k] || 13; },
+  sizes: store.get('fonts', { term: 14, editor: 14, sql: 14 }), // a size you chose (A-/A+) is kept
+  size(k) { return this.sizes[k] || 14; },
+  // Text size of the whole app (Settings → Appearance): every font scales with --ui-scale.
+  ui() { return store.get('uiScale', 1.08); },
+  setUI(v) { store.set('uiScale', v); root.style.setProperty('--ui-scale', v); window.dispatchEvent(new Event('resize')); },
   set(k, v) {
     this.sizes[k] = clamp(Math.round(v), 8, 32);
     store.set('fonts', this.sizes);
     this.apply();
   },
   apply() {
+    root.style.setProperty('--ui-scale', this.ui());
     root.style.setProperty('--fs-editor', this.size('editor') + 'px');
     root.style.setProperty('--fs-sql', this.size('sql') + 'px');
     Term.tabs.forEach(t => { t.term.options.fontSize = this.size('term'); });
@@ -4423,6 +4467,8 @@ Fonts.apply();
 function applySideTop(top) {
   document.body.classList.toggle('side-top', top);
   (top ? $('.side') : $('.appbar')).append($('#gsearch')); // search stays at the top right
+  // left: 💬 and ✨ sit in the title row (☰ and the layout switch are in the menu bar); top: all in the tools row
+  for (const id of ['chatFab', 'whatsNewTop']) { const b = $('#' + id); if (b) (top ? $('.brand-tools') : $('.brand')).insertBefore(b, top ? $('#mainMenuBtn') : $('#sideToggle')); }
   const b = $('#sideFlip');
   b.title = top ? 'Move this menu back to the left' : 'Move this menu to the top of the window';
   b.innerHTML = top ? '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>' : '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>';

@@ -120,7 +120,7 @@ $('#mainMenuBtn').onclick = () => {
     ['💬 Ask the assistant (Ctrl+J)', () => Chat.toggle(true)],
     ["✨ What's new & tips", click('#whatsNewBtn')],
     '-',
-    ...((o => o.ssh.length || o.ftp || o.sql ? [[`⏏ Disconnect all (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && 'FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')})`, disconnectAll]] : [])(openSessions())),
+    ...((o => o.ssh.length || o.ftp || o.sql ? [[`⏏ Disconnect all (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && o.ftp + ' FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')})`, disconnectAll]] : [])(openSessions())),
     ['🔑 Change a password everywhere…', () => PwAll.open()],
     ...(S.sshKeysOff ? [] : [['🔑 My SSH keys (copy for GitHub)…', () => SSHKeys.open()]]),
     ['🔒 Lock (Ctrl+L)', click('#lockBtn')], '-',

@@ -166,6 +166,23 @@ with sync_playwright() as p:
         expect(not r["ok"] and "switched off" in r["message"], f"SSH test: {r}")
         expect(ev(f"api('GET', '/api/entries').then(l => l.find(e => e.port === 2222).status || '')") != "fail", "the switched-off test marked the entry failed")
 
+    @check("Files: each server in its own tab; opening an open one switches to it")
+    def _():
+        if ssh_off():
+            raise Skip("SSH is switched off")
+        a, b = "S.entries.find(e => e.port === 2222)", "S.entries.find(e => e.port === 2223)"
+        ev(f"Remote.connect({a})"); pg.wait_for_function("Remote.tabs.length === 1 && Remote.items.length > 0", timeout=15000)
+        first_path = ev("Remote.path")
+        ev(f"Remote.connect({b})"); pg.wait_for_function("Remote.tabs.length === 2 && Remote.tab === Remote.tabs[1]", timeout=15000)
+        expect(pg.locator("#ftpTabs .ftab").count() == 2, "two tabs not shown")
+        ev(f"Remote.connect({a})"); pg.wait_for_timeout(500)
+        expect(ev("Remote.tabs.length") == 2 and ev("Remote.tab === Remote.tabs[0]"), "the open server got a new tab instead of switching")
+        expect(ev("Remote.path") == first_path, "the tab lost its folder")
+        pg.click("#ftpTabs [data-fx='1']"); pg.wait_for_timeout(300)
+        expect(ev("Remote.tabs.length") == 1, "✕ didn't close the tab")
+        ev("disconnectAll()"); pg.wait_for_timeout(300)
+        expect(ev("Remote.tabs.length") == 0 and not ev("Remote.sid"), "Disconnect all left FTP open")
+
     @check("threads: open one with a screenshot")
     def _():
         ev("show('tasks')")
@@ -355,6 +372,59 @@ with sync_playwright() as p:
         ev("document.activeElement && document.activeElement.blur()")
         pg.keyboard.press("Control+Comma"); pg.wait_for_timeout(300)
         expect(ev("!!document.querySelector('dialog[open]')"), "Ctrl+, didn't open Settings")
+        close_dialogs()
+
+    @check("Settings: sections on the left, each with its controls; Watch clipboard there too")
+    def _():
+        pg.click("#settingsTop"); pg.wait_for_timeout(500)
+        tabs = ev("[...document.querySelectorAll('#settingsBody [data-settab]')].map(b => b.dataset.settab)")
+        expect(tabs[:2] == ["general", "look"] and "capture" in tabs and "data" in tabs, f"tabs: {tabs}")
+        for t in tabs:
+            pg.click(f"[data-settab={t}]"); pg.wait_for_timeout(100)
+            n = ev(f"document.querySelectorAll('#settingsBody [data-setpane={t}]:not([hidden]) .set-row').length")
+            expect(n > 0, f"section {t} is empty")
+        pg.click("[data-settab=capture]")
+        was = ev("!!S.settings.watch")
+        pg.click("#settingsBody label.switch:has([data-set=watch])"); pg.wait_for_timeout(500)
+        expect(ev("!!S.settings.watch") == (not was), "Watch clipboard in Settings didn't switch capture")
+        pg.click("#settingsBody label.switch:has([data-set=watch])"); pg.wait_for_timeout(500)
+        close_dialogs()
+
+    @check("left menu: fits, no page counts, no duplicate search; the rail can be expanded again")
+    def _():
+        expect(not pg.is_visible("#nav .navsearch"), "🔍 beside Dashboard is back")
+        expect(not pg.is_visible("#nav .ng-n"), "page counts shown")
+        expect(not pg.is_visible("#mainMenuBtn") and not pg.is_visible("#sideFlip"), "☰ / layout switch shown on the left")
+        expect(not pg.is_visible("#nav [data-view=groups]"), "Groups still in the menu")
+        expect(ev("show('groups'), document.querySelector('.view.active').id") == "view-groups", "Groups page no longer opens")
+        ev("show('dashboard')")
+        pg.click("#sideToggle"); pg.wait_for_timeout(300)
+        expect(pg.is_visible("#sideToggle"), "» not visible on the rail")
+        pg.click("#sideToggle"); pg.wait_for_timeout(300)
+        expect(not ev("document.body.classList.contains('side-collapsed')"), "menu didn't expand again")
+
+    @check("search leaves UAT and PROD out unless picked at the top (with a note and Show buttons)")
+    def _():
+        ev("show('dashboard')"); ev("EnvSwitch.v && EnvSwitch.set('')")
+        pg.fill("#search", "acme"); pg.dispatch_event("#search", "input"); pg.wait_for_timeout(500)
+        envs = ev("filtered().map(e => (e.env || '').toUpperCase())")
+        expect(envs and not any(e.startswith("UAT") or e.startswith("PROD") for e in envs), f"UAT/PROD in results: {set(envs)}")
+        expect(pg.is_visible("#board .guard-note"), "no note about hidden UAT/PROD results")
+        pg.click("#board [data-guardenv=PROD]"); pg.wait_for_timeout(400)
+        envs = ev("filtered().map(e => (e.env || '').toUpperCase())")
+        expect(envs and all(e.startswith("PROD") for e in envs), f"PROD picked, results: {set(envs)}")
+        ev("EnvSwitch.set('')")
+        pg.fill("#search", "acme env:prod"); pg.dispatch_event("#search", "input"); pg.wait_for_timeout(400)
+        expect(ev("filtered().length") > 0, "env:prod typed shows nothing")
+        pg.fill("#search", ""); pg.dispatch_event("#search", "input")
+
+    @check("text size: bigger by default, Settings → Appearance changes it")
+    def _():
+        expect(float(ev("parseFloat(getComputedStyle(document.body).fontSize)")) > 14.5, "default text not bigger")
+        pg.click("#settingsTop"); pg.wait_for_timeout(400); pg.click("[data-settab=look]")
+        pg.select_option("#settingsBody select[data-set=uiscale]", "1.25"); pg.wait_for_timeout(300)
+        expect(float(ev("parseFloat(getComputedStyle(document.body).fontSize)")) > 17, "Larger didn't apply")
+        pg.select_option("#settingsBody select[data-set=uiscale]", "1.08"); pg.wait_for_timeout(200)
         close_dialogs()
 
     @check("thread list: the capture thread says Active; no 'To do' badges")

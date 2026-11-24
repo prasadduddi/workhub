@@ -4,6 +4,14 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.15.6', title: 'Lighter menu and Settings, bigger text, safer search, FTP tabs', items: [
+    ['🔒', 'UAT and PROD stay out of search', 'With All at the top, searching leaves UAT and PROD servers out — pick UAT or PROD (or type env:prod) to see them. A note says how many matched, with Show UAT / Show PROD.', 'dashboard'],
+    ['🔠', 'Bigger text', 'Everything is a little larger by default; ⚙ Settings → Appearance → Text size: Small, Normal, Large or Larger. Terminal, editor and SQL start at 14 px (A− / A+ there as before).', ''],
+    ['🗂', 'FTP in tabs', 'On the Files page each server opens in its own tab, like SQL — opening one that is already open switches to it, and each tab keeps its folder. ✕ on a tab disconnects it.', 'files'],
+    ['☰', 'Left menu', 'Lighter and compact: all pages fit without scrolling, the active page is clearly marked, no page counts or duplicate buttons (search, ☰ and the layout switch are at the top / in View). 💬 and ✨ sit next to the title; capture is one line saying where copies go.', ''],
+    ['⚙', 'Settings in sections', 'General, Appearance, Capture, Security, Data & backups, Programs and About — one short page each. Capture now has Watch clipboard, screenshots, “keep clips with no info” and Outlook monitoring together.', ''],
+    ['🗂', 'Groups hidden', 'Groups is out of the menu (search, ★ saved searches and projects do its job). Your groups still label tabs; View → Pages in the sidebar shows the page again.', ''],
+  ] },
   { v: '1.15.5', title: 'A calmer Dashboard, Active thread, Settings at the top', items: [
     ['📅', 'Dashboard: what you use', 'The Dashboard now shows your recent connections, recent links, open threads, reminders and Jira issues, your ★ pinned items and what needs doing — not every saved connection and bookmark. “All connections and links” opens the full list (▴ Back to the overview returns); searching works as before.', 'dashboard'],
     ['🟢', 'The thread you work in says Active', 'In the thread list, the thread you\'re capturing into shows ● Active. Threads that are just “To do” no longer show a badge; In progress, Blocked and Done still do.', 'tasks'],

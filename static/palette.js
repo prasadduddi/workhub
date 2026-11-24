@@ -24,7 +24,7 @@ const Palette = {
       else walk(items, [name]);
     }
     for (const v of Menubar.pages()) out.push([`page:${v}`, '📄', `Go to ${Menubar.label(v)}`, 'page', () => show(v)]);
-    for (const e of S.entries.filter(isConn)) {
+    for (const e of S.entries.filter(e => isConn(e) && !(searchGuard('x') && guardedEnv(e)))) { // UAT / PROD: when picked at the top
       const what = canDB(e) ? 'SQL' : canFiles(e) && !canSSH(e) ? 'FTP' : 'SSH';
       out.push([`conn:${e.id}`, canDB(e) ? '🛢' : '🖥', `${what}: ${(canDB(e) ? dbLabel(e) : e.name || e.host).replace(/<[^>]*>/g, '')}`, [e.env, e.username ? e.username + '@' + e.host : e.host].filter(Boolean).join(' · '), () => connectEntry(e)]);
     }

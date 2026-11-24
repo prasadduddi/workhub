@@ -47,7 +47,7 @@ const Groups = {
       ...Term.tabs.map(t => ({ kind: 'SSH', label: t.local ? t.local.label : `${t.creds.username || t.entry.username || ''}@${t.entry.host}`, text: t.local ? t.local.label + ' ' + t.local.dir : this.entryText(t.entry), go: () => { show('terminal'); Term.activate(t); } })),
       ...SQL.tabs.map(t => ({ kind: 'SQL', label: t.entry.name, text: this.entryText(t.entry), go: () => { show('sql'); SQL.activate(t); } })),
       ...Notes.docs.map(d => ({ kind: 'Notes', label: d.title, text: (d.path || '') + ' ' + d.title + ' ' + (d.content || '').slice(0, 20000), go: () => { show('notes'); Notes.activate(d); } })),
-      ...(Remote.sid && Remote.entry ? [{ kind: 'FTP', label: Remote.entry.name, text: this.entryText(Remote.entry) + ' ' + Remote.path, go: () => show('files') }] : []),
+      ...Remote.tabs.map(t => ({ kind: 'FTP', label: t.entry.name, text: this.entryText(t.entry) + ' ' + (t === Remote.tab ? Remote.path : t.path), go: () => { show('files'); Remote.show(t); } })),
     ].filter(w => this.matches(g, w.text));
     const notes = (Notes.notes || []).filter(n => this.matches(g, n.title + ' ' + n.body));
     const files = (Notes.recent || []).filter(r => this.matches(g, r.path));

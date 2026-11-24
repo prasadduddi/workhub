@@ -14,7 +14,12 @@ const PAGE_GROUPS = [
 
 const Menubar = {
   store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k) || 'null'); localStorage.setItem(k, JSON.stringify(v)); } catch { return null; } },
-  hidden() { return new Set(this.store('navHidden') || []); },
+  hidden() {
+    // Groups is hidden once by default (search, saved searches and projects do its job);
+    // View → Pages in the sidebar shows it again, and that choice is kept.
+    if (!this.store('groupsHiddenOnce')) { const h = new Set(this.store('navHidden') || []); h.add('groups'); this.store('navHidden', [...h]); this.store('groupsHiddenOnce', true); }
+    return new Set(this.store('navHidden') || []);
+  },
   folded() { return new Set(this.store('navFolded') || []); },
   label(v) { return $(`#nav [data-view="${v}"] .nl`)?.textContent || v; },
   pages() { return PAGE_GROUPS.flatMap(g => g[4]); },

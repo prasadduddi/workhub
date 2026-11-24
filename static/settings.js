@@ -22,36 +22,63 @@ const Settings = {
     const sw = (act, on) => `<label class="switch small"><input type="checkbox" data-set="${act}" ${on ? 'checked' : ''}><span></span></label>`;
     const sel = (act, val, opts) => `<select data-set="${act}">${opts.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
     const latest = backups.backups?.[0];
-    $('#settingsBody').innerHTML = `
-      ${inst.supported ? `<h4>This PC</h4>
-      ${inst.installed
-        ? row('📌 Installed for easy access', `In <code class="set-path">${esc(inst.target)}</code>${inst.start_menu ? ' · in the Start menu (type “WorkHub” in Start; right-click → Pin to taskbar)' : ''}`, '')
-        : row('📌 Install for easy access', `Running from <code class="set-path">${esc(inst.exe)}</code>. Install copies WorkHub to your own programs folder (safe from Downloads clean-ups), adds it to the Start menu and restarts it from there. Your data stays where it is.`, btn('install', 'Install', 'primary'))}
-      ${row('Desktop shortcut', '', sw('inst-desktop', inst.desktop))}
-      ${row('Start with Windows', 'Opens when you sign in' + (window.WH_DESKTOP ? ' (with the tray, it waits there)' : ''), sw('inst-startup', inst.startup))}` : ''}
-      <h4>Appearance</h4>
-      ${row('Theme', '', sel('theme', Theme.pref(), [['auto', 'Follow Windows'], ['light', 'Light'], ['dark', 'Dark']]))}
-      ${row('Menu position', 'The pages menu on the left, or across the top', sel('menu', document.body.classList.contains('side-top') ? 'top' : 'left', [['left', 'Left'], ['top', 'Top']]))}
-      <h4>You &amp; security</h4>
-      ${row('👤 Your profile', 'Name, email (where recovery codes are sent), team', btn('profile', 'Edit…'))}
-      ${row('🔒 PIN lock', lock.enabled ? `On — locks after ${lock.minutes ? lock.minutes + ' idle minutes' : 'start-up and Lock now only'}` : 'Off — set a PIN to lock WorkHub when you step away', btn('pin', lock.enabled ? 'Change…' : 'Set up…'))}
-      ${row('🔐 Master password', master.on ? 'On — asked the first time each new version starts' : 'Off — protects your data if the data folder is copied', btn('master', master.on ? 'Change…' : 'Turn on…'))}
-      <h4>Data</h4>
-      ${row('📁 Data folder', `<code class="set-path">${esc(S.dataDir || '')}</code>`, btn('dataopen', 'Open') + btn('datacopy', 'Copy path') + btn('dataloc', 'Change…'))}
-      ${row('🛟 Backups', `${latest ? 'Latest ' + esc(fmtDateTime(latest.when)) : 'None yet'}${backups.copy_to ? ` · also copied to <code class="set-path">${esc(backups.copy_to)}</code>` : ''}`, btn('backups', 'Manage…'))}
-      ${row('📸 Capture screenshots', 'Pictures you copy (Win+Shift+S, PrtScn) go into the capture thread — General, a thread with 📥 Capture here, or the one for a Jira key', sw('shots', !S.settings.no_shots))}
-      ${row('📝 Save SSH session text', 'Keep what each terminal shows, per server and day, searchable', sw('slog', !!S.settings.session_log) + btn('slogopen', 'Logs…'))}
-      ${row('Import data', 'From an older WorkHub data folder or a file', btn('import', 'Import…'))}
-      ${row('↺ Reopen last session', 'After starting WorkHub, offer to reopen the SSH terminals, SQL tabs and thread you had open (after an update it reopens them by itself)', sw('reopen', !S.settings.no_reopen))}
-      ${row('⬇ Download updates in the background', 'New versions are fetched quietly and wait — nothing is installed until you click ⬆ in the sidebar', sw('updfetch', !S.settings.no_update_fetch))}
-      <h4>Programs</h4>
-      ${row('↗ Programs for “Open in”', 'PuTTY, FileZilla, SQL Developer, DBeaver…', btn('ext', 'Choose…'))}
-      ${window.WH_DESKTOP ? `<h4>Desktop window</h4>${row('Close button keeps WorkHub running', 'In the tray by the clock — capture, tunnels and transfers carry on', sw('tray', Tray.on()))}` : ''}
-      <div class="muted tiny set-ver">WorkHub ${esc($('#appVersion')?.textContent || '')}</div>`;
+    const ver = $('#appVersion')?.textContent || '';
+    // One page per section, chosen on the left: a few related rows each, instead of one long list.
+    const sections = [
+      ['general', '⚙', 'General', [
+        ...(inst.supported ? [inst.installed
+          ? row('Installed for easy access', `In <code class="set-path">${esc(inst.target)}</code>${inst.start_menu ? ' · in the Start menu' : ''}`, '')
+          : row('Install for easy access', 'Copies WorkHub to your programs folder and adds it to the Start menu. Your data stays where it is.', btn('install', 'Install', 'primary')),
+          row('Start with Windows', 'Opens when you sign in', sw('inst-startup', inst.startup)),
+          row('Desktop shortcut', '', sw('inst-desktop', inst.desktop))] : []),
+        ...(window.WH_DESKTOP ? [row('Close button keeps WorkHub running', 'In the tray by the clock — capture, tunnels and transfers carry on', sw('tray', Tray.on()))] : []),
+        row('Reopen last session', 'Offer to reopen your SSH, SQL tabs and thread when WorkHub starts', sw('reopen', !S.settings.no_reopen)),
+        row('Download updates in the background', 'Nothing is installed until you choose to', sw('updfetch', !S.settings.no_update_fetch)),
+      ]],
+      ['look', '🎨', 'Appearance', [
+        row('Theme', '', sel('theme', Theme.pref(), [['auto', 'Follow Windows'], ['light', 'Light'], ['dark', 'Dark']])),
+        row('Text size', 'Bigger text for small or high-resolution screens (terminal and editor: A− / A+ there)', sel('uiscale', String(Fonts.ui()), [['1', 'Small'], ['1.08', 'Normal'], ['1.15', 'Large'], ['1.25', 'Larger']])),
+        row('Menu position', 'Pages on the left, or across the top', sel('menu', document.body.classList.contains('side-top') ? 'top' : 'left', [['left', 'Left'], ['top', 'Top']])),
+      ]],
+      ['capture', '📥', 'Capture', [
+        row('Watch clipboard', 'Hosts, logins and links you copy are saved (also “● Capturing” at the top)', sw('watch', !!S.settings.watch)),
+        row('Capture screenshots', 'Pictures you copy go into the capture thread', sw('shots', !S.settings.no_shots)),
+        row('Keep clips with no info', 'Also keep copied text in which nothing was recognised', sw('capall', !!S.settings.capture_all)),
+        row('Outlook monitoring', 'Capture details from mail sent by chosen senders', btn('mail', 'Open…')),
+      ]],
+      ['security', '🔒', 'Security', [
+        row('Your profile', 'Name, email (where recovery codes are sent), team', btn('profile', 'Edit…')),
+        row('PIN lock', lock.enabled ? `On — locks after ${lock.minutes ? lock.minutes + ' idle minutes' : 'start-up and Lock only'}` : 'Off — lock WorkHub when you step away', btn('pin', lock.enabled ? 'Change…' : 'Set up…')),
+        row('Master password', master.on ? 'On' : 'Off — protects your data if the data folder is copied', btn('master', master.on ? 'Change…' : 'Turn on…')),
+      ]],
+      ['data', '🗂', 'Data & backups', [
+        row('Data folder', `<code class="set-path">${esc(S.dataDir || '')}</code>`, btn('dataopen', 'Open') + btn('datacopy', 'Copy path') + btn('dataloc', 'Change…')),
+        row('Backups', `${latest ? 'Latest ' + esc(fmtDateTime(latest.when)) : 'None yet'}${backups.copy_to ? ` · also copied to <code class="set-path">${esc(backups.copy_to)}</code>` : ''}`, btn('backups', 'Manage…')),
+        row('Save SSH session text', 'What each terminal shows, per server and day, searchable', sw('slog', !!S.settings.session_log) + btn('slogopen', 'Logs…')),
+        row('Import data', 'From an older WorkHub data folder or a file', btn('import', 'Import…')),
+      ]],
+      ['programs', '↗', 'Programs', [
+        row('Programs for “Open in”', 'PuTTY, FileZilla, SQL Developer, DBeaver…', btn('ext', 'Choose…')),
+      ]],
+      ['about', 'ℹ', 'About', [
+        row('Version', esc(ver.replace(/^Version\s*/, '')) || '—', btn('updcheck', 'Check for updates')),
+        row('What’s new & tips', '', btn('whatsnew', 'Open…')),
+      ]],
+    ];
+    if (!sections.some(x => x[0] === this.tab)) this.tab = 'general';
+    $('#settingsBody').innerHTML = `<div class="set-layout"><nav class="set-tabs">${sections.map(([k, ic, name]) => `<button type="button" data-settab="${k}" class="${k === this.tab ? 'on' : ''}"><span class="set-ic">${ic}</span>${name}</button>`).join('')}</nav>
+      <div class="set-pane">${sections.map(([k, , name, rows]) => `<section data-setpane="${k}" ${k === this.tab ? '' : 'hidden'}><h4>${name}</h4>${rows.join('')}</section>`).join('')}</div></div>`;
   },
 };
 
 $('#settingsBody').addEventListener('click', async e => {
+  const tab = e.target.closest('[data-settab]');
+  if (tab) { // switch section without asking the server again
+    Settings.tab = tab.dataset.settab;
+    $$('#settingsBody [data-settab]').forEach(x => x.classList.toggle('on', x === tab));
+    $$('#settingsBody [data-setpane]').forEach(x => { x.hidden = x.dataset.setpane !== Settings.tab; });
+    return;
+  }
   const b = e.target.closest('button[data-set]'); if (!b) return;
   const click = id => $(id).click();
   switch (b.dataset.set) {
@@ -66,6 +93,9 @@ $('#settingsBody').addEventListener('click', async e => {
     case 'import': $('#settingsDlg').close(); click('#importBtn'); break;
     case 'ext': click('#extBtn'); break;
     case 'install': Settings.install(); break;
+    case 'mail': $('#settingsDlg').close(); show('inbox'); $('#mailPanel').open = true; break;
+    case 'updcheck': $('#settingsDlg').close(); Update.check(true); break;
+    case 'whatsnew': $('#settingsDlg').close(); click('#whatsNewBtn'); break;
   }
 });
 Settings.install = async () => {
@@ -86,11 +116,14 @@ $('#settingsBody').addEventListener('change', async e => {
   const t = e.target.closest('[data-set]'); if (!t) return;
   switch (t.dataset.set) {
     case 'theme': Theme.set(t.value); break;
+    case 'uiscale': Fonts.setUI(+t.value); break;
     case 'menu': if ((t.value === 'top') !== document.body.classList.contains('side-top')) $('#sideFlip').click(); break;
     case 'slog': await saveSettings({ session_log: t.checked }); toast(t.checked ? 'SSH sessions you open from now on are saved' : 'SSH sessions are no longer saved'); break;
     case 'tray': Tray.set(t.checked); break;
     case 'reopen': await saveSettings({ no_reopen: !t.checked }); toast(t.checked ? 'You will be offered to reopen your last session' : 'The last session is no longer offered at start (an update still reopens it)'); break;
     case 'updfetch': await saveSettings({ no_update_fetch: !t.checked }); toast(t.checked ? 'New versions download in the background — you choose when to install' : 'New versions are no longer downloaded until you ask'); break;
+    case 'watch': if ($('#watchToggle').checked !== t.checked) $('#watchToggle').click(); break; // same as ● Capturing at the top
+    case 'capall': await saveSettings({ capture_all: t.checked }); break;
     case 'shots': await saveSettings({ no_shots: !t.checked }); toast(t.checked ? 'Copied screenshots go into the capture thread' : 'Screenshots are no longer captured'); break;
     case 'inst-desktop': case 'inst-startup': if (Settings.inst?.installed) Settings.install(); break; // not installed yet: used by Install
   }
