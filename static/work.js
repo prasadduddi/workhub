@@ -323,7 +323,7 @@ const Work = {
     const last = rs.length ? new Date(rs[rs.length - 1].at) : null;
     const thread = !inPanel && rs.length ? `<a href="#" class="tthread" data-pact="thread">💬 ${rs.length} repl${rs.length > 1 ? 'ies' : 'y'} <span class="muted">Last reply ${esc(last.toDateString() === new Date().toDateString() ? last.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : last.toLocaleDateString())}</span></a>` : '';
     // ✎ Edit comes first, with its name on it: the action people look for most
-    const tools = `<div class="thover">${p.kind === 'note' ? '<button class="tedit-btn" data-pact="edit" title="Edit this message (↑ in an empty box edits your last one)">✎ Edit</button>' : ''}${QUICK_REACTS.map(e => `<button class="icon" data-pact="react" data-emoji="${e}" title="React ${e}">${e}</button>`).join('')}<button class="icon" data-pact="emoji" title="More reactions">😀</button>${inPanel && p.parent ? '' : `<button class="icon" data-pact="thread" title="Reply in thread">💬</button>`}<button class="icon" data-pact="save" title="${p.saved ? 'Remove from Saved' : 'Save for later'}">${p.saved ? '🔖✓' : '🔖'}</button><button class="icon more" data-pact="more" title="More: pin, remind me, copy link, delete">⋯</button></div>`;
+    const tools = `<div class="thover">${Work.canEdit(p) ? `<button class="tedit-btn" data-pact="edit" title="${p.kind === 'entry' ? 'Edit this connection' : 'Edit this message (↑ in an empty box edits your last one)'}">✎ Edit</button>` : ''}${QUICK_REACTS.map(e => `<button class="icon" data-pact="react" data-emoji="${e}" title="React ${e}">${e}</button>`).join('')}<button class="icon" data-pact="emoji" title="More reactions">😀</button>${inPanel && p.parent ? '' : `<button class="icon" data-pact="thread" title="Reply in thread">💬</button>`}<button class="icon" data-pact="save" title="${p.saved ? 'Remove from Saved' : 'Save for later'}">${p.saved ? '🔖✓' : '🔖'}</button><button class="icon more" data-pact="more" title="More: pin, remind me, copy link, delete">⋯</button></div>`;
     return `<div class="tmsg k-${p.kind} ${cont ? 'cont' : ''} ${p.pinned ? 'pinned' : ''} ${p.parent ? 'reply' : ''}" data-post="${p.id}">
       <div class="tav">${cont ? `<span class="tmini" title="${esc(at.toLocaleString())}">${time}</span>` : `<span class="avatar k-${p.kind}">${icon}</span>`}</div>
       <div class="tcontent">${head}<div class="tbody${fold === 'fold' ? ' long' : ''}">${this.postBody(p)}</div>${fold ? `<button class="tmore" data-pact="${fold === 'fold' ? 'expand' : 'fold'}">${fold === 'fold' ? 'Show the whole document ▾' : 'Show less ▴'}</button>` : ''}${this.previews(p)}${reacts}${thread}</div>${tools}</div>`;
@@ -425,9 +425,16 @@ const Work = {
     this.patch(p, { remind_at: when ? when.toISOString() : '0001-01-01T00:00:00Z' }, when ? `⏰ I'll remind you ${when.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Reminder removed');
   },
   postLink(p) { return `${location.origin}/#tasks/${this.current.id}/${p.id}`; },
+  // What ✎ Edit does: your messages and emails are edited in place; a
+  // clipboard capture as its real text (it is shown with passwords masked);
+  // a server card opens the connection.
+  canEdit(p) { return p.kind === 'note' || (p.kind === 'capture' && !p.html) || (p.kind === 'entry' && !!byId(p.ref)); },
   editPost(pid) {
+    const p = this.current?.posts.find(x => x.id === pid);
+    if (p?.kind === 'entry') return byId(p.ref) && openEntryDialog(byId(p.ref));
     const postEl = $(`#taskMain [data-post="${pid}"]`); if (!postEl) return;
     const body = postEl.querySelector('.tbody');
+    if (p?.kind === 'capture' && !p.html) body.innerHTML = `<pre class="tedit-pre">${esc(p.text || '')}</pre>`; // the text itself, not the masked view
     body.contentEditable = 'true'; body.classList.add('editing'); body.focus();
     const r = document.createRange(); r.selectNodeContents(body); r.collapse(false); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
     body.insertAdjacentHTML('afterend', '<div class="row tedit"><button class="primary" data-pact="save-edit">Save</button><button data-pact="cancel">Cancel</button><span class="muted tiny">Enter saves · Esc cancels</span></div>');
@@ -691,6 +698,11 @@ page.addEventListener('click', async e => {
     if (pact === 'edit') return Work.editPost(p.id);
     if (pact === 'expand' || pact === 'fold') { (Work.expanded ||= new Set())[pact === 'expand' ? 'add' : 'delete'](p.id); Work.render(); return pact === 'fold' && Work.flash(p.id); }
     if (pact === 'cancel') return Work.render();
+    if (pact === 'save-edit' && p.kind === 'capture' && !p.html) { // a capture keeps being a capture: its text, masked when shown
+      const text = postEl.querySelector('.tbody').innerText.replace(/\s+$/, '');
+      await api('PUT', `/api/work/${w.id}/posts/${p.id}`, { text }).catch(err => toast(err.message, true));
+      p.text = text; p.edited = new Date().toISOString(); return Work.render();
+    }
     if (pact === 'save-edit') {
       const html = slackBlocks(sanitizeHTML(postEl.querySelector('.tbody').innerHTML));
       await api('PUT', `/api/work/${w.id}/posts/${p.id}`, { html }).catch(err => toast(err.message, true));
@@ -712,7 +724,7 @@ function postMenu(p, postEl, r) {
   const at = (h, m = 0, days = 0) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, m, 0, 0); return d; };
   const nextMon = () => { const d = at(9); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return d; };
   setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
-    ...(p.kind === 'note' ? [['✎ Edit message', () => Work.editPost(p.id)], '-'] : []),
+    ...(Work.canEdit(p) ? [[p.kind === 'entry' ? '✎ Edit connection' : '✎ Edit message', () => Work.editPost(p.id)], '-'] : []),
     ['💬 Reply in thread', () => Work.openPanel(p.parent || p.id)],
     [p.pinned ? '📌 Unpin' : '📌 Pin to the top', () => Work.pin(p, !p.pinned)],
     [p.saved ? '🔖 Remove from Saved' : '🔖 Save for later', () => Work.save(p)],

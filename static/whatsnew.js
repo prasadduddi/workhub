@@ -4,6 +4,9 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.15.4', title: 'Edit on every message', items: [
+    ['✎', 'Edit clipboard captures and server cards too', '✎ Edit is now on every message, first on its bar: your messages and emails are edited in place; a clipboard capture opens its real text (passwords included) and stays a capture — still masked when shown; a server card opens the connection to edit.', 'tasks'],
+  ] },
   { v: '1.15.3', title: 'Edit a message: first and easy to find', items: [
     ['✎', 'Edit comes first', 'Point at a message: ✎ Edit is now the first button, with its name on it. It is also the first item in the message\'s ⋯ menu. (↑ in the empty box still edits your last message.) Menus near the right edge no longer run off the screen.', 'tasks'],
   ] },

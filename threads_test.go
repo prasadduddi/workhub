@@ -414,3 +414,23 @@ func TestImportDocxIntoThread(t *testing.T) {
 		t.Error("unknown thread accepted")
 	}
 }
+
+// A clipboard capture can be edited: its text changes, it stays a capture.
+func TestEditCaptureText(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	w := s.SaveWorkItem(WorkItem{Title: "x"})
+	p, err := s.AddPost(w.ID, Post{Kind: "capture", Text: "host srv-01 pasword: Secret123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt := "host srv-01 password: Secret123"
+	if err := s.PatchPost(w.ID, p.ID, PostPatch{Text: &txt}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetWorkItem(w.ID)
+	for _, q := range got.Posts {
+		if q.ID == p.ID && (q.Text != txt || q.Kind != "capture" || q.HTML != "" || q.Edited.IsZero()) {
+			t.Fatalf("edited capture: %+v", q)
+		}
+	}
+}

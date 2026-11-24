@@ -39,6 +39,7 @@ type Post struct {
 // PostPatch changes parts of a post; nil fields stay as they are.
 type PostPatch struct {
 	HTML      *string    `json:"html"`
+	Text      *string    `json:"text"` // a clipboard capture's text (shown with passwords masked)
 	Pinned    *bool      `json:"pinned"`
 	Reactions *[]string  `json:"reactions"`
 	Saved     *bool      `json:"saved"`
@@ -135,6 +136,9 @@ func (s *Store) PatchPost(id, pid string, in PostPatch) error {
 		if p.ID == pid {
 			if in.HTML != nil {
 				p.HTML, p.Edited = *in.HTML, time.Now()
+			}
+			if in.Text != nil {
+				p.Text, p.Edited = *in.Text, time.Now()
 			}
 			if in.Pinned != nil {
 				p.Pinned = *in.Pinned
@@ -504,7 +508,7 @@ func (a *App) handlePostEdit(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 404, err)
 		return
 	}
-	if in.HTML != nil || in.Pinned != nil { // what the Word copy shows
+	if in.HTML != nil || in.Text != nil || in.Pinned != nil { // what the Word copy shows
 		_, _ = a.store.writeWorkDocx(r.PathValue("id"))
 	}
 	writeJSON(w, map[string]bool{"ok": true})

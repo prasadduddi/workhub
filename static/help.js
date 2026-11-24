@@ -124,7 +124,8 @@ const HELP_TOPICS = [
     'UAT or PROD shows only that environment\'s connections, databases and bookmarks on every page (UAT also covers UAT1, UAT2…); entries without an environment are hidden too.',
     'All shows everything again. The choice is remembered when WorkHub restarts.'] },
   { t: 'Edit a message in a thread', k: 'edit change correct fix message post typo update rewrite', v: 'tasks', s: [
-    'Point at the message: ✎ Edit is the first button on the bar that appears (or ⋯ → ✎ Edit message).',
+    'Point at the message: ✎ Edit is the first button on the bar that appears (or ⋯ → ✎ Edit message). It is on every kind of message:',
+    'your messages and emails are edited in place; a clipboard capture shows its real text (passwords too) and stays a capture, masked when shown; a server card opens the connection.',
     'Change the text, then Save (Enter) or Cancel (Esc). Edited messages show (edited).',
     'Quick way for your last message: press ↑ in the empty message box.'] },
   { t: 'Add a Word document to a thread', k: 'word docx document import contents paste into thread add format formatting keep', v: 'tasks', s: [

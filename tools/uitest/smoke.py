@@ -199,6 +199,38 @@ with sync_playwright() as p:
         expect(ev("!!document.querySelector('#tposts .tbody.editing')"), "Edit didn't start editing")
         pg.click("#tposts [data-pact=cancel]")
 
+    @check("✎ Edit on a clipboard capture: real text, still a capture; on a server card: the connection")
+    def _():
+        ev("show('tasks')")
+        find = lambda test: ev(f"""(async () => {{ for (const w of Work.list) {{ const d = await api('GET', '/api/work/' + w.id);
+                    if (d.posts.some(p => {test})) return w.id; }} return ''; }})()""")
+        tid = find("p.kind === 'capture' && !p.html")
+        expect(tid, "no demo thread with a clipboard capture")
+        ev(f"Work.open('{tid}')"); pg.wait_for_timeout(500)
+        cap = pg.locator("#tposts .tmsg.k-capture").first
+        cap.scroll_into_view_if_needed(); cap.hover(); pg.wait_for_timeout(200)
+        first = cap.locator(".thover button").first
+        expect("Edit" in first.inner_text(), f"capture's first button: {first.inner_text()!r}")
+        pid = cap.get_attribute("data-post")
+        raw = ev(f"Work.current.posts.find(p => p.id === '{pid}').text")
+        first.click(); pg.wait_for_timeout(200)
+        expect(pg.inner_text(f"#tposts [data-post='{pid}'] .tbody").strip() == raw.strip(), "edit box doesn't hold the real text")
+        pg.evaluate(f"(() => {{ const pre = document.querySelector(\"#tposts [data-post='{pid}'] .tedit-pre\"); pre.textContent += '\\nchecked by smoke'; }})()")
+        pg.click(f"#tposts [data-post='{pid}'] [data-pact=save-edit]"); pg.wait_for_timeout(400)
+        saved = ev(f"api('GET', '/api/work/{tid}').then(d => d.posts.find(p => p.id === '{pid}'))")
+        expect(saved["kind"] == "capture" and saved["text"].endswith("checked by smoke") and not saved.get("html"), f"saved: {saved}")
+        expect(saved["text"].startswith(raw.rstrip()), "the original text (passwords included) was changed")
+        eid = find("p.kind === 'entry'")
+        if not eid:  # the demo has no server card in a thread: post one
+            eid = tid
+            ev(f"api('POST', '/api/work/{tid}/posts', {{ kind: 'entry', ref: S.entries.find(e => e.port === 2222).id }})")
+        ev(f"Work.open('{eid}')"); pg.wait_for_timeout(500)
+        card = pg.locator("#tposts .tmsg.k-entry").first
+        card.scroll_into_view_if_needed(); card.hover(); pg.wait_for_timeout(200)
+        card.locator(".thover button").first.click(); pg.wait_for_timeout(400)
+        expect(ev("!!document.querySelector('dialog[open]')"), "the connection didn't open for editing")
+        close_dialogs()
+
     @check("add a Word document to a thread, formatting kept")
     def _():
         import io, zipfile
