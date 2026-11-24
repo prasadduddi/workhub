@@ -322,7 +322,8 @@ const Work = {
     const reacts = p.reactions?.length ? `<div class="treact">${p.reactions.map(e => `<button class="rchip" data-pact="react" data-emoji="${esc(e)}" title="Remove ${esc(e)}">${esc(e)}</button>`).join('')}<button class="rchip add" data-pact="emoji" title="Add a reaction">😀＋</button></div>` : '';
     const last = rs.length ? new Date(rs[rs.length - 1].at) : null;
     const thread = !inPanel && rs.length ? `<a href="#" class="tthread" data-pact="thread">💬 ${rs.length} repl${rs.length > 1 ? 'ies' : 'y'} <span class="muted">Last reply ${esc(last.toDateString() === new Date().toDateString() ? last.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : last.toLocaleDateString())}</span></a>` : '';
-    const tools = `<div class="thover">${QUICK_REACTS.map(e => `<button class="icon" data-pact="react" data-emoji="${e}" title="React ${e}">${e}</button>`).join('')}<button class="icon" data-pact="emoji" title="More reactions">😀</button>${inPanel && p.parent ? '' : `<button class="icon" data-pact="thread" title="Reply in thread">💬</button>`}<button class="icon" data-pact="save" title="${p.saved ? 'Remove from Saved' : 'Save for later'}">${p.saved ? '🔖✓' : '🔖'}</button>${p.kind === 'note' ? '<button class="icon" data-pact="edit" title="Edit">✎</button>' : ''}<button class="icon more" data-pact="more" title="More: pin, remind me, copy link, delete">⋯</button></div>`;
+    // ✎ Edit comes first, with its name on it: the action people look for most
+    const tools = `<div class="thover">${p.kind === 'note' ? '<button class="tedit-btn" data-pact="edit" title="Edit this message (↑ in an empty box edits your last one)">✎ Edit</button>' : ''}${QUICK_REACTS.map(e => `<button class="icon" data-pact="react" data-emoji="${e}" title="React ${e}">${e}</button>`).join('')}<button class="icon" data-pact="emoji" title="More reactions">😀</button>${inPanel && p.parent ? '' : `<button class="icon" data-pact="thread" title="Reply in thread">💬</button>`}<button class="icon" data-pact="save" title="${p.saved ? 'Remove from Saved' : 'Save for later'}">${p.saved ? '🔖✓' : '🔖'}</button><button class="icon more" data-pact="more" title="More: pin, remind me, copy link, delete">⋯</button></div>`;
     return `<div class="tmsg k-${p.kind} ${cont ? 'cont' : ''} ${p.pinned ? 'pinned' : ''} ${p.parent ? 'reply' : ''}" data-post="${p.id}">
       <div class="tav">${cont ? `<span class="tmini" title="${esc(at.toLocaleString())}">${time}</span>` : `<span class="avatar k-${p.kind}">${icon}</span>`}</div>
       <div class="tcontent">${head}<div class="tbody${fold === 'fold' ? ' long' : ''}">${this.postBody(p)}</div>${fold ? `<button class="tmore" data-pact="${fold === 'fold' ? 'expand' : 'fold'}">${fold === 'fold' ? 'Show the whole document ▾' : 'Show less ▴'}</button>` : ''}${this.previews(p)}${reacts}${thread}</div>${tools}</div>`;
@@ -711,6 +712,7 @@ function postMenu(p, postEl, r) {
   const at = (h, m = 0, days = 0) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, m, 0, 0); return d; };
   const nextMon = () => { const d = at(9); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return d; };
   setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
+    ...(p.kind === 'note' ? [['✎ Edit message', () => Work.editPost(p.id)], '-'] : []),
     ['💬 Reply in thread', () => Work.openPanel(p.parent || p.id)],
     [p.pinned ? '📌 Unpin' : '📌 Pin to the top', () => Work.pin(p, !p.pinned)],
     [p.saved ? '🔖 Remove from Saved' : '🔖 Save for later', () => Work.save(p)],
@@ -726,7 +728,6 @@ function postMenu(p, postEl, r) {
     ['Copy text', () => copyText(p.text || postEl.querySelector('.tbody').innerText)],
     ['➡ Move to another thread…', () => Work.movePost(p, false, { clientX: r.left - 160, clientY: r.bottom })],
     ['⧉ Copy to another thread…', () => Work.movePost(p, true, { clientX: r.left - 160, clientY: r.bottom })],
-    ...(p.kind === 'note' ? [['✎ Edit', () => Work.editPost(p.id)]] : []),
     [kids.length ? `Delete message and its ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'}` : 'Delete message', async () => {
       await api('DELETE', `/api/work/${w.id}/posts/${p.id}`);
       w.posts = w.posts.filter(x => x !== p && x.parent !== p.id);

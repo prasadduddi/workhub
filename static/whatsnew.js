@@ -4,6 +4,9 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.15.3', title: 'Edit a message: first and easy to find', items: [
+    ['✎', 'Edit comes first', 'Point at a message: ✎ Edit is now the first button, with its name on it. It is also the first item in the message\'s ⋯ menu. (↑ in the empty box still edits your last message.) Menus near the right edge no longer run off the screen.', 'tasks'],
+  ] },
   { v: '1.15.2', title: 'WorkHub no longer reads ~/.ssh', items: [
     ['🔑', 'SSH keys window switched off', 'The 🔑 My SSH keys window — the only part of WorkHub that looked in ~/.ssh — is switched off and gone from the menus, so WorkHub never reads your ~/.ssh folder. SSH terminals, SFTP, tunnels, log tailing and git work as before (WorkHub\'s own SSH uses only the key file you set on a connection and keeps its known hosts in its own data folder).', ''],
   ] },

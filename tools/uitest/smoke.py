@@ -184,6 +184,21 @@ with sync_playwright() as p:
         expect("Moved from" in moved["via"], "no 'Moved from' label")
         ev(f"api('POST', '/api/work/{dst}/posts/{moved['id']}/move', {{ to: '{src}' }})")
 
+    @check("✎ Edit is the first thing on a message (hover bar and ⋯ menu)")
+    def _():
+        ev("show('tasks')")
+        ev("Work.open(Work.list.find(w => w.title.startsWith('PAY-205')).id)"); pg.wait_for_timeout(500)
+        msg = pg.locator("#tposts .tmsg.k-note").first
+        msg.hover(); pg.wait_for_timeout(200)
+        first = msg.locator(".thover button").first
+        expect(first.is_visible() and "Edit" in first.inner_text(), f"first hover button: {first.inner_text()!r}")
+        msg.locator(".thover [data-pact=more]").click(); pg.wait_for_timeout(200)
+        expect(pg.locator("#ctxMenu button").first.inner_text().startswith("✎ Edit"), "⋯ menu doesn't start with Edit")
+        pg.keyboard.press("Escape"); pg.wait_for_timeout(100)
+        msg.hover(); first.click(); pg.wait_for_timeout(200)
+        expect(ev("!!document.querySelector('#tposts .tbody.editing')"), "Edit didn't start editing")
+        pg.click("#tposts [data-pact=cancel]")
+
     @check("add a Word document to a thread, formatting kept")
     def _():
         import io, zipfile

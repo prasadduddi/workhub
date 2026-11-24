@@ -1044,6 +1044,7 @@ body.side-collapsed:not(.side-top) .navhead:not(:first-child)::after { content: 
 .thover button { min-height: 26px; padding: 0 6px; border: 0; background: none; font-size: 14px; }
 .thover button:hover { background: var(--panel2); }
 .tmsg:hover .thover, .thover:focus-within { display: flex; }
+.thover .tedit-btn { font-size: 12.5px; font-weight: 600; color: var(--accent); padding: 0 9px; margin-right: 2px; border-right: 1px solid var(--border) !important; border-radius: 6px 0 0 6px; }
 .treact { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .rchip { font-size: 13px; padding: 0 8px; min-height: 24px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .rchip.add { opacity: 0; border-color: var(--border); background: none; } .tmsg:hover .rchip.add { opacity: 1; }

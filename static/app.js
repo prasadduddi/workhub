@@ -2642,7 +2642,7 @@ const Tree = {
       : it[1] ? `<button data-i="${i}">${esc(it[0])}</button>` : `<button disabled title="Nothing connected right now">${esc(it[0])}</button>`;
     m.innerHTML = items.map((it, i) => row(it, i)).join('');
     m.hidden = false;
-    m.style.left = Math.min(ev.clientX, innerWidth - 210) + 'px';
+    m.style.left = Math.max(4, Math.min(ev.clientX, innerWidth - m.offsetWidth - 8)) + 'px'; // its real width: wide menus stay on screen
     m.style.top = Math.min(ev.clientY, innerHeight - m.offsetHeight - 8) + 'px';
     m.classList.toggle('subleft', ev.clientX + 420 > innerWidth); // no room on the right: open submenus to the left
     m.onclick = c => {

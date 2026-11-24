@@ -123,6 +123,10 @@ const HELP_TOPICS = [
     'Use the All · UAT · PROD switch beside the search at the top.',
     'UAT or PROD shows only that environment\'s connections, databases and bookmarks on every page (UAT also covers UAT1, UAT2…); entries without an environment are hidden too.',
     'All shows everything again. The choice is remembered when WorkHub restarts.'] },
+  { t: 'Edit a message in a thread', k: 'edit change correct fix message post typo update rewrite', v: 'tasks', s: [
+    'Point at the message: ✎ Edit is the first button on the bar that appears (or ⋯ → ✎ Edit message).',
+    'Change the text, then Save (Enter) or Cancel (Esc). Edited messages show (edited).',
+    'Quick way for your last message: press ↑ in the empty message box.'] },
   { t: 'Add a Word document to a thread', k: 'word docx document import contents paste into thread add format formatting keep', v: 'tasks', s: [
     'Open the thread and drop the .docx on it, or ⋯ (top right) → 📄 Add a Word document to this thread….',
     'Its contents become one message with the formatting kept: headings, bold / italic / underline, highlights, numbered and bullet lists (nested), links, tables (merged cells too), code and pictures. Long documents show their start — “Show the whole document” opens them out.',
