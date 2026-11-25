@@ -16,7 +16,7 @@ fi
 #   WorkHub-Desktop.exe  desktop version (own window via Edge WebView2, no console)
 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=$stamp" -o dist/WorkHub-web.exe .
 GOOS=windows GOARCH=amd64 go build -trimpath -tags desktop -ldflags "-s -w -H windowsgui -X main.version=$stamp" -o dist/WorkHub-Desktop.exe .
-go build -trimpath -ldflags "-X main.version=$stamp" -o dist/workhub-local .
+go build -trimpath -ldflags "-X main.version=$stamp" -o dist/WorkHub-local .
 cp README.md TESTING.txt dist/
 echo "Built dist/WorkHub-web.exe and dist/WorkHub-Desktop.exe ($stamp)"
 if [ "$1" = zip ]; then

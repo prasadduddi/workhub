@@ -154,6 +154,20 @@ const HELP_TOPICS = [
   { t: 'Copy or resize a picture in a message', k: 'copy picture image screenshot resize size smaller bigger message thread paste outlook word teams', v: 'tasks', s: [
     'Resize: point at the picture\'s bottom-right corner and drag; the size is kept with the message. Right-click → Original size undoes it.',
     'Right-click a picture → 🖼 Copy image. Right-click a message (or ⋯) → 📋 Copy: its text and pictures together — paste into Outlook, Word or Teams.'] },
+  { t: 'Attach a script, snippet or file to a thread', k: 'attach file snippet script code copy paste plus + attachment sql shell log view edit download', v: 'tasks', s: [
+    'Copy the script (or query, log, config).',
+    'In the thread, press + next to the message box → 📋 Attach copied text as a file… — the text is already in, the name is guessed (change it if you like), add a note if you want, then Attach to the thread (Ctrl+Enter).',
+    'It shows as a file card: View opens it (edit and Save changes there), Copy copies its text, ⬇ downloads it.',
+    '✎ New snippet file… starts empty; 📎 Attach files from this PC… attaches files from disk.'] },
+  { t: 'Forward a message to Teams / add messages from Teams', k: 'teams microsoft chat forward send share import add from teams graph', v: 'tasks', s: [
+    'Right-click a message (or ⋯) → 💬 Forward to Teams… and enter an email (several, comma-separated, make a group chat).',
+    'Without setup Teams opens on that chat with the text typed in — paste pictures with Ctrl+V, then Send.',
+    'To bring messages in: select them in Teams, Ctrl+C, then the thread ⋯ → 📥 Add from Teams….',
+    'Full connection: ⚙ Settings → Teams — enter the Tenant ID and Client ID IT gives you, then Sign in. Forward then sends directly (pictures too) and Add from Teams lets you pick a chat and tick its messages.'] },
+  { t: 'Search inside a thread', k: 'search find inside thread message word ctrl+f highlight yellow only matches next previous', v: 'tasks', s: [
+    'Open the thread and type in 🔍 Search this thread in its header (or press Ctrl+F on the Tasks page).',
+    'Matching words are marked in yellow; ▲ ▼ (or Enter / Shift+Enter) move between the messages — a match in a reply opens its panel.',
+    'Tick “only matches” to hide the other messages; Esc clears the search.'] },
   { t: 'Edit a message in a thread', k: 'edit change correct fix message post typo update rewrite', v: 'tasks', s: [
     'Point at the message: ✎ Edit is the first button on the bar that appears (or ⋯ → ✎ Edit message). It is on every kind of message:',
     'your messages and emails are edited in place; a clipboard capture shows its real text (passwords too) and stays a capture, masked when shown; a server card opens the connection.',

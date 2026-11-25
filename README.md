@@ -59,7 +59,7 @@ Tag it to publish a release:
     git tag v1.1 && git push origin v1.1
 
 ## Developing
-    ./build.sh                 # dist/WorkHub-web.exe + dist/WorkHub-Desktop.exe, dist/workhub-local, dist/WorkHub-<timestamp>.zip
+    ./build.sh                 # dist/WorkHub-web.exe + dist/WorkHub-Desktop.exe, dist/WorkHub-local, dist/WorkHub-<timestamp>.zip
     go test -short ./...       # quick tests; without -short also runs a real PostgreSQL test
 
 Options: `WorkHub-web.exe -workspace NAME -data D:\folder -port 47821 -no-browser`

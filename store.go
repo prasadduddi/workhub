@@ -165,6 +165,7 @@ type State struct {
 	Props        []*PropNode  `json:"props,omitempty"`             // Properties page tree
 	WorkItems    []*WorkItem  `json:"work_items,omitempty"`        // Notepad++ work item pages
 	Jira         JiraConfig   `json:"jira"`
+	Teams        TeamsConfig  `json:"teams,omitempty"` // ⚙ Settings → Teams (Microsoft Graph); the refresh token never leaves the server
 	JiraIssues   []*JiraIssue `json:"jira_issues,omitempty"`
 	Events       []*Event     `json:"events,omitempty"` // Calendar
 	Snippets     []*Snippet   `json:"sql_snippets,omitempty"`

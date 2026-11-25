@@ -1600,3 +1600,55 @@ body.side-anim:not(.side-top) .side { transition: width .22s ease, padding .22s 
 /* the Assistant starts below the search bar and can be resized by its left edge */
 #chat .chat-grip { position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 2; }
 #chat .chat-grip:hover, #chat .chat-grip.on { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* Edit connection: wider, three short fields a row, related blocks side by side, the buttons always in view */
+#entryDlg { width: min(980px, 96vw); max-height: 94vh; }
+#entryDlg #entryForm { display: flex; flex-direction: column; max-height: calc(94vh - 36px); }
+#entryDlg #entryForm > .grid { overflow-y: auto; min-height: 0; padding-right: 4px; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px 12px; align-items: start; }
+#entryDlg #entryForm > .grid > label { grid-column: span 2; }
+#entryDlg #entryForm > .grid > label.wide, #entryDlg #entryForm > .grid > label.check { grid-column: span 3; }
+#entryDlg #entryForm > .grid > label:has(input[name=url]), #entryDlg #entryForm > .grid > #sidRow { grid-column: span 2; }
+/* side by side: tunnels | commands, their tick-boxes in pairs, key file | tags, extra | notes */
+#entryDlg #entryForm > .grid > #tunnelRow { order: 1; } #entryDlg #entryForm > .grid > #macroRow { order: 2; }
+#entryDlg #entryForm > .grid > #tunnelOnRow { order: 3; } #entryDlg #entryForm > .grid > #macroOnRow { order: 4; }
+#entryDlg #entryForm > .grid > label:has(input[name=tunnels_auto]) { order: 5; } #entryDlg #entryForm > .grid > #keyAuthRow { order: 6; }
+#entryDlg #entryForm > .grid > label:has(input[name=key_file]) { order: 7; } #entryDlg #entryForm > .grid > label:has(input[name=tags]) { order: 8; }
+#entryDlg #entryForm > .grid > label:has(textarea[name=extra]) { order: 9; } #entryDlg #entryForm > .grid > label:has(textarea[name=notes]) { order: 10; }
+#entryDlg #entryForm > .grid > label:has(input[name=favorite]) { order: 11; grid-column: 1 / -1; }
+#entryDlg #entryForm > .grid textarea[name=commands] { min-height: 64px; }
+#entryDlg #entryForm > .row.end { flex: none; padding-top: 10px; border-top: 1px solid var(--border); margin-top: 8px; }
+@media (max-width: 760px) { #entryDlg #entryForm > .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } #entryDlg #entryForm > .grid > label, #entryDlg #entryForm > .grid > label.wide, #entryDlg #entryForm > .grid > * { grid-column: auto / span 2 !important; } }
+
+/* 🔍 search inside a thread */
+.tfind { display: inline-flex; align-items: center; gap: 4px; }
+.tfind input[type=search] { width: 220px; }
+.tfind .icon { padding: 2px 6px; }
+.tfind-only { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); white-space: nowrap; }
+mark.tfind { background: color-mix(in srgb, #ffd400 60%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+.tmsg.tfind-cur { box-shadow: inset 3px 0 0 #e0a800; background: color-mix(in srgb, #ffd400 10%, transparent); }
+.tmsg.tfind-cur mark.tfind { background: #ffb300; }
+.tmsg.tfind-hidden { display: none; }
+
+/* search words in yellow in the results */
+#board mark.tfind { background: color-mix(in srgb, #ffd400 60%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+/* Teams: pick a chat, then its messages */
+.teams-dlg { width: min(620px, 94vw); }
+.teams-dlg .tm-body { max-height: 60vh; overflow: auto; display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.teams-dlg .tm-chat { text-align: left; padding: 8px 10px; }
+.teams-dlg .tm-msg { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; background: var(--panel2); }
+.tm-code { font-family: var(--mono); font-size: calc(15px * var(--ui-scale)); letter-spacing: .08em; }
+
+/* + Attach: snippet files */
+.tcompose .tplus { align-self: flex-end; width: 34px; height: 34px; padding: 0; border-radius: 50%; font-size: calc(20px * var(--ui-scale)); line-height: 1; flex: none; }
+.snip-dlg { width: min(860px, 94vw); }
+.snip-dlg label { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; }
+.snip-dlg textarea { width: 100%; height: min(52vh, 460px); font-family: var(--mono); font-size: calc(13px * var(--ui-scale)); white-space: pre; overflow: auto; tab-size: 2; box-sizing: border-box; }
+.snip-dlg .grow { flex: 1; }
+.tbody p.tatt { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); margin: 3px 0; }
+.tatt-btns { display: inline-flex; gap: 4px; }
+.tatt-btns .icon { padding: 1px 8px; }
+.snip-dlg h3 { text-align: left; }
+.snip-dlg label { align-items: stretch; text-align: left; width: 100%; }
+.snip-dlg label input { width: 100%; box-sizing: border-box; font-family: var(--mono); }
+.snip-dlg #snipNote { font-family: inherit; }

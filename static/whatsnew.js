@@ -4,6 +4,15 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.15.8', title: 'Search inside a thread, words in yellow, tidier trees and dialogs', items: [
+    ['📄', 'Attach scripts and snippets as files', 'The + next to the message box: “Attach copied text as a file” puts what you copied (a script, query, log) in a window — the name is guessed (.sh, .sql, .py, .json…) — and attaches it to the thread as a file instead of message text. Files show as a card with View (edit and save there), Copy and Download. “Attach files from this PC” too.', 'tasks'],
+    ['💬', 'Forward to Teams, add from Teams', 'Right-click a message → 💬 Forward to Teams…: Teams opens on the chat with the text typed in (pictures: Ctrl+V). Thread ⋯ → 📥 Add from Teams… adds the messages you copied in Teams. With ⚙ Settings → Teams (an app IT registers), it sends directly with pictures and lets you pick chat messages to bring in.', 'tasks'],
+    ['🔍', 'Search inside a thread', 'Each thread has a 🔍 search box (Ctrl+F on the Tasks page): matching words are marked in yellow, ▲ ▼ or Enter / Shift+Enter move between the messages (a reply opens its panel), “only matches” hides the rest, Esc clears.', 'tasks'],
+    ['🟨', 'Search words in yellow', 'The search at the top now marks every matching word in yellow in the results — connections, notes, files, captures and threads.', 'dashboard'],
+    ['🌳', 'Trees: hostname-username-sid', 'In the SSH, SQL and FTP trees each connection is shown as host-user (and -service for databases); a name you gave it is in the grey text next to it.', ''],
+    ['🪟', 'Edit connection fits the screen', 'The Edit connection window is wider with fields three to a row, so it fits a laptop screen with Save always in view.', ''],
+    ['➕', 'File → + New', 'The new items (connection, thread, note, API request) are grouped under File → + New.', ''],
+  ] },
   { v: '1.15.7', title: 'Add connections by copying — the Assistant asks first', items: [
     ['💬', 'The Assistant asks before saving what you copy', 'Open the 💬 Assistant (Ctrl+J). While it is open, anything you copy is offered there instead of being saved by itself: “I found an SSH server ops@app-01:22 — Add it?” (or an Oracle/Postgres database from a JDBC URL, an FTP/SFTP server, a link). Yes creates it and says ✅ Connection created. Paste server details, a JDBC URL or a screenshot into its message box and press Send — text in pictures is read with the OCR built into Windows. Type clear to empty the conversation. Close the Assistant and capture works as before.', ''],
     ['🔐', 'No more “Session expired”', 'Open WorkHub tabs and bookmarks stay signed in after an update, a restart, closing the browser or a reboot, and localhost links work too.', ''],

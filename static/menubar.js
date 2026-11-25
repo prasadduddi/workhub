@@ -84,10 +84,12 @@ const Menubar = {
     const hid = this.hidden();
     return {
       File: [
-        ['+ New connection…', () => openEntryDialog(null)],
-        ['+ New thread…', async () => { show('tasks'); await Work.create(); }],
-        ['+ New note', () => { show('notes'); $('#newNote')?.click(); }],
-        ['+ New API request', () => { show('api'); Api.edit(Api.blank()); }],
+        ['+ New', null, [
+          ['Connection…', () => openEntryDialog(null)],
+          ['Thread…', async () => { show('tasks'); await Work.create(); }],
+          ['Note', () => { show('notes'); $('#newNote')?.click(); }],
+          ['API request', () => { show('api'); Api.edit(Api.blank()); }],
+        ]],
         '-',
         ['⬇ Import', null, [
           ['Connections from DBeaver / PuTTY / FileZilla / SQL Developer…', () => ConnImport.open()],

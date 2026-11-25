@@ -219,9 +219,21 @@ func (s *Store) ReadAttachment(id string) (Attachment, []byte, error) {
 func (s *Store) WriteAttachment(id string, data []byte) (Attachment, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(data) > maxAttachment {
+		return Attachment{}, errors.New("larger than 50 MB")
+	}
 	n, i := s.findAttachment(id)
 	if n == nil {
-		return Attachment{}, errors.New("file not found")
+		wa := s.workAttachment(id) // a thread's file (a snippet edited in the viewer)
+		if wa == nil {
+			return Attachment{}, errors.New("file not found")
+		}
+		if err := os.WriteFile(filepath.Join(s.attachDir(), id), data, 0o600); err != nil {
+			return Attachment{}, err
+		}
+		wa.Size, wa.Added = int64(len(data)), time.Now()
+		s.changed()
+		return *wa, nil
 	}
 	if err := os.WriteFile(filepath.Join(s.attachDir(), id), data, 0o600); err != nil {
 		return Attachment{}, err

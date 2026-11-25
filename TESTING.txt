@@ -131,3 +131,11 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] Right-click a server in the SSH tree -> Background colour… -> pick -> row tinted; Remove the colour
   [ ] Files page: drag the Type column edge -> wider; double-click the edge -> default
   [ ] + New thread -> the name box opens next to the click (no "127.0.0.1 says")
+  [ ] Open a long thread -> Ctrl+F -> type a word: yellow marks, 1 / n; Enter moves; only matches hides the rest; Esc clears
+  [ ] Search at the top for a server name -> the word is yellow in the cards
+  [ ] SSH / SQL / FTP trees show host-user(-service); Edit connection fits the laptop screen with Save visible
+  [ ] Right-click a thread message -> Forward to Teams -> email: Teams opens on that chat with the text; Ctrl+V adds the picture
+  [ ] Copy messages in Teams -> thread ⋯ -> Add from Teams: added with formatting
+  [ ] (once IT registers the app) Settings -> Teams -> Tenant + Client ID -> Sign in with the code; Forward sends directly; Add from Teams lists chats
+  [ ] Copy a script -> thread + -> Attach copied text as a file: name guessed (.sh/.sql/.ps1), Attach -> card with View / Copy / Download
+  [ ] View -> change a line -> Save changes -> Copy gives the new text; Download opens/saves the file

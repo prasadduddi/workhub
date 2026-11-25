@@ -313,6 +313,87 @@ with sync_playwright() as p:
         ev("Work.open(Work.list.find(w => w.images > 0).id)")
         pg.wait_for_function("[...document.querySelectorAll('#taskMain img')].some(i => i.complete && i.naturalWidth > 0)", timeout=10000)
 
+    @check("🔍 search inside a thread: marks, counts, Enter moves, only matches, Esc clears")
+    def _():
+        ev("show('tasks')")
+        tid = ev("Work.list.find(w => w.title.startsWith('Incident')).id")
+        ev(f"Work.open('{tid}')"); pg.wait_for_timeout(600)
+        pg.keyboard.press("Control+f"); pg.wait_for_timeout(100)
+        expect(ev("document.activeElement.id") == "tfindIn", "Ctrl+F didn't go to the thread search")
+        pg.keyboard.type("deadlock"); pg.wait_for_function("document.querySelectorAll('#taskMain mark.tfind').length > 0", timeout=3000)
+        n = ev("Work.find.ids.length")
+        expect(n >= 1, f"no matches")
+        expect(pg.inner_text("#tfindN").strip() == f"1 / {n}", f"counter: {pg.inner_text('#tfindN')!r}")
+        if n > 1:
+            pg.keyboard.press("Enter"); pg.wait_for_timeout(200)
+            expect(pg.inner_text("#tfindN").strip() == f"2 / {n}", "Enter didn't move to the next match")
+        total = pg.locator("#tposts .tmsg").count()
+        pg.check("#tfindOnly"); pg.wait_for_timeout(200)
+        visible = ev("[...document.querySelectorAll('#tposts .tmsg')].filter(m => m.offsetParent).length")
+        expect(visible < total or visible == n, f"only matches: {visible} of {total} shown")
+        pg.uncheck("#tfindOnly")
+        pg.focus("#tfindIn"); pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+        expect(pg.locator("#taskMain mark.tfind").count() == 0 and ev("Work.find.q") == "", "Esc didn't clear")
+
+    @check("Teams without setup: Forward opens a Teams chat link with the text; Add from Teams adds what was copied")
+    def _():
+        ctx.grant_permissions(["clipboard-read", "clipboard-write"], origin=URL.split("/?")[0])
+        ev("show('tasks')")
+        tid = ev("Work.list.find(w => w.title.startsWith('PAY-205')).id")
+        ev(f"Work.open('{tid}')"); pg.wait_for_timeout(600)
+        ev("window._opened = []; window.openExternal = u => _opened.push(u); 0")
+        msg = pg.locator("#tposts .tmsg.k-note").first
+        msg.click(button="right"); pg.wait_for_timeout(200)
+        pg.click("#ctxMenu button:has-text('Forward to Teams')"); pg.wait_for_selector(".askbox")
+        pg.keyboard.type("bob@acme.example.com"); pg.keyboard.press("Enter"); pg.wait_for_timeout(1500)
+        opened = ev("_opened")
+        expect(opened and opened[0].startswith("https://teams.microsoft.com/l/chat/0/0?users=bob%40acme.example.com&message="), f"opened: {opened}")
+        expect(ev("Teams.recent()[0]") == "bob@acme.example.com", "recipient not remembered")
+        n = ev("Work.current.posts.length")
+        ev("navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob(['<p><b>Bob</b>: restarted app-01</p>'], { type: 'text/html' }), 'text/plain': new Blob(['Bob: restarted app-01'], { type: 'text/plain' }) })])")
+        ev("Teams.addFrom()"); pg.wait_for_function(f"Work.current.posts.length === {n} + 1", timeout=5000)
+        last = ev("Work.current.posts[Work.current.posts.length - 1]")
+        expect(last["from"] == "Teams" and "restarted app-01" in last["html"], f"added: {last}")
+
+    @check("⚙ Settings → Teams: tenant and client saved; sign-in asks for them first")
+    def _():
+        pg.click("#settingsTop"); pg.wait_for_timeout(400); pg.click("[data-settab=teams]"); pg.wait_for_timeout(300)
+        expect("For IT" in pg.inner_text("#settingsBody") and pg.is_visible("[data-set='teams-tenant']"), "no Teams section")
+        pg.fill("[data-set='teams-tenant']", "contoso.example"); pg.dispatch_event("[data-set='teams-tenant']", "change"); pg.wait_for_timeout(500)
+        expect(ev("api('GET', '/api/teams/status').then(s => s.tenant)") == "contoso.example", "tenant not saved")
+        r = ev("api('POST', '/api/teams/signin').then(() => 'ok', e => e.message)")
+        expect("Client ID" in r, f"sign-in without client: {r}")
+        ev("api('PUT', '/api/teams/config', { tenant: '', client_id: '' })")
+        close_dialogs()
+
+    @check("+ Attach: copied script saved as a file on the thread (card, View, edit, Copy), not as message text")
+    def _():
+        ctx.grant_permissions(["clipboard-read", "clipboard-write"], origin=URL.split("/?")[0])
+        ev("show('tasks')")
+        tid = ev("Work.list.find(w => w.title.startsWith('PAY-205')).id")
+        ev(f"Work.open('{tid}')"); pg.wait_for_timeout(600)
+        script = "#!/bin/bash\n# restart batch\ncd /opt/batch && ./stop.sh\n./start.sh\n"
+        ev(f"navigator.clipboard.writeText({script!r})")
+        n = ev("Work.current.posts.length")
+        pg.click("#tplus"); pg.wait_for_timeout(200)
+        pg.click("#ctxMenu button:has-text('Attach copied text')"); pg.wait_for_selector("#snipDlg[open]")
+        expect(pg.input_value("#snipText") == script.replace("\\n", "\n"), f"clipboard not pasted: {pg.input_value('#snipText')!r}")
+        name = pg.input_value("#snipName")
+        expect(name.startswith("script-") and name.endswith(".sh"), f"name: {name}")
+        pg.fill("#snipNote", "restart script")
+        pg.click("[data-snip=save]"); pg.wait_for_function(f"Work.current.posts.length === {n} + 1", timeout=5000)
+        last = ev("Work.current.posts[Work.current.posts.length - 1]")
+        expect("/api/props/files/" in last["html"] and name in last["html"] and "stop.sh" not in last["html"], f"post: {last['html'][:200]}")
+        card = pg.locator(f"#tposts [data-post='{last['id']}'] .tatt")
+        expect(card.count() == 1 and card.locator("[data-att=view]").count() == 1, "no attachment card")
+        card.locator("[data-att=view]").click(); pg.wait_for_selector("#attView[open]")
+        expect("./start.sh" in pg.input_value("#attView .av-text"), "viewer text")
+        pg.fill("#attView .av-text", "echo changed\n"); pg.click("#attView [data-av=save]"); pg.wait_for_timeout(400)
+        pg.click("#attView [data-av=close]")
+        card.locator("[data-att=copy]").click(); pg.wait_for_timeout(400)
+        expect(ev("navigator.clipboard.readText()") == "echo changed\n", "Copy didn't give the saved text")
+        expect(ev("guessSnippetName('SELECT * FROM dual')").endswith(".sql") and ev("guessSnippetName('{\"a\": 1}')").endswith(".json"), "name guessing")
+
     @check("move a message to another thread and back")
     def _():
         ev("show('tasks')")
@@ -449,9 +530,9 @@ with sync_playwright() as p:
 
     @check("search: thread results full width, with the matching messages (who, when, highlighted) that open the thread there")
     def _():
-        ev("show('dashboard')")
+        ev("show('dashboard')"); pg.wait_for_function("!document.body.classList.contains('side-anim')", timeout=3000); pg.wait_for_timeout(100)
         pg.fill("#search", "deadlock"); pg.dispatch_event("#search", "input")
-        pg.wait_for_selector("#board .tresult .thit", timeout=10000)
+        pg.wait_for_selector("#board .tresult .thit", timeout=10000); pg.wait_for_timeout(300)  # drawn again when the matches arrive
         card = pg.locator("#board .tresult").first
         expect(card.bounding_box()["width"] > 700, "the thread card is still narrow")
         hit = card.locator(".thit").first
@@ -470,7 +551,7 @@ with sync_playwright() as p:
 
     @check("+ New thread asks in WorkHub's own box, right of the click (not the browser's prompt)")
     def _():
-        ev("show('tasks')"); pg.wait_for_timeout(300)
+        ev("show('tasks')"); pg.wait_for_timeout(300); pg.wait_for_function("!document.body.classList.contains('side-anim')", timeout=3000); pg.wait_for_timeout(100)  # the menu has finished sliding
         n = ev("Work.list.length")
         b = pg.locator("#workNew").bounding_box()
         pg.mouse.click(b["x"] + 20, b["y"] + 10); pg.wait_for_selector(".askbox", timeout=3000)
@@ -481,6 +562,45 @@ with sync_playwright() as p:
         expect(ev("Work.current?.title") == "SMOKE-1 thread from the box", "thread not created")
         pg.click("#workNew"); pg.wait_for_selector(".askbox"); pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
         expect(not pg.query_selector(".askbox") and ev("Work.list.length") == n + 1, "Esc didn't cancel")
+
+    @check("File → + New ▸ holds the new items (connection, thread, note, API request)")
+    def _():
+        pg.click("#menubar [data-menu=File]"); pg.wait_for_timeout(200)
+        top = ev("[...document.querySelectorAll('#ctxMenu > button, #ctxMenu > .ctxsub > .ctxsub-btn')].map(b => b.textContent.trim())")
+        expect(not any(t.startswith("+ New ") for t in top) and any(t.startswith("+ New") for t in top), f"File menu: {top}")
+        pg.hover("#ctxMenu .ctxsub-btn:has-text('+ New')"); pg.wait_for_timeout(200)
+        sub = pg.inner_text("#ctxMenu .ctxsub:has(.ctxsub-btn:has-text('+ New')) .ctxsub-menu")
+        expect(all(x in sub for x in ["Connection", "Thread", "Note", "API request"]), f"+ New ▸: {sub}")
+        pg.click("#ctxMenu .ctxsub-menu button:has-text('Connection')"); pg.wait_for_timeout(300)
+        expect(ev("!!document.querySelector('dialog[open]')"), "New → Connection didn't open the dialog")
+        close_dialogs()
+
+    @check("server trees name connections hostname-username-sid")
+    def _():
+        ev("show('terminal')"); pg.wait_for_timeout(300)
+        e = ev("S.entries.find(x => canSSH(x) && !canDB(x) && x.username && x.host && !x.host.startsWith('127.'))")
+        row = pg.locator(f"#view-terminal .tnode.item[data-id='{e['id']}'] .nm").first
+        expect(row.inner_text().strip().startswith(f"{e['host']}-{e['username']}"), f"SSH row: {row.inner_text()!r}")
+        ev("show('files')"); pg.wait_for_timeout(300)
+        f = ev("S.entries.find(x => canFiles(x) && isFTP(x) && x.username && x.host)") or ev("S.entries.find(x => canFiles(x) && x.username && x.host && !x.host.startsWith('127.'))")
+        row = pg.locator(f"#view-files .tnode.item[data-id='{f['id']}'] .nm").first
+        expect(row.inner_text().strip().startswith(f"{f['host']}-{f['username']}"), f"FTP row: {row.inner_text()!r}")
+        ev("show('sql')"); pg.wait_for_timeout(300)
+        d = ev("S.entries.find(x => canDB(x) && x.username && dbService(x))")
+        if d:
+            want = f"{d['host']}-{d['username']}-" + ev(f"dbService(byId('{d['id']}')).name")
+            row = pg.locator(f"#view-sql .tnode.item[data-id='{d['id']}'] .nm").first
+            expect(row.inner_text().strip().startswith(want), f"DB row: {row.inner_text()!r}, want {want}")
+        ev("show('dashboard')")
+
+    @check("search highlights every matching word in yellow (cards, notes, files, threads)")
+    def _():
+        ev("show('dashboard')"); ev("EnvSwitch.set('ALL')")
+        pg.fill("#search", "picasso"); pg.dispatch_event("#search", "input"); pg.wait_for_timeout(800)
+        marks = ev("[...document.querySelectorAll('#board mark')].map(m => m.textContent.toLowerCase())")
+        expect(len(marks) >= 3 and all("picasso" in m for m in marks), f"marks: {marks[:5]}")
+        expect(pg.evaluate("getComputedStyle(document.querySelector('#board mark')).backgroundColor") not in ("rgba(0, 0, 0, 0)", "transparent"), "marks not coloured")
+        pg.fill("#search", ""); pg.dispatch_event("#search", "input")
 
     @check("capture button at the top pauses and resumes clipboard capture")
     def _():

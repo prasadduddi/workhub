@@ -156,6 +156,7 @@ const Work = {
   },
 
   async open(id, pid, stay) {
+    if (this.current?.id !== id) this.find = { q: '', i: -1, ids: [], only: this.find.only, focus: false }; // another thread: a fresh search
     try { this.current = await api('GET', '/api/work/' + id); } catch (err) { return toast(err.message, true); }
     try { localStorage.setItem('workSel', id); } catch { /* ignore */ }
     if (!stay && !$('#view-tasks').classList.contains('active')) show('tasks');
@@ -262,6 +263,7 @@ const Work = {
         <span class="spacer"></span>
         ${typeof Popout !== 'undefined' && !Popout.me ? '<button data-tact="popout" title="Open this thread in its own window (⇲ Dock back puts it back)">⧉ New window</button>' : ''}
         <button data-tact="word" title="Open the Word copy (kept in the work-items folder)">Open in Word</button>
+        <div class="tfind"><input id="tfindIn" type="search" placeholder="🔍 Search this thread (Ctrl+F)" value="${esc(this.find.q)}" autocomplete="off"><span id="tfindN" class="muted tiny"></span><button type="button" class="icon" data-tfind="prev" title="Previous (Shift+Enter)">▲</button><button type="button" class="icon" data-tfind="next" title="Next (Enter)">▼</button><label class="tiny tfind-only" title="Hide the messages that don't match"><input type="checkbox" id="tfindOnly" ${this.find.only ? 'checked' : ''}> only matches</label></div>
         <button data-tact="more" class="icon more" title="More">⋯</button>
       </div>
       ${w.archived ? `<div class="tarch-bar">🗄 This thread is archived (hidden from the list). <button class="icon" data-tact="unarchive">Unarchive</button></div>` : ''}
@@ -270,6 +272,7 @@ const Work = {
         <div class="tmainc">
           <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
           <div class="tcompose">
+            <button id="tplus" type="button" class="tplus" title="Attach — copied text or a script as a file, or files from this PC">+</button>
             <div class="tcol">${FMT_BAR}
               <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Message ${esc(w.title)} — *bold* _italic_ \`code\` :emoji: · paste screenshots, drop files, Outlook emails or Word documents · Enter posts · ↑ edits your last post"></div>
             </div>
@@ -283,6 +286,50 @@ const Work = {
     this.lastRendered = w.id;
     if (scroll) this.scrollEnd(); else if (keep != null) $('#tposts').scrollTop = keep;
     const pb = $('.tpanel .tpbody'); if (pb && this.panelScroll) { pb.scrollTop = pb.scrollHeight; this.panelScroll = false; }
+    enhanceAttachments($('#taskMain'));
+    if (this.find.q) this.findApply();
+    if (this.find.focus) { const i = $('#tfindIn'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+  },
+
+  // ---- 🔍 search inside the open thread: marks the words, ▲ ▼ / Enter move between matching messages ----
+  find: { q: '', i: -1, ids: [], only: false, focus: false },
+  postText(p) {
+    if (p.kind === 'capture' && !p.html) return p.text || '';
+    if (p.kind === 'entry') { const e = byId(p.ref); return [e?.name, e?.host, e?.username, p.html && new DOMParser().parseFromString(p.html, 'text/html').body.textContent].filter(Boolean).join(' '); }
+    return [p.text, new DOMParser().parseFromString(p.html || '', 'text/html').body.textContent].filter(Boolean).join(' ');
+  },
+  findRun(q) {
+    const w = this.current; if (!w) return;
+    this.find.q = q; this.find.i = -1;
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    this.find.ids = words.length ? (w.posts || []).filter(p => { const t = this.postText(p).toLowerCase(); return words.every(x => t.includes(x)); }).map(p => p.id) : [];
+    this.findApply();
+    if (this.find.ids.length) this.findGo(1);
+  },
+  findApply() {
+    const words = this.find.q.toLowerCase().split(/\s+/).filter(Boolean), hits = new Set(this.find.ids);
+    const posts = this.current?.posts || [];
+    const withHit = new Set(posts.filter(p => hits.has(p.id) && p.parent).map(p => p.parent)); // a message whose replies match
+    for (const el of $$('#taskMain [data-post]')) {
+      const id = el.dataset.post, hit = hits.has(id);
+      el.classList.toggle('tfind-hit', hit);
+      el.classList.toggle('tfind-cur', hit && this.find.ids[this.find.i] === id);
+      el.classList.toggle('tfind-hidden', this.find.only && words.length > 0 && !hit && !withHit.has(id) && !el.closest('.tpanel'));
+      el.querySelectorAll('mark.tfind').forEach(m => m.replaceWith(...m.childNodes));
+      el.querySelector('.tbody')?.normalize(); // join the pieces the old marks left, so a longer word is found again
+      if (hit) markIn(el.querySelector('.tbody'), words);
+    }
+    const n = $('#tfindN');
+    if (n) n.textContent = !words.length ? '' : this.find.ids.length ? `${this.find.i + 1 || 0} / ${this.find.ids.length}` : 'no match';
+  },
+  findGo(step) {
+    const ids = this.find.ids; if (!ids.length) return;
+    this.find.i = ((this.find.i < 0 ? (step > 0 ? -1 : 0) : this.find.i) + step + ids.length) % ids.length;
+    const p = this.current.posts.find(x => x.id === ids[this.find.i]);
+    if (p?.parent && this.panel !== p.parent) { this.panel = p.parent; this.render(); } // a reply: in its side panel
+    else this.findApply();
+    const el = $(`#taskMain [data-post="${ids[this.find.i]}"]`);
+    el?.scrollIntoView({ block: 'center' });
   },
   scrollEnd() { const el = $('#tposts'); if (el) el.scrollTop = el.scrollHeight; },
 
@@ -441,6 +488,7 @@ const Work = {
     if (p?.kind === 'entry') return byId(p.ref) && openEntryDialog(byId(p.ref));
     const postEl = $(`#taskMain [data-post="${pid}"]`); if (!postEl) return;
     const body = postEl.querySelector('.tbody');
+    body.querySelectorAll('.tatt-btns').forEach(b => b.remove()); body.querySelectorAll('.tatt').forEach(c => c.classList.remove('tatt'));
     if (p?.kind === 'capture' && !p.html) body.innerHTML = `<pre class="tedit-pre">${esc(p.text || '')}</pre>`; // the text itself, not the masked view
     body.contentEditable = 'true'; body.classList.add('editing'); body.focus();
     const r = document.createRange(); r.selectNodeContents(body); r.collapse(false); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
@@ -667,6 +715,8 @@ page.addEventListener('click', async e => {
     return setTimeout(() => Tree.showMenu({ clientX: r.left - 160, clientY: r.bottom }, [
       ['📄 Add a Word document to this thread…', () => Work.pickInto()],
       '-',
+      ['📥 Add from Teams…', () => Teams.addFrom()],
+      '-',
       ['⬇ Export as Markdown (.md, screenshots beside it)', async () => {
         try { const r = await api('POST', `/api/work/${w.id}/markdown`); toast(`Saved ${r.path.split(/[\\/]/).pop()}${r.files ? ` and ${r.files} file(s)` : ''} in the work-items folder`); }
         catch (err) { toast(err.message, true); }
@@ -785,6 +835,7 @@ function postMenu(p, postEl, r, img) {
     '-',
     ['🔗 Copy link to this message', () => copyText(Work.postLink(p), 'Link copied — paste it in another thread or note to jump here')],
     ['📋 Copy', () => copyPost(p, postEl)],
+    ['💬 Forward to Teams…', () => Teams.forward(p, postEl)],
     ['➡ Move to another thread…', () => Work.movePost(p, false, { clientX: r.left - 160, clientY: r.bottom })],
     ['⧉ Copy to another thread…', () => Work.movePost(p, true, { clientX: r.left - 160, clientY: r.bottom })],
     [kids.length ? `Delete message and its ${kids.length} repl${kids.length > 1 ? 'ies' : 'y'}` : 'Delete message', async () => {
@@ -1005,3 +1056,157 @@ $('#taskMain').addEventListener('contextmenu', e => {
     document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
   });
 }
+
+// Wrap the search words in <mark class="tfind"> inside an element's text (not inside tags or the copy buttons).
+function markIn(el, words) {
+  if (!el) return;
+  const ws = words.filter(w => w.length > 0).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!ws.length) return;
+  const re = new RegExp(ws.join('|'), 'gi');
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('button, mark, .pwv, script, style, textarea') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  const nodes = []; for (let n; (n = walk.nextNode());) nodes.push(n);
+  for (const n of nodes) {
+    const t = n.data; re.lastIndex = 0; if (!re.test(t)) continue;
+    re.lastIndex = 0; const frag = document.createDocumentFragment(); let i = 0;
+    for (const m of t.matchAll(re)) { frag.append(t.slice(i, m.index)); const mk = Object.assign(document.createElement('mark'), { className: 'tfind', textContent: m[0] }); frag.append(mk); i = m.index + m[0].length; }
+    frag.append(t.slice(i)); n.replaceWith(frag);
+  }
+}
+// the search box: typing searches, Enter / Shift+Enter move, Esc clears; "only matches" hides the rest
+page.addEventListener('input', e => { if (e.target.id === 'tfindIn') Work.findRun(e.target.value); });
+page.addEventListener('focusin', e => { if (e.target.id === 'tfindIn') Work.find.focus = true; });
+page.addEventListener('focusout', e => { if (e.target.id === 'tfindIn') setTimeout(() => { if (document.activeElement?.id !== 'tfindIn') Work.find.focus = false; }, 0); });
+page.addEventListener('keydown', e => {
+  if (e.target.id !== 'tfindIn') return;
+  if (e.key === 'Enter') { e.preventDefault(); Work.findGo(e.shiftKey ? -1 : 1); }
+  if (e.key === 'Escape') { e.preventDefault(); e.target.value = ''; Work.findRun(''); }
+});
+page.addEventListener('change', e => { if (e.target.id === 'tfindOnly') { Work.find.only = e.target.checked; Work.findApply(); } });
+page.addEventListener('click', e => { const b = e.target.closest('[data-tfind]'); if (b) { e.preventDefault(); Work.findGo(b.dataset.tfind === 'prev' ? -1 : 1); } });
+// Ctrl+F on the Tasks page: search the open thread (not while typing in a message)
+window.addEventListener('keydown', e => {
+  if (!((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'f') || !$('#view-tasks').classList.contains('active') || !Work.current) return;
+  if (e.target.closest?.('.tbox, .rbox, [contenteditable=true]')) return;
+  e.preventDefault(); const i = $('#tfindIn'); i?.focus(); i?.select();
+}, true);
+
+// ---- + Attach: copied text / a script as a file, or files from this PC — a file on the thread, not message text ----
+const TEXT_EXT = /\.(txt|log|sh|bash|ksh|zsh|ps1|psm1|bat|cmd|py|js|ts|java|kt|go|rb|pl|php|cs|c|h|cpp|sql|pls|pks|pkb|xml|json|ya?ml|properties|ini|conf|cfg|toml|env|md|csv|tsv|html?|css|groovy|gradle|dockerfile|tf|jsonl|out|err|diff|patch)$/i;
+function guessSnippetName(t) {
+  const s = t.trimStart(), first = s.split('\n')[0];
+  const ext =
+    /^#!.*\b(bash|sh|ksh|zsh)\b/.test(first) ? 'sh' : /^#!.*python/.test(first) ? 'py' : /^#!.*perl/.test(first) ? 'pl' : /^#!.*node/.test(first) ? 'js' :
+    /^\s*[{[]/.test(s) && (() => { try { JSON.parse(s); return true; } catch { return false; } })() ? 'json' :
+    /^<\?xml|^<[a-zA-Z][\w:-]*[\s>]/.test(s) ? 'xml' :
+    /^\s*(select|insert|update|delete|create|alter|drop|begin|declare|with|merge|grant)\b/i.test(s) ? 'sql' :
+    /^\s*(param\s*\(|\$[\w:]+\s*=|Get-|Set-|Write-Host|Import-Module)/m.test(s) ? 'ps1' :
+    /^\s*(@echo off|set \w+=|rem\s)/im.test(s) ? 'bat' :
+    /^\s*(def |import |from \w+ import|class \w+.*:|print\()/m.test(s) ? 'py' :
+    /^\s*(package |import java|public (class|interface))/m.test(s) ? 'java' :
+    /^\s*(export |cd |echo |for \w+ in|if \[|sudo |grep |awk |sed |tail |ps -ef|kill )/m.test(s) ? 'sh' :
+    /^[\w.-]+\s*:\s*\S/m.test(s) && !/[;{}]/.test(s) && /\n/.test(s) && /^\s{2,}\S|^[\w.-]+:\s*$/m.test(s) ? 'yaml' :
+    /^[\w.]+\s*=\s*\S/m.test(s) && !/[;{}()]/.test(s) ? 'properties' :
+    /\b(ERROR|WARN|INFO|DEBUG)\b/.test(s) && /\d{2}:\d{2}:\d{2}/.test(s) ? 'log' : 'txt';
+  const stamp = new Date().toTimeString().slice(0, 5).replace(':', '');
+  return (ext === 'log' ? 'log-' : ext === 'txt' ? 'snippet-' : 'script-') + stamp + '.' + ext;
+}
+const Attach = {
+  menu(btn) {
+    const r = btn.getBoundingClientRect();
+    setTimeout(() => Tree.showMenu({ clientX: r.left, clientY: r.top - 110 }, [
+      ['📋 Attach copied text as a file…', () => this.snippet(true)],
+      ['✎ New snippet file…', () => this.snippet(false)],
+      ['📎 Attach files from this PC…', () => this.pickFiles()],
+    ]));
+  },
+  pickFiles() {
+    const inp = Object.assign(document.createElement('input'), { type: 'file', multiple: true });
+    inp.onchange = async () => { if (!inp.files.length) return; const html = await Work.storeFiles([...inp.files]); if (html) await Work.post('note', { html }); toast(`Attached ${inp.files.length} file${inp.files.length > 1 ? 's' : ''}`); };
+    inp.click();
+  },
+  dlg() {
+    let d = $('#snipDlg');
+    if (d) return d;
+    d = Object.assign(document.createElement('dialog'), { id: 'snipDlg', className: 'snip-dlg' });
+    d.innerHTML = `<h3>📄 Attach as a file</h3>
+      <div class="row"><label class="grow">File name <input id="snipName" spellcheck="false" autocomplete="off"></label></div>
+      <textarea id="snipText" spellcheck="false" placeholder="Paste or type the script, query or log here (Ctrl+V)"></textarea>
+      <label>Note (optional) <input id="snipNote" placeholder="What it is, e.g. restart script for the batch server"></label>
+      <div class="row end"><span id="snipInfo" class="muted tiny grow"></span><button type="button" data-snip="cancel">Cancel</button><button type="button" class="primary" data-snip="save">Attach to the thread</button></div>`;
+    document.body.append(d);
+    const name = d.querySelector('#snipName'), text = d.querySelector('#snipText'), info = d.querySelector('#snipInfo');
+    const upd = () => { const t = text.value; info.textContent = t ? `${t.split('\n').length} lines · ${fmtSize(new Blob([t]).size)}` : ''; if (!name.dataset.typed) name.value = t.trim() ? guessSnippetName(t) : ''; };
+    text.addEventListener('input', upd); name.addEventListener('input', () => { name.dataset.typed = name.value ? '1' : ''; });
+    text.addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); document.execCommand('insertText', false, '  '); } if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.save(); } });
+    d.addEventListener('click', e => { const b = e.target.closest('[data-snip]'); if (!b) return; if (b.dataset.snip === 'cancel') d.close(); else this.save(); });
+    d.upd = upd;
+    return d;
+  },
+  async snippet(fromClipboard) {
+    if (!Work.current) return toast('Open a thread first', true);
+    const d = this.dlg(), name = d.querySelector('#snipName'), text = d.querySelector('#snipText');
+    name.value = ''; delete name.dataset.typed; text.value = ''; d.querySelector('#snipNote').value = '';
+    if (fromClipboard) { try { text.value = (await navigator.clipboard.readText()) || ''; } catch { /* not allowed: paste by hand */ } }
+    d.upd(); d.showModal();
+    if (fromClipboard && !text.value) toast('Nothing copied (or the browser blocked it) — paste with Ctrl+V', true);
+    (text.value ? name : text).focus();
+  },
+  async save() {
+    const d = $('#snipDlg'), t = d.querySelector('#snipText').value, note = d.querySelector('#snipNote').value.trim();
+    let n = d.querySelector('#snipName').value.trim().replace(/[\\/:*?"<>|]+/g, '-');
+    if (!t.trim()) return toast('Paste or type the text first', true);
+    if (!n) n = guessSnippetName(t); if (!/\.\w+$/.test(n)) n += '.txt';
+    const html = await Work.storeFiles([new File([t], n, { type: 'text/plain' })]);
+    if (!html) return;
+    await Work.post('note', { html: (note ? `<p>${esc(note)}</p>` : '') + html });
+    d.close(); toast(`Attached ${n}`);
+  },
+  async text(aid) { const r = await fetch('/api/props/files/' + aid, { cache: 'no-store' }); if (!r.ok) throw new Error('File not found'); return r.text(); },
+  async view(aid, nm) {
+    let t; try { t = await this.text(aid); } catch (err) { return toast(err.message, true); }
+    let d = $('#attView');
+    if (!d) {
+      d = Object.assign(document.createElement('dialog'), { id: 'attView', className: 'snip-dlg' });
+      d.innerHTML = `<h3 class="av-title"></h3><textarea class="av-text" spellcheck="false"></textarea>
+        <div class="row end"><span class="muted tiny grow av-info"></span><button type="button" data-av="copy">📋 Copy</button><a class="btn" data-av="dl">⬇ Download</a><button type="button" data-av="save" disabled>Save changes</button><button type="button" class="primary" data-av="close">Close</button></div>`;
+      document.body.append(d);
+      const ta = d.querySelector('.av-text');
+      ta.addEventListener('input', () => { d.querySelector('[data-av=save]').disabled = ta.value === d.orig; });
+      ta.addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); document.execCommand('insertText', false, '  '); } });
+      d.addEventListener('click', async e => {
+        const b = e.target.closest('[data-av]'); if (!b) return;
+        if (b.dataset.av === 'close') { if (ta.value !== d.orig && !confirm('Close without saving your changes?')) return; d.close(); }
+        if (b.dataset.av === 'copy') copyText(ta.value, 'Copied ' + d.nm);
+        if (b.dataset.av === 'save') {
+          const r = await fetch('/api/props/files/' + d.aid, { method: 'PUT', body: ta.value });
+          if (!r.ok) return toast('Could not save', true);
+          d.orig = ta.value; b.disabled = true; toast('Saved ' + d.nm);
+        }
+      });
+    }
+    Object.assign(d, { aid, nm, orig: t });
+    d.querySelector('.av-title').textContent = '📄 ' + nm;
+    d.querySelector('.av-text').value = t;
+    d.querySelector('.av-info').textContent = `${t.split('\n').length} lines · ${fmtSize(new Blob([t]).size)} · edit here and Save changes`;
+    const dl = d.querySelector('[data-av=dl]'); dl.href = `/api/props/files/${aid}?download=1`; dl.download = nm;
+    d.querySelector('[data-av=save]').disabled = true;
+    d.showModal();
+  },
+};
+// 📎 links to files in messages → a card: name, and View / Copy for text files
+function enhanceAttachments(root) {
+  for (const a of root?.querySelectorAll('.tbody a[href*="/api/props/files/"]') || []) {
+    const p = a.parentElement; if (!p || p.classList.contains('tatt') || p.closest('.editing')) continue;
+    const aid = (a.getAttribute('href').match(/files\/([0-9a-f]+)/) || [])[1]; if (!aid) continue;
+    const nm = a.textContent.trim(), txt = TEXT_EXT.test(nm) || /^dockerfile$/i.test(nm);
+    p.classList.add('tatt');
+    p.insertAdjacentHTML('beforeend', `<span class="tatt-btns">${txt ? `<button type="button" class="icon" data-att="view" data-aid="${aid}" data-nm="${esc(nm)}" title="Open it here (edit too)">View</button><button type="button" class="icon" data-att="copy" data-aid="${aid}" data-nm="${esc(nm)}" title="Copy the file's text">Copy</button>` : ''}<a class="btn icon" href="/api/props/files/${aid}?download=1" download="${esc(nm)}" title="Download">⬇</a></span>`);
+  }
+}
+page.addEventListener('click', async e => {
+  if (e.target.closest('#tplus')) { e.preventDefault(); return Attach.menu(e.target.closest('#tplus')); }
+  const b = e.target.closest('[data-att]'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  if (b.dataset.att === 'view') return Attach.view(b.dataset.aid, b.dataset.nm);
+  try { copyText(await Attach.text(b.dataset.aid), 'Copied ' + b.dataset.nm); } catch (err) { toast(err.message, true); }
+}, true);

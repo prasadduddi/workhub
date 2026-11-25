@@ -6,7 +6,7 @@
 // The windows talk over a BroadcastChannel (same origin, also in the Desktop version).
 
 const Popout = {
-  chan: 'BroadcastChannel' in window ? new BroadcastChannel('workhub-popout') : null,
+  chan: 'BroadcastChannel' in window ? new BroadcastChannel('WorkHub-popout') : null,
   me: (() => { const m = new URLSearchParams(location.search).get('popout')?.match(/^(\w+):(.+)$/); return m ? { kind: m[1], id: m[2] } : null; })(),
   out: new Map(), // in WorkHub: what is popped out, key → { kind, id, label }
   docked: false,

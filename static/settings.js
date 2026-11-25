@@ -22,6 +22,7 @@ const Settings = {
     const sw = (act, on) => `<label class="switch small"><input type="checkbox" data-set="${act}" ${on ? 'checked' : ''}><span></span></label>`;
     const sel = (act, val, opts) => `<select data-set="${act}">${opts.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
     const latest = backups.backups?.[0];
+    const teamsRows = typeof Teams !== 'undefined' ? await Teams.settingsHTML(row, btn) : [];
     const ver = $('#appVersion')?.textContent || '';
     // One page per section, chosen on the left: a few related rows each, instead of one long list.
     const sections = [
@@ -61,6 +62,7 @@ const Settings = {
       ['connections', '🏷', 'Connections', [
         row('Naming rules', 'Name servers and links by what their host name contains (e.g. -BAT- → Batch); this workspace only', btn('namerules', 'Edit…')),
       ]],
+      ['teams', '💬', 'Teams', teamsRows],
       ['programs', '↗', 'Programs', [
         row('Programs for “Open in”', 'PuTTY, FileZilla, SQL Developer, DBeaver…', btn('ext', 'Choose…')),
       ]],
@@ -99,6 +101,20 @@ $('#settingsBody').addEventListener('click', async e => {
     case 'install': Settings.install(); break;
     case 'mail': $('#settingsDlg').close(); show('inbox'); $('#mailPanel').open = true; break;
     case 'namerules': openNameRules(); break;
+    case 'teams-signin': {
+      try {
+        const r = await api('POST', '/api/teams/signin');
+        if (r.verify) (typeof openExternal === 'function' ? openExternal : u => window.open(u, '_blank'))(r.verify);
+        toast(`Enter the code ${r.user_code} on the Microsoft page that opened`);
+        Settings.tab = 'teams'; await Settings.render();
+        const poll = setInterval(async () => { // until the sign-in is done (or the window is closed)
+          const st = await Teams.status(true);
+          if (st.pending !== 'waiting' || !$('#settingsDlg').open) { clearInterval(poll); if ($('#settingsDlg').open) Settings.render(); if (st.signed_in) toast(`Signed in to Teams as ${st.user}`); }
+        }, 2000);
+      } catch (err) { toast(err.message, true); }
+      break;
+    }
+    case 'teams-signout': await api('POST', '/api/teams/signout'); Settings.render(); toast('Signed out of Teams'); break;
     case 'updcheck': $('#settingsDlg').close(); Update.check(true); break;
     case 'whatsnew': $('#settingsDlg').close(); click('#whatsNewBtn'); break;
   }
@@ -129,6 +145,9 @@ $('#settingsBody').addEventListener('change', async e => {
     case 'updfetch': await saveSettings({ no_update_fetch: !t.checked }); toast(t.checked ? 'New versions download in the background — you choose when to install' : 'New versions are no longer downloaded until you ask'); break;
     case 'watch': if ($('#watchToggle').checked !== t.checked) $('#watchToggle').click(); break; // same as ● Capturing at the top
     case 'capall': await saveSettings({ capture_all: t.checked }); break;
+    case 'teams-tenant': case 'teams-client':
+      await api('PUT', '/api/teams/config', { tenant: $('[data-set="teams-tenant"]').value, client_id: $('[data-set="teams-client"]').value });
+      toast('Teams details saved — now Sign in'); Settings.render(); break;
     case 'sshkeys': await saveSettings({ ssh_keys: t.checked }); await poll(); toast(t.checked ? '🔑 SSH keys window on — Tools → My SSH keys' : 'SSH keys window off — ~/.ssh is not read'); break;
     case 'shots': await saveSettings({ no_shots: !t.checked }); toast(t.checked ? 'Copied screenshots go into the capture thread' : 'Screenshots are no longer captured'); break;
     case 'inst-desktop': case 'inst-startup': if (Settings.inst?.installed) Settings.install(); break; // not installed yet: used by Install
@@ -138,3 +157,5 @@ $('#settingsClose').onclick = () => $('#settingsDlg').close();
 // dialogs opened from Settings come back to an up-to-date Settings
 for (const id of ['#masterDlg', '#pinDlg', '#profileDlg', '#backupDlg', '#slogDlg'])
   $(id)?.addEventListener('close', () => { if ($('#settingsDlg').open) Settings.render(); });
+
+$('#settingsBody').addEventListener('click', e => { const v = e.target.closest('[data-teamsverify]'); if (v) { e.preventDefault(); (typeof openExternal === 'function' ? openExternal : u => window.open(u, '_blank'))(v.textContent); } });

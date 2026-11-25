@@ -577,7 +577,7 @@ $('#watchToggle').onchange = e => saveSettings({ watch: e.target.checked }).then
 $('#captureAll').onchange = e => saveSettings({ capture_all: e.target.checked });
 $('#captureProject').onchange = e => saveSettings({ project: e.target.value.trim() || 'General' });
 $('#importBtn').onclick = async () => {
-  toast('Pick the old workhub-data folder in the window that opened (it may be behind the browser)');
+  toast('Pick the old WorkHub-data folder in the window that opened (it may be behind the browser)');
   try {
     const r = await api('POST', '/api/import');
     if (r.cancelled) return;
@@ -949,6 +949,10 @@ function hostEnv(e) {
   const t = (e.host || '').split(/[.\-_]/).find(x => ENV_TOKEN.test(x));
   return t ? t.toUpperCase() : e.env || '';
 }
+// How a connection is named in the server trees: hostname-username-sid (the sid /
+// service only for databases; missing parts left out).
+const treeName = e => [e.host || e.name || e.url, e.username, canDB(e) ? dbService(e)?.name : ''].filter(Boolean).join('-');
+
 function dbLabel(e) {
   const host = (e.host || '').toLowerCase(), name = e.name || '';
   if (name && !name.replace(COPY_RE, '').toLowerCase().includes(host)) return ruleName(e); // a name you gave it
@@ -1175,7 +1179,7 @@ function renderBoard() {
   const inbox = list.filter(e => e.unsorted), sortable = inbox.filter(suggestPlace).length;
   const inboxNote = /\bis:(unsorted|new)\b/.test($('#search').value) && inbox.length ? `<div class="fuzzy-note">📥 ${inbox.length} new capture(s) to sort. ${sortable ? `<button class="primary" data-acceptall>✓ Move all ${sortable} to their suggested folders</button>` : ''} <button data-keepall>Keep all where they are</button></div>` : '';
   const rest = threadResultsHTML(threads) + Everything.html($('#search').value) + jiraResultsHTML(jira), recent = RecentCaps.html();
-  if (S.layout === 'grid') { board.innerHTML = back + recent + fixNote + inboxNote + gridHTML(list) + rest; markKbSel(); Bulk.bar(); return; }
+  if (S.layout === 'grid') { board.innerHTML = back + recent + fixNote + inboxNote + gridHTML(list) + rest; markKbSel(); Bulk.bar(); markSearchWords(board); return; }
   // Searching: the group holding the best match comes first (Object keys keep list order).
   board.innerHTML = back + recent + fixNote + inboxNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
     const items = groups[g];
@@ -1185,6 +1189,15 @@ function renderBoard() {
   }).join('') + rest;
   markKbSel();
   Bulk.bar();
+  markSearchWords(board);
+}
+// Searching: every matching word in the results in yellow (cards, notes, files,
+// captures; thread cards mark their own). Not inside buttons, links' addresses or passwords.
+function markSearchWords(board) {
+  if (typeof markIn !== 'function') return;
+  const words = parseQuery($('#search').value.trim().toLowerCase()).words.filter(w => !w.neg && w.v.length > 1).map(w => w.v);
+  if (!words.length) return;
+  for (const el of board.querySelectorAll('.card:not(.tresult), .tblwrap td, .rc-row')) markIn(el, words);
 }
 // The result Enter acts on (↑/↓ in the search box move it).
 function markKbSel() {
@@ -2641,7 +2654,7 @@ const Tree = {
     const isDb = canDB(e) && !node.flat, dbt = isDb && SQL.tabs.find(t => t.entry.id === e.id);
     const dbOpen = isDb && SQL.expanded.has(e.id);
     out += `<div class="tnode item ${this.selected === e.id ? 'sel' : ''} ${e.extra?.color ? 'tinted' : ''}" draggable="true" style="padding-left:${8 + depth * 14}px${/^#[0-9a-f]{6}$/i.test(e.extra?.color || '') ? `;--rowbg:${e.extra.color}` : ''}" data-id="${e.id}" title="${esc((e.name && e.name !== e.host ? e.name + '\n' : '') + target)}">
-      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? pm(dbOpen) : ''}</span>${STATE_DOT[connState(e)]} ${canDB(e) ? dbIcon(e) : ''}<span class="nm">${label || (canDB(e) ? dbLabel(e) : withCopyTag(cardName(e) || esc(e.host || e.name), e))}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) ? `<small class="dbaddr">${esc(dbKindOf(e) === 'oracle' ? jdbcURL(e) : e.host)}</small>` : cardName(e) ? `<small>${esc(target)}</small>` : e.username || port !== def ? `<small>${esc(e.username || '')}${port !== def ? ':' + port : ''}</small>` : ''}${connState(e) === 'dropped' ? '<span class="droptag">disconnected</span>' : ''}${lastSeen(e)}</div>`;
+      <span class="tw" ${isDb ? `data-dbexp="${e.id}" title="${dbOpen ? 'Collapse' : 'Connect and show tables'}"` : ''}>${isDb ? pm(dbOpen) : ''}</span>${STATE_DOT[connState(e)]} ${canDB(e) ? dbIcon(e) : ''}<span class="nm">${label || withCopyTag(esc(treeName(e)), e)}</span>${Tunnels.chip(e)}${(rl => rl && !e.name.includes(rl) ? `<span class="rlabel"${ruleStyle(e.host)}>${esc(rl)}</span>` : '')(ruleLabel(e.host))}${label ? '' : canDB(e) ? `<small class="dbaddr">${esc(dbKindOf(e) === 'oracle' ? jdbcURL(e) : e.host)}</small>` : cardName(e) ? `<small>${esc(cardName(e).replace(/<[^>]*>/g, ''))}${port !== def ? ' :' + port : ''}</small>` : port !== def ? `<small>:${port}</small>` : ''}${connState(e) === 'dropped' ? '<span class="droptag">disconnected</span>' : ''}${lastSeen(e)}</div>`;
     if (dbOpen) {
       const pad = `style="padding-left:${8 + (depth + 1) * 14}px"`;
       if (dbt) out += SQL.treeHTML(dbt, depth + 1);
