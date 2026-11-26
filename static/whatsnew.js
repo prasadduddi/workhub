@@ -4,6 +4,11 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.16.2', title: 'Threads: oldest first, a one-line message box', items: [
+    ['↑', 'Oldest first again', 'Every thread opens oldest first with the message box at the bottom; ↓ Newest first is now only for the thread where you click it.', 'tasks'],
+    ['📁', 'Browse remembers its folder', 'Each Browse… button (FTP, Git, backups, Folders, Compare, data folder…) opens where you last chose with that button — the first time at C:\\ — in the Windows Explorer-style chooser with the address bar and Quick access.', ''],
+    ['✏', 'One-line message box', 'The message box hint is just “Message …” on one line; the tips (Enter, Shift+Enter, *bold*, :emoji:, paste) are in its tooltip.', 'tasks'],
+  ] },
   { v: '1.16.1', title: 'A local copy of Confluence for Ask, search Confluence / Jira, a pinned menu', items: [
     ['☑', 'Confluence, Jira or both', 'Two ticks next to the question on the Ask page: Confluence (on by default), Jira, or both — remembered. Ask also says what it searched, and uses your Jira login for Confluence when Confluence was never set up.', 'ask'],
     ['↕', 'Message box follows the order', 'With ↓ Newest first the message box moves to the top, above the newest message; with ↑ Oldest first it stays at the bottom.', 'tasks'],

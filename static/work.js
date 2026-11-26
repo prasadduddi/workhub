@@ -274,7 +274,7 @@ const Work = {
         <span class="spacer"></span>
         ${typeof Popout !== 'undefined' && !Popout.me ? `<button data-tact="popone" class="icon winbtn" aria-label="Open this thread in a new window" title="Open only this thread in a new window — no thread list (Dock back puts it back)">${ICON_NEWWIN}</button>` : ''}
         <button data-tact="word" title="Open the Word copy (kept in the work-items folder)">Open in Word</button>
-        <button type="button" id="torder" class="torder" title="Order of the messages — click to switch">${this.newestFirst() ? '↓ Newest first' : '↑ Oldest first'}</button>
+        <button type="button" id="torder" class="torder" title="Order of the messages in this thread — click to switch (other threads stay oldest first)">${this.newestFirst() ? '↓ Newest first' : '↑ Oldest first'}</button>
         <div class="tfind"><input id="tfindIn" type="search" placeholder="🔍 Search this thread (Ctrl+F)" value="${esc(this.find.q)}" autocomplete="off"><span id="tfindN" class="muted tiny"></span><button type="button" class="icon" data-tfind="prev" title="Previous (Shift+Enter)">▲</button><button type="button" class="icon" data-tfind="next" title="Next (Enter)">▼</button><label class="tiny tfind-only" title="Hide the messages that don't match"><input type="checkbox" id="tfindOnly" ${this.find.only ? 'checked' : ''}> only matches</label></div>
         <button data-tact="more" class="icon more" title="More">⋯</button>
       </div>
@@ -287,7 +287,7 @@ const Work = {
           <div class="tcompose">
             <button id="tplus" type="button" class="tplus" title="Attach — copied text or a script as a file, or files from this PC">+</button>
             <div class="tcol">${FMT_BAR}
-              <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Message ${esc(w.title)} — *bold* _italic_ \`code\` :emoji: · paste screenshots, drop files, Outlook emails or Word documents · Enter posts · ↑ edits your last post"></div>
+              <div id="tbox" class="tbox" contenteditable="true" spellcheck="true" data-placeholder="Message ${esc(w.title)}" title="Enter posts · Shift+Enter new line · ↑ edits your last post · *bold* _italic_ \`code\` :emoji: · paste screenshots, drop files, Outlook emails or Word documents"></div>
             </div>
             <button id="tsend" class="primary" title="Post (Enter)">Post</button>
           </div>
@@ -367,9 +367,21 @@ const Work = {
     el?.scrollIntoView({ block: 'center' });
   },
   scrollEnd() { const el = $('#tposts'); if (el) el.scrollTop = this.newestFirst() ? 0 : el.scrollHeight; }, // to the newest message
-  // Message order (the button in the header): oldest first like a chat, or newest first; kept for all threads
-  newestFirst() { try { return localStorage.getItem('threadOrder') === 'desc'; } catch { return false; } },
-  setOrder(desc) { try { localStorage.setItem('threadOrder', desc ? 'desc' : 'asc'); } catch { /* private mode */ } this.render(true); },
+  // Message order (the button in the header): oldest first like a chat (every thread, by default), or newest
+  // first — only for the thread where you chose it.
+  newestSet() {
+    try {
+      if (localStorage.getItem('threadOrder')) localStorage.removeItem('threadOrder'); // the old all-threads choice: back to oldest first
+      return new Set(JSON.parse(localStorage.getItem('threadNewest') || '[]'));
+    } catch { return new Set(); }
+  },
+  newestFirst(id = this.current?.id) { return !!id && this.newestSet().has(id); },
+  setOrder(desc) {
+    const s = this.newestSet(), id = this.current?.id; if (!id) return;
+    desc ? s.add(id) : s.delete(id);
+    try { localStorage.setItem('threadNewest', JSON.stringify([...s])); } catch { /* private mode */ }
+    this.render(true);
+  },
 
   // Pinned posts as chips under the header; clicking one jumps to it.
   pinsHTML(w) {
@@ -1062,7 +1074,7 @@ const QuickNote = {
     const def = Work.active() || Work.current?.id || Work.list[0]?.id;
     const opts = [...Work.list].filter(w => !w.archived).sort((a, b) => (b.id === def) - (a.id === def) || b.starred - a.starred || new Date(b.updated) - new Date(a.updated));
     d.innerHTML = `<div class="row"><b>📝 Quick note to</b><select>${opts.map(w => `<option value="${w.id}">${w.starred ? '★ ' : ''}${esc(w.title)}</option>`).join('')}</select></div>
-      <div class="tbox qbox" contenteditable="true" data-placeholder="Type the note… *bold* _italic_ \`code\` · Enter posts · Shift+Enter new line · Esc closes"></div>
+      <div class="tbox qbox" contenteditable="true" data-placeholder="Type the note…" title="*bold* _italic_ \`code\` · Enter posts · Shift+Enter new line · Esc closes"></div>
       <div class="row end"><button value="cancel">Cancel</button><button class="primary" value="post">Post</button></div>`;
     document.body.append(d); d.showModal();
     const box = $('.qbox', d), sel = $('select', d);

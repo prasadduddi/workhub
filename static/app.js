@@ -2370,7 +2370,7 @@ $('#localPane').addEventListener('click', async e => {
   if (a === 'browse') {
     toast('Choose a folder in the window that opened (it may be behind the browser)');
     try {
-      const r = await api('POST', '/api/local/pick', { start: Local.roots ? '' : Local.path });
+      const r = await api('POST', '/api/local/pick', { key: 'ftp-local' }); // where you last browsed to (first time C:\)
       if (r.ok) Local.load(r.path);
     } catch (err) { toast(err.message, true); }
   }
@@ -4378,7 +4378,7 @@ $('#gitFetch').onclick = async () => {
 $('#gitAdd').onclick = async () => {
   toast('Choose the repository folder in the window that opened (it may be behind the browser)');
   try {
-    const r = await api('POST', '/api/local/pick', { start: '' });
+    const r = await api('POST', '/api/local/pick', { key: 'git-add' });
     if (!r.ok) return;
     const info = await api('GET', '/api/git/info?path=' + encodeURIComponent(r.path));
     const root = info.root || r.path;
@@ -4529,7 +4529,7 @@ $('#newNote').onclick = async () => {
 async function browseFile() {
   toast('Choose a file in the window that opened (it may be behind the browser)');
   try {
-    const r = await api('POST', '/api/local/pickfile');
+    const r = await api('POST', '/api/local/pickfile', { key: 'notes-file' });
     if (r.ok) await Notes.open('file:' + r.path);
   } catch (err) { toast(err.message, true); }
 }
@@ -4879,7 +4879,7 @@ $('#backupOneDrive').onclick = () => Backups.copyTo(Backups.onedrive);
 $('#backupCopyOff').onclick = () => Backups.copyTo('');
 $('#backupCopyPick').onclick = async () => {
   toast('Choose a folder in the window that opened (it may be behind WorkHub)');
-  const r = await api('POST', '/api/local/pick', { start: '' }).catch(err => (toast(err.message, true), null));
+  const r = await api('POST', '/api/local/pick', { key: 'backup-copy' }).catch(err => (toast(err.message, true), null));
   if (r?.ok) Backups.copyTo(r.path);
 };
 $('#backupBtn').onclick = showBackups;

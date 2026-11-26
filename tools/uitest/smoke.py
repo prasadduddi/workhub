@@ -416,14 +416,20 @@ with sync_playwright() as p:
         expect(st["fam"].startswith('"WH Lato"') and abs(st["px"] - 15) < 0.2 and st["w"] == "900", f"style: {st}")
         expect(st["loaded"] >= 2, f"Lato not loaded: {st}")
 
-    @check("thread order: newest first / oldest first, kept")
+    @check("thread order: oldest first by default; newest first only for the thread where it was chosen")
     def _():
+        ev("localStorage.setItem('threadOrder', 'desc'); localStorage.removeItem('threadNewest'); 0")  # an old all-threads choice is cleared
         ev("show('tasks')")
         tid = ev("Work.list.find(w => w.title.startsWith('Incident')).id")
         ev(f"Work.open('{tid}')"); pg.wait_for_timeout(500)
         first = lambda: ev("document.querySelector('#tposts .tmsg')?.dataset.post")
         old = first(); pg.click("#torder"); pg.wait_for_timeout(300)
         expect("Newest" in pg.inner_text("#torder") and first() != old, "newest first didn't change the order")
+        other = ev(f"Work.list.find(w => w.id !== '{tid}' && w.title.startsWith('PAY-201')).id")
+        ev(f"Work.open('{other}')"); pg.wait_for_timeout(500)
+        expect("Oldest" in pg.inner_text("#torder"), "another thread should stay oldest first")
+        ev(f"Work.open('{tid}')"); pg.wait_for_timeout(500)
+        expect("Newest" in pg.inner_text("#torder"), "the thread should keep its own newest first")
         top = ev("[...Work.current.posts].filter(p => !p.parent).sort((a, b) => new Date(b.at) - new Date(a.at))[0].id")
         expect(first() == top, "the newest message isn't at the top")
         y = lambda sel: ev(f"document.querySelector('{sel}').getBoundingClientRect().top")

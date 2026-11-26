@@ -81,11 +81,11 @@ func (a *App) restart() {
 }
 
 func (a *App) handleDataDirPick(w http.ResponseWriter, r *http.Request) {
-	start := ""
-	if a.store != nil { // nil on the recovery page
-		start = a.store.LocalDir()
+	start := defaultPickDir() // first time C:\, then where this button last chose
+	if a.store != nil {       // nil on the recovery page
+		start = orDefault(a.store.lastPick("data-folder"), start)
 	}
-	p, ok, err := pickFolder(start)
+	p, ok, err := pickFolderFn(start)
 	if err != nil {
 		writeErr(w, 400, err)
 		return
@@ -93,6 +93,9 @@ func (a *App) handleDataDirPick(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeJSON(w, map[string]any{"cancelled": true})
 		return
+	}
+	if a.store != nil {
+		a.store.setPick("data-folder", p)
 	}
 	dir, has := resolveDataFolder(p)
 	writeJSON(w, map[string]any{"path": dir, "has_data": has, "current": filepath.Clean(dir) == filepath.Clean(a.dataDir)})

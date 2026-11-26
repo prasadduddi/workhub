@@ -545,19 +545,6 @@ func (a *App) handleLocalList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"path": p, "parent": parent, "entries": list, "sep": string(filepath.Separator)})
 }
 
-func (a *App) handleLocalPick(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Start string `json:"start"`
-	}
-	_ = readJSON(r, &in)
-	p, ok, err := pickFolder(orDefault(in.Start, a.store.LocalDir()))
-	if err != nil {
-		writeErr(w, 400, err)
-		return
-	}
-	writeJSON(w, map[string]any{"path": p, "ok": ok})
-}
-
 // handleLocalPlaces lists shortcuts for the This PC pane.
 func (a *App) handleLocalPlaces(w http.ResponseWriter, r *http.Request) {
 	type place struct {

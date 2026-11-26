@@ -252,18 +252,6 @@ func expandPath(p string) string {
 
 // handlePickFile shows the system "Open" window, starting in the folder of
 // the last opened file (or the last This PC folder).
-func (a *App) handlePickFile(w http.ResponseWriter, r *http.Request) {
-	start := a.store.LocalDir()
-	if rec := a.store.Recent(); len(rec) > 0 {
-		start = filepath.Dir(rec[0].Path)
-	}
-	p, ok, err := pickFile(start)
-	if err != nil {
-		writeErr(w, 400, err)
-		return
-	}
-	writeJSON(w, map[string]any{"path": p, "ok": ok})
-}
 
 func (a *App) handleReadFile(w http.ResponseWriter, r *http.Request) {
 	p := expandPath(r.URL.Query().Get("path"))

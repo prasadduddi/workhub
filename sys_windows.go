@@ -171,9 +171,10 @@ var browseCallback = syscall.NewCallback(func(hwnd, msg, lp, data uintptr) uintp
 	return 0
 })
 
-// pickFolder shows the Windows "Browse for Folder" dialog. ok is false if
-// the user cancelled.
-func pickFolder(start string) (path string, ok bool, err error) {
+// pickFolderOld shows the older Windows "Browse for Folder" dialog (a tree);
+// used when the Explorer-style chooser (pickfolder_windows.go) can't start.
+// ok is false if the user cancelled.
+func pickFolderOld(start string) (path string, ok bool, err error) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

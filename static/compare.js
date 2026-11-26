@@ -286,7 +286,7 @@ const Compare = {
     if (e.target.closest('[data-cclose]')) { if (await this.okToClose()) d.close(); return; }
     const pc = e.target.closest('[data-cpc]');
     if (pc) {
-      const r = await api('POST', pc.dataset.cpc === 'file' ? '/api/local/pickfile' : '/api/local/pick', {}).catch(err => (toast(err.message, true), {}));
+      const r = await api('POST', pc.dataset.cpc === 'file' ? '/api/local/pickfile' : '/api/local/pick', { key: `compare-${pc.dataset.cpc === 'file' ? 'file' : 'folder'}-${pc.dataset.side}` }).catch(err => (toast(err.message, true), {}));
       if (r.ok) $$('.cmp-in', d)[+pc.dataset.side].value = r.path;
       return;
     }

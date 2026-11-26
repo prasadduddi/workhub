@@ -284,8 +284,8 @@ const Ref = {
 };
 
 $('#refNewFolder').onclick = () => Ref.newFolder();
-$('#refLinkFolderBtn').onclick = async () => { const r = await api('POST', '/api/local/pick', { start: $('#refLinkPath').value }).catch(err => (toast(err.message, true), {})); if (r.ok) $('#refLinkPath').value = r.path; };
-$('#refLinkFileBtn').onclick = async () => { const r = await api('POST', '/api/local/pickfile', {}).catch(err => (toast(err.message, true), {})); if (r.ok) $('#refLinkPath').value = r.path; };
+$('#refLinkFolderBtn').onclick = async () => { const r = await api('POST', '/api/local/pick', { key: 'ref-link-folder', start: $('#refLinkPath').value.trim() }).catch(err => (toast(err.message, true), {})); if (r.ok) $('#refLinkPath').value = r.path; };
+$('#refLinkFileBtn').onclick = async () => { const r = await api('POST', '/api/local/pickfile', { key: 'ref-link-file' }).catch(err => (toast(err.message, true), {})); if (r.ok) $('#refLinkPath').value = r.path; };
 let refSearchTimer;
 $('#refSearch').addEventListener('input', e => { clearTimeout(refSearchTimer); refSearchTimer = setTimeout(() => Ref.search(e.target.value.trim()), 250); });
 $('#refTree').addEventListener('click', async e => {
@@ -328,7 +328,7 @@ $('#refTree').addEventListener('contextmenu', e => {
     if (pk && pk !== it.path) items.push([`⇆ Compare with “${label(pk)}”`, () => { Compare.pick = null; Compare.open(Compare.ref(pk), Compare.ref(it.path)); }]);
     items.push(['⇆ Select for compare', () => { Compare.pick = it.path; toast(`“${label(it.path)}” selected — right-click another ${it.dir ? 'folder' : 'file'} → Compare with…, or Ctrl+click it`); }],
       [`⇆ Compare with a ${it.dir ? 'folder' : 'file'} on this PC…`, async () => {
-        const r = await api('POST', it.dir ? '/api/local/pick' : '/api/local/pickfile', {}).catch(err => (toast(err.message, true), {}));
+        const r = await api('POST', it.dir ? '/api/local/pick' : '/api/local/pickfile', { key: it.dir ? 'ref-compare-folder' : 'ref-compare-file' }).catch(err => (toast(err.message, true), {}));
         if (r.ok) Compare.open(Compare.ref(it.path), Compare.local(r.path));
       }]);
   }

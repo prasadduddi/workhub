@@ -159,3 +159,5 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] Ask: Confluence ticked by default; tick Jira too -> results from both; untick both refused
   [ ] Left menu 📌: SSH/FTP/Tasks don't shrink it, Ctrl+B / double-click don't change it; after a restart still pinned; unpin -> as before
   [ ] Top bar: Ask button before 💬 opens Ask with the cursor in the question box
+  [ ] Windows: FTP This PC -> Browse: Explorer-style folder chooser at C:\ the first time; choose a folder; Browse again -> opens there
+  [ ] Git add / Backup copy / Folders link / Compare each remember their own folder (not FTP's)

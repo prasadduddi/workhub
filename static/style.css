@@ -1808,3 +1808,7 @@ body.popout #askTop { display: none !important; }
 
 /* ↓ Newest first: the message box sits on top, above the newest message */
 .tmainc.newest .tcompose { order: -1; border-top: 0; border-bottom: 1px solid var(--border); }
+
+/* the message box: one line until you write more; the hint stays on one line */
+#tbox.tbox { min-height: 0; line-height: 1.45; }
+#tbox.tbox:empty::before { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
