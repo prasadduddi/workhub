@@ -155,3 +155,5 @@ if (Popout.me) {
   const sr = SQL.renderTabs.bind(SQL);
   SQL.renderTabs = () => { sr(); if (!Popout.me) $$('#sqlTabs .tab').forEach(el => { if (!el.querySelector('[data-spop]')) el.querySelector('.x')?.insertAdjacentHTML('beforebegin', `<span class="pop" data-spop="${esc(el.dataset.st)}" title="Open in a new window (same session — nothing is lost)">${ICON_NEWWIN}</span>`); }); };
 }
+// the page shown at start was drawn before this file: its ⧉ button now
+if (typeof pagePopBtn === 'function') pagePopBtn($('.view.active')?.id.replace('view-', '') || 'dashboard');

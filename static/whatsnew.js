@@ -4,6 +4,12 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.16.3', title: 'Capture traffic on a server, every page in its own window', items: [
+    ['📡', 'Capture traffic (tcpdump)', 'Right-click a server → Capture traffic…: tcpdump runs there and the packets come in live, Wireshark-style (protocol, addresses, ports, HTTP lines, DNS names), with each packet’s bytes; filter like “port 1521”, and ⬇ Save .pcap to open it in Wireshark.', ''],
+    ['📋', 'No more Allow / Block for the clipboard', 'Attach copied text and the terminal’s right-click paste read the clipboard through WorkHub itself, so the browser no longer asks.', 'tasks'],
+    ['🎨', 'A light blue title bar', 'WorkHub-Desktop’s title bar is light blue (Windows 11), so the window is easy to spot and drag.', ''],
+    ['⧉', 'Open any page in a new window', 'The new-window icon next to the page name at the top opens that page (Dashboard, Notes, Calendar, Ask, Jira, API, Monitor, Git, Folders…) in its own window — or right-click a page in the left menu. SSH, FTP, SQL and Tasks have it beside their tree / thread list.', ''],
+  ] },
   { v: '1.16.2', title: 'Threads: oldest first, a one-line message box', items: [
     ['↑', 'Oldest first again', 'Every thread opens oldest first with the message box at the bottom; ↓ Newest first is now only for the thread where you click it.', 'tasks'],
     ['📁', 'Browse remembers its folder', 'Each Browse… button (FTP, Git, backups, Folders, Compare, data folder…) opens where you last chose with that button — the first time at C:\\ — in the Windows Explorer-style chooser with the address bar and Quick access.', ''],

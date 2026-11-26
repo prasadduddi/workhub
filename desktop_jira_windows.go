@@ -82,6 +82,7 @@ func newSignInWindow(main webview2.WebView, site string) (
 			return errors.New("couldn't open the " + site + " sign-in window (WebView2)")
 		}
 		jwHwnd = uintptr(jw.Window())
+		tintTitleBar(jwHwnd)
 		orig, _, _ := pSetWindowLongPtr.Call(jwHwnd, ^uintptr(3) /* GWLP_WNDPROC = -4 */, jiraWinProcCallback)
 		signWinProcs.Store(jwHwnd, orig)
 		_ = jw.Bind("whJiraReply", func(id, status int, body string) {

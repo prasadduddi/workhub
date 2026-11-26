@@ -259,7 +259,7 @@
   <section id="view-api" class="view">
     <div class="api-layout">
       <div class="api-side">
-        <div class="api-side-tools"><button id="apiNew" class="primary" title="A new request">+ New</button><button id="apiImport" title="Import Postman or Bruno collections and environments">⬇ Import</button><input type="file" id="apiImportFiles" accept=".json,.bru" multiple hidden><input type="file" id="apiImportFolder" webkitdirectory hidden><input id="apiFilter" type="search" placeholder="Filter…"></div>
+        <div class="api-side-tools"><button id="apiNew" class="primary" title="A new request">+ New</button><button id="apiImport" title="Import Postman or Bruno collections and environments">⬇ Import</button><button class="icon winbtn pagepop" data-pagepop="api" aria-label="Open in a new window" title="Open the whole API page in a new window (Dock back puts it back)"><svg class="ico-win" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg></button><input type="file" id="apiImportFiles" accept=".json,.bru" multiple hidden><input type="file" id="apiImportFolder" webkitdirectory hidden><input id="apiFilter" type="search" placeholder="Filter…"></div>
         <div class="seg api-side-seg"><button data-aside="saved" class="active">Saved</button><button data-aside="hist">History</button></div>
         <div id="apiList" class="api-list"></div>
       </div>
@@ -313,7 +313,7 @@
   <section id="view-git" class="view">
     <div class="git-layout">
       <div class="git-side">
-        <div class="tree-tools"><b>Repositories</b><span class="spacer"></span><button id="gitAdd" title="Add a repository folder">+</button><button id="gitFind" title="Find repositories on this PC">Find</button><button id="gitReview" title="Review a Bitbucket pull request or GitLab merge request">🔍 Review PR</button></div>
+        <div class="tree-tools"><b>Repositories</b><span class="spacer"></span><button id="gitAdd" title="Add a repository folder">+</button><button class="icon winbtn pagepop" data-pagepop="git" aria-label="Open in a new window" title="Open the whole Git page in a new window (Dock back puts it back)"><svg class="ico-win" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg></button><button id="gitFind" title="Find repositories on this PC">Find</button><button id="gitReview" title="Review a Bitbucket pull request or GitLab merge request">🔍 Review PR</button></div>
         <div id="gitRepoList"></div>
         <div class="git-bh"><b>Branches</b><input id="gitBranchFilter" type="search" placeholder="Filter…"></div>
         <div id="gitBranches"></div>
@@ -383,7 +383,7 @@
   <section id="view-ref" class="view">
     <div class="props-layout">
       <div class="props-side">
-        <div class="tree-tools"><input id="refSearch" type="search" placeholder="Search names and file contents…"><button id="refNewFolder" class="primary" title="New folder (inside the selected folder)">+</button><button id="refCompare" title="Compare two files or folders — in Folders or anywhere on this PC (or Ctrl+click a second item)">⇆</button></div>
+        <div class="tree-tools"><input id="refSearch" type="search" placeholder="Search names and file contents…"><button id="refNewFolder" class="primary" title="New folder (inside the selected folder)">+</button><button class="icon winbtn pagepop" data-pagepop="ref" aria-label="Open in a new window" title="Open the whole Folders page in a new window (Dock back puts it back)"><svg class="ico-win" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg></button><button id="refCompare" title="Compare two files or folders — in Folders or anywhere on this PC (or Ctrl+click a second item)">⇆</button></div>
         <div id="refTree" class="tree"></div>
         <div id="refWhere" class="muted tiny refwhere"></div>
       </div>
@@ -418,7 +418,7 @@
   <section id="view-notes" class="view">
     <div class="notes-layout">
       <div class="notes-side">
-        <button id="newNote" class="primary">+ New note</button>
+        <button id="newNote" class="primary">+ New note</button><button class="icon winbtn pagepop" data-pagepop="notes" aria-label="Open in a new window" title="Open the whole Notes page in a new window (Dock back puts it back)"><svg class="ico-win" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg></button>
         <h4>Notes</h4><div id="noteList"></div>
         <h4>Open file</h4>
         <div class="row"><input id="openPath" placeholder="Paste a path, or press Open to browse"><button id="openBtn" class="primary">Open</button></div>
@@ -725,6 +725,7 @@
 <script src="capture.js"></script>
 <script src="teams.js"></script>
 <script src="ask.js"></script>
+<script src="pcap.js"></script>
 <script src="palette.js"></script>
 </body>
 </html>

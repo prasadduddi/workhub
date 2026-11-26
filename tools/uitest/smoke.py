@@ -379,11 +379,14 @@ with sync_playwright() as p:
         tid = ev("Work.list.find(w => w.title.startsWith('PAY-205')).id")
         ev(f"Work.open('{tid}')"); pg.wait_for_timeout(600)
         script = "#!/bin/bash\n# restart batch\ncd /opt/batch && ./stop.sh\n./start.sh\n"
-        ev(f"navigator.clipboard.writeText({script!r})")
+        # the text comes from WorkHub's own clipboard read (no browser Allow / Block box): give it the script
+        ev(f"window._clipAsked = 0; const r = navigator.clipboard.readText.bind(navigator.clipboard); navigator.clipboard.readText = () => (window._clipAsked++, r()); window.clipText = async () => {script!r}; 0")
+        expect(isinstance(ev("api('GET', '/api/clipboard/text').then(r => typeof r.text)"), str), "no native clipboard read")
         n = ev("Work.current.posts.length")
         pg.click("#tplus"); pg.wait_for_timeout(200)
         pg.click("#ctxMenu button:has-text('Attach copied text')"); pg.wait_for_selector("#snipDlg[open]")
         expect(pg.input_value("#snipText") == script.replace("\\n", "\n"), f"clipboard not pasted: {pg.input_value('#snipText')!r}")
+        expect(ev("window._clipAsked") == 0, "the page asked the browser for the clipboard (Allow / Block box)")
         name = pg.input_value("#snipName")
         expect(name.startswith("script-") and name.endswith(".sh"), f"name: {name}")
         pg.fill("#snipNote", "restart script")
@@ -1071,6 +1074,65 @@ with sync_playwright() as p:
         pg.click("#askTop"); pg.wait_for_timeout(400)
         expect(ev("document.querySelector('#view-ask').classList.contains('active') && document.activeElement.id === 'askQ'"), "Ask button didn't open Ask")
         ev("EnvSwitch.set('ALL')")
+
+    @check("⧉ every page opens in its own window (top bar icon, left-menu right-click) and docks back")
+    def _():
+        views = ev("[...document.querySelectorAll('#nav button[data-view]')].map(b => b.dataset.view).filter(v => !['terminal', 'files', 'sql', 'tasks', 'groups'].includes(v))")
+        own = ['api', 'git', 'ref', 'notes']  # beside their own list
+        expect(len(views) >= 8, f"pages: {views}")
+        bad = []
+        for v in views:
+            ev(f"show('{v}')"); pg.wait_for_timeout(250)
+            sel = f"#view-{v} [data-pagepop={v}]" if v in own else "#pagePop"
+            if not pg.is_visible(sel):
+                bad.append(v + ": no icon"); continue
+            if v in own and pg.is_visible("#pagePop"):
+                bad.append(v + ": icon twice")
+            with ctx.expect_page() as pw:
+                pg.click(sel)
+            w = pw.value
+            errs = []; w.on("pageerror", lambda e: errs.append(str(e)))
+            try:
+                w.wait_for_function(f"document.body.classList.contains('popout') && document.querySelector('#view-{v}')?.classList.contains('active')", timeout=15000)
+            except Exception:
+                bad.append(v + ": didn't open")
+            if errs: bad.append(v + ": " + errs[0][:80])
+            w.click("#popDock"); pg.wait_for_timeout(500)
+        expect(not bad, f"pages: {bad}")
+        ev("show('notes')"); pg.wait_for_timeout(200)
+        pg.click("#nav button[data-view=cal]", button="right"); pg.wait_for_timeout(300)
+        expect(pg.locator("#ctxMenu button:has-text('Open in a new window')").count() == 1, "no left-menu right-click option")
+        pg.keyboard.press("Escape")
+        ev("show('terminal')"); pg.wait_for_timeout(200)
+        expect(not pg.is_visible("#pagePop"), "SSH has its icon by the tree, not in the top bar")
+        ev("show('dashboard')")
+
+    @check("📡 Capture traffic on a server: live packets Wireshark-style, filter, bytes, stop, .pcap")
+    def _():
+        if ssh_off():
+            raise Skip("SSH is switched off")
+        e = ev("S.entries.find(e => e.port === 2222)")
+        ev(f"show('terminal'); Tree.menu({{ clientX: 300, clientY: 300 }}, {{ dataset: {{ id: '{e['id']}' }} }}, 'ssh')"); pg.wait_for_timeout(300)
+        expect(pg.locator("#ctxMenu button:has-text('Capture traffic')").count() == 1, "no Capture traffic on a server")
+        pg.keyboard.press("Escape")
+        ev(f"Pcap.open(S.entries.find(e => e.id === '{e['id']}'))"); pg.wait_for_selector("#pcapDlg[open]")
+        pg.uncheck("#pcapDlg [data-pc=sudo]")
+        pg.fill("#pcapDlg [data-pc=filter]", "port 1521"); pg.click("#pcapDlg [data-pc=start]")
+        pg.wait_for_function("document.querySelectorAll('#pcapDlg tbody tr').length >= 4", timeout=15000)
+        protos = ev("[...document.querySelectorAll('#pcapDlg tbody tr td:nth-child(5)')].map(td => td.textContent)")
+        expect(set(protos) == {"TNS"}, f"filter port 1521: {set(protos)}")
+        info = pg.inner_text("#pcapDlg tbody tr:first-child td:last-child")
+        expect("1521" in info and "PSH" in info, f"info: {info}")
+        pg.click("#pcapDlg tbody tr:first-child"); pg.wait_for_timeout(500)
+        ascii = ev("document.querySelector('#pcapDlg .pc-hex').textContent.split('\\n').filter(l => /^[0-9a-f]{4}  /.test(l)).map(l => l.slice(56)).join('')")
+        expect("SELECT status FROM refunds" in ascii, f"packet bytes not shown: {ascii[:120]!r}")
+        pg.click("#pcapDlg [data-pc=stop]"); pg.wait_for_function("!Pcap.running", timeout=10000)
+        expect("Stopped" in pg.inner_text("#pcapDlg .pc-status"), pg.inner_text("#pcapDlg .pc-status"))
+        head = ev("fetch(`/api/pcap/${Pcap.id}/file`).then(r => r.arrayBuffer()).then(b => [...new Uint8Array(b.slice(0, 4))])")
+        expect(head == [0xd4, 0xc3, 0xb2, 0xa1], f"not a pcap: {head}")
+        pg.fill("#pcapDlg [data-pc=find]", "nothing-matches-this"); pg.wait_for_timeout(200)
+        expect(pg.locator("#pcapDlg tbody tr").count() == 0, "row filter")
+        close_dialogs()
 
     @check("no page errors during the whole run")
     def _():

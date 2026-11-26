@@ -169,6 +169,11 @@ const HELP_TOPICS = [
     'Confluence pages and Jira issues that match are listed together, best first, with the matching sentences in yellow; click one to open it, or 🧵 post its link in a thread.',
     'Set up Confluence in ⚙ Settings → Ask: “Same as my Jira login” on Atlassian Cloud, a token for Server / Data Center, or 🔑 Sign in with browser in WorkHub-Desktop (SSO / MFA — the window hides when you are in).',
     'Optional ✨ AI answers (off by default): add your Anthropic API key and switch them on — the best matches are then sent to Anthropic and you get a short answer with numbered links to its sources. Check your company allows this first.'] },
+  { t: 'Capture network traffic on a server (like Wireshark)', k: 'capture traffic tcpdump wireshark packets pcap network sniff port filter', v: 'terminal', s: [
+    'Right-click a server in the SSH tree (or ⋯ on its card) → 📡 Capture traffic….',
+    'Optional: a filter in tcpdump words — port 1521 · host 10.0.0.31 · port 8443 and host 10.0.0.15 — then ▶ Start.',
+    'tcpdump needs root: “use sudo” runs it with sudo (the server’s saved password is used if it asks). WorkHub’s own SSH packets are left out unless you untick it.',
+    'Packets come in live; type in “Show only rows with…” to narrow the list; click one to see its bytes. ■ Stop, then ⬇ Save .pcap to open it in Wireshark.'] },
   { t: 'Pin the left menu', k: 'pin lock sidebar left menu keep open stop shrinking collapse', v: '', s: [
     'Click 📌 next to « at the top of the left menu: it stays as it is (full or icons only).',
     'While pinned, the SSH, FTP, SQL and Tasks pages don\'t shrink it, and double-click, Ctrl+B and « don\'t change it. Click 📌 again to unpin.'] },

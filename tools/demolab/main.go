@@ -186,6 +186,11 @@ func session(ch ssh.Channel, reqs <-chan *ssh.Request, h host, root string) {
 			var r struct{ Cmd string }
 			_ = ssh.Unmarshal(req.Payload, &r)
 			req.Reply(true, nil)
+			if strings.Contains(r.Cmd, "tcpdump") { // 📡 Capture traffic: a pretend tcpdump
+				fakeTcpdump(ch, r.Cmd)
+				_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ C uint32 }{0}))
+				return
+			}
 			run([]string{"/bin/bash", "-c", r.Cmd})
 			return
 		case "subsystem":
@@ -247,4 +252,85 @@ func seed(root string, h host) {
 		_ = os.Chmod(filepath.Join(root, "app/bin/restart.sh"), 0o755)
 	}
 	w(".bash_history", "cd app/logs\ntail -f application.log\n")
+}
+
+// fakeTcpdump writes a live pcap (Ethernet): app ↔ Oracle 1521, HTTP, DNS, ping — "port 1521" keeps only Oracle.
+func fakeTcpdump(ch ssh.Channel, cmd string) {
+	fmt.Fprintln(ch.Stderr(), "tcpdump: listening on any, link-type EN10MB (Ethernet), snapshot length 65535 bytes")
+	onlyTNS := strings.Contains(cmd, "port 1521")
+	le := binary.LittleEndian
+	hdr := make([]byte, 24)
+	copy(hdr, []byte{0xd4, 0xc3, 0xb2, 0xa1})
+	le.PutUint16(hdr[4:6], 2)
+	le.PutUint16(hdr[6:8], 4)
+	le.PutUint32(hdr[16:20], 65535)
+	le.PutUint32(hdr[20:24], 1)
+	if _, err := ch.Write(hdr); err != nil {
+		return
+	}
+	ip4 := func(a, b, c, d byte) []byte { return []byte{a, b, c, d} }
+	app, db, web, dns := ip4(10, 0, 0, 21), ip4(10, 0, 0, 31), ip4(10, 0, 0, 15), ip4(10, 0, 0, 2)
+	ipv4 := func(proto byte, src, dst, body []byte) []byte {
+		h := make([]byte, 34) // Ethernet + IPv4
+		binary.BigEndian.PutUint16(h[12:14], 0x0800)
+		h[14], h[23] = 0x45, proto
+		binary.BigEndian.PutUint16(h[16:18], uint16(20+len(body)))
+		h[22] = 64
+		copy(h[26:30], src)
+		copy(h[30:34], dst)
+		return append(h, body...)
+	}
+	tcp := func(sp, dp int, seq uint32, flags byte, payload string) []byte {
+		b := make([]byte, 20)
+		binary.BigEndian.PutUint16(b[0:2], uint16(sp))
+		binary.BigEndian.PutUint16(b[2:4], uint16(dp))
+		binary.BigEndian.PutUint32(b[4:8], seq)
+		binary.BigEndian.PutUint32(b[8:12], seq+7)
+		b[12], b[13] = 5<<4, flags
+		return append(b, payload...)
+	}
+	udp := func(sp, dp int, payload []byte) []byte {
+		b := make([]byte, 8)
+		binary.BigEndian.PutUint16(b[0:2], uint16(sp))
+		binary.BigEndian.PutUint16(b[2:4], uint16(dp))
+		binary.BigEndian.PutUint16(b[4:6], uint16(8+len(payload)))
+		return append(b, payload...)
+	}
+	dnsQ := func(name string) []byte {
+		m := []byte{0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0}
+		for _, l := range strings.Split(name, ".") {
+			m = append(m, byte(len(l)))
+			m = append(m, l...)
+		}
+		return append(m, 0, 0, 1, 0, 1)
+	}
+	for i := 0; ; i++ {
+		seq := uint32(1000 + i*100)
+		pkts := [][]byte{
+			ipv4(6, app, db, tcp(52344, 1521, seq, 0x18, "\x00\x3a\x00\x00\x06\x00\x00\x00SELECT status FROM refunds WHERE id = :1")),
+			ipv4(6, db, app, tcp(1521, 52344, seq+1, 0x18, "\x00\x40\x00\x00\x06\x00\x00\x00APPROVED")),
+		}
+		if !onlyTNS {
+			pkts = append(pkts,
+				ipv4(6, web, app, tcp(51000+i%50, 8080, seq, 0x18, fmt.Sprintf("GET /api/payments/%d HTTP/1.1\r\nHost: acme-app-01\r\n\r\n", 4700+i))),
+				ipv4(6, app, web, tcp(8080, 51000+i%50, seq, 0x18, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{}")),
+				ipv4(17, app, dns, udp(40000+i, 53, dnsQ("acme-ora-uat01.acme.local"))),
+			)
+			if i%4 == 0 {
+				pkts = append(pkts, ipv4(1, app, db, []byte{8, 0, 0, 0, 0, 1, 0, byte(i)}))
+			}
+		}
+		now := time.Now()
+		for _, p := range pkts {
+			r := make([]byte, 16)
+			le.PutUint32(r[0:4], uint32(now.Unix()))
+			le.PutUint32(r[4:8], uint32(now.Nanosecond()/1000))
+			le.PutUint32(r[8:12], uint32(len(p)))
+			le.PutUint32(r[12:16], uint32(len(p)))
+			if _, err := ch.Write(append(r, p...)); err != nil {
+				return // WorkHub stopped the capture
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }

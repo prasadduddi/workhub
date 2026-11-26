@@ -1235,7 +1235,7 @@ const Attach = {
     if (!Work.current) return toast('Open a thread first', true);
     const d = this.dlg(), name = d.querySelector('#snipName'), text = d.querySelector('#snipText');
     name.value = ''; delete name.dataset.typed; text.value = ''; d.querySelector('#snipNote').value = '';
-    if (fromClipboard) { try { text.value = (await navigator.clipboard.readText()) || ''; } catch { /* not allowed: paste by hand */ } }
+    if (fromClipboard) { try { text.value = (await clipText()) || ''; } catch { /* not allowed: paste by hand */ } }
     d.upd(); d.showModal(); text.cm.refresh();
     if (fromClipboard && !text.value) toast('Nothing copied (or the browser blocked it) — paste with Ctrl+V', true);
     (text.value ? name : text).focus();

@@ -9,6 +9,7 @@ package main
 import (
 	"crypto/sha256"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -233,4 +234,15 @@ func (a *App) watchScreenshots() {
 			}
 		}
 	}
+}
+
+// handleClipboardText: GET /api/clipboard/text — the clipboard's text, read by WorkHub itself, so the page
+// never has to ask the browser (whose "Allow / Block" box would appear every time).
+func (a *App) handleClipboardText(w http.ResponseWriter, r *http.Request) {
+	t, err := readClipboard()
+	if err != nil {
+		writeErr(w, 500, err)
+		return
+	}
+	writeJSON(w, map[string]string{"text": t})
 }

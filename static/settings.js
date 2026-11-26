@@ -35,6 +35,7 @@ const Settings = {
           row('Desktop shortcut', '', sw('inst-desktop', inst.desktop))] : []),
         ...(window.WH_DESKTOP ? [row('Close button keeps WorkHub running', 'In the tray by the clock — capture, tunnels and transfers carry on', sw('tray', Tray.on()))] : []),
         row('Reopen last session', 'Offer to reopen your SSH, SQL tabs and thread when WorkHub starts', sw('reopen', !S.settings.no_reopen)),
+        row('Check for new versions automatically', 'Asks GitHub about once an hour (sends only “WorkHub/version”). Off: only when you press ⟳ Check for updates', sw('updcheck', !S.settings.no_update_check)),
         row('Download updates in the background', 'Nothing is installed until you choose to', sw('updfetch', !S.settings.no_update_fetch)),
       ]],
       ['look', '🎨', 'Appearance', [
@@ -144,6 +145,7 @@ $('#settingsBody').addEventListener('change', async e => {
     case 'slog': await saveSettings({ session_log: t.checked }); toast(t.checked ? 'SSH sessions you open from now on are saved' : 'SSH sessions are no longer saved'); break;
     case 'tray': Tray.set(t.checked); break;
     case 'reopen': await saveSettings({ no_reopen: !t.checked }); toast(t.checked ? 'You will be offered to reopen your last session' : 'The last session is no longer offered at start (an update still reopens it)'); break;
+    case 'updcheck': await saveSettings({ no_update_check: !t.checked }); toast(t.checked ? 'WorkHub checks for new versions by itself again' : 'No automatic update checks — press ⟳ Check for updates when you want'); break;
     case 'updfetch': await saveSettings({ no_update_fetch: !t.checked }); toast(t.checked ? 'New versions download in the background — you choose when to install' : 'New versions are no longer downloaded until you ask'); break;
     case 'watch': if ($('#watchToggle').checked !== t.checked) $('#watchToggle').click(); break; // same as ● Capturing at the top
     case 'capall': await saveSettings({ capture_all: t.checked }); break;

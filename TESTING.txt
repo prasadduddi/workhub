@@ -161,3 +161,8 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] Top bar: Ask button before 💬 opens Ask with the cursor in the question box
   [ ] Windows: FTP This PC -> Browse: Explorer-style folder chooser at C:\ the first time; choose a folder; Browse again -> opens there
   [ ] Git add / Backup copy / Folders link / Compare each remember their own folder (not FTP's)
+  [ ] Calendar / Notes / Ask / Jira…: the icon next to the page name opens it in its own window; right-click a page in the left menu -> Open in a new window
+  [ ] Real server: right-click -> Capture traffic -> filter port 22? no: e.g. port 1521 -> Start: packets live; click one -> bytes; Stop; Save .pcap opens in Wireshark
+  [ ] Server without tcpdump / sudo password: the window says why
+  [ ] Attach copied text: no Allow / Block box (Desktop and browser)
+  [ ] Windows 11: WorkHub-Desktop title bar is light blue

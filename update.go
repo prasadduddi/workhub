@@ -124,6 +124,10 @@ func exeName() string {
 }
 
 func (a *App) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("force") != "1" && a.store.Settings().NoUpdateCheck { // automatic checks off: GitHub is asked only when you press ⟳
+		writeJSON(w, map[string]any{"current": version, "off": true})
+		return
+	}
 	rel, err := latestRelease(r.URL.Query().Get("force") == "1")
 	if err != nil {
 		writeJSON(w, map[string]any{"current": version, "error": err.Error(), "page": releasesPage})
@@ -333,7 +337,7 @@ func stagedTag(tag string) string {
 
 // fetchUpdate downloads the latest release if it is newer and not there yet.
 func (a *App) fetchUpdate() {
-	if !canSelfUpdate || a.store.Settings().NoUpdateFetch {
+	if !canSelfUpdate || a.store.Settings().NoUpdateFetch || a.store.Settings().NoUpdateCheck {
 		return
 	}
 	rel, err := latestRelease(false)

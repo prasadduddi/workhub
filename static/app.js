@@ -138,6 +138,13 @@ function askYes(message, opts = {}) {
   });
 }
 
+// The clipboard's text without the browser's "Allow / Block" question: WorkHub reads it itself
+// (the page's own clipboard access only if that fails).
+async function clipText() {
+  try { const r = await api('GET', '/api/clipboard/text'); if (typeof r?.text === 'string') return r.text; } catch { /* fall back */ }
+  return navigator.clipboard.readText();
+}
+
 async function copyText(text, what = 'Copied') {
   try {
     await navigator.clipboard.writeText(text);
@@ -452,6 +459,7 @@ function show(view) {
   }
   $$('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   $('#pageTitle').textContent = $(`#nav [data-view="${view}"] .nl`)?.textContent || '';
+  pagePopBtn(view);
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   history.replaceState(null, '', '#' + view);
   if (view === 'terminal') { fitActiveTerm(); if (!Term.tabs.length) Term.emptyHTML(); }
@@ -2161,7 +2169,7 @@ const Term = {
     term.onSelectionChange(() => { const s = term.getSelection(); if (s) navigator.clipboard.writeText(s).catch(() => {}); });
     el.addEventListener('contextmenu', async ev => {
       ev.preventDefault();
-      try { const txt = await navigator.clipboard.readText(); if (txt && !t.closed && await this.pasteOK(t, txt)) t.ws.send(JSON.stringify({ t: 'd', d: txt })); } catch { toast('Allow clipboard access to paste with right-click (or use Ctrl+V)', true); }
+      try { const txt = await clipText(); if (txt && !t.closed && await this.pasteOK(t, txt)) t.ws.send(JSON.stringify({ t: 'd', d: txt })); } catch { toast('Allow clipboard access to paste with right-click (or use Ctrl+V)', true); }
     });
     term.onData(async d => { // keys go straight through; only a paste of several lines waits for the PROD question
       if (t.closed) { if (d === '\r') this.connect(t); return; }
@@ -2982,6 +2990,7 @@ const Tree = {
       }
       if (problems(e).some(p => p[0] === 'password')) items.push(['🔑 Logs in with a key / SSO (no password)', async () => { await api('POST', '/api/entries', { ...entryInput(e), password: e.password, extra: { ...(e.extra || {}), auth: 'key' } }); poll(); toast(`${e.name}: marked as key login`); }]);
       if (isConn(e) && typeof Popout !== 'undefined' && !Popout.me) items.push(['⧉ Open in its own window', () => Popout.popConn(e, Popout.connHow(e, mode))]);
+      if (canSSH(e) && typeof Pcap !== 'undefined') items.push(['📡 Capture traffic… (tcpdump)', () => Pcap.open(e)]);
       items.push(['🧵 Add to task thread…', () => Work.addEntry(e, ev)]);
       const port = canDB(e) ? e.port || (dbKindOf(e) === 'oracle' ? 1521 : 5432) : canSSH(e) ? sshPort(e) : e.port;
       // Two copy options: Copy = the basics (host, port, user, password…), Copy all = everything.
@@ -4926,3 +4935,28 @@ $('#backupNow').onclick = async () => {
   grip.addEventListener('dblclick', () => { store.set('chatW', 0); document.documentElement.style.removeProperty('--chat-w'); });
   window.addEventListener('resize', () => { if (!c.hidden) Chat.place(); });
 }
+
+// ⧉ Open in a new window, for every page: next to the page name at the top (SSH, FTP, SQL and Tasks have it
+// beside their tree / thread list instead), and on right-click of a page in the left menu.
+const OWN_POP = ['terminal', 'files', 'sql', 'tasks', 'api', 'git', 'ref', 'notes']; // these have it beside their own list
+function pagePopBtn(view) {
+  let b = $('#pagePop');
+  if (!b) {
+    b = Object.assign(document.createElement('button'), { id: 'pagePop', className: 'icon winbtn ghost' });
+    b.setAttribute('aria-label', 'Open in a new window');
+    b.innerHTML = ICON_NEWWIN;
+    b.onclick = () => Popout.popPage(b.dataset.view);
+    $('#pageTitle').after(b);
+  }
+  b.dataset.view = view;
+  b.title = `Open ${Menubar?.label?.(view) || 'this page'} in a new window (Dock back puts it back)`;
+  b.hidden = typeof Popout === 'undefined' || !!Popout.me || OWN_POP.includes(view) || !$(`#nav [data-view="${view}"]`);
+}
+$('#nav').addEventListener('contextmenu', e => {
+  const b = e.target.closest('button[data-view]'); if (!b || typeof Popout === 'undefined' || Popout.me) return;
+  e.preventDefault();
+  const v = b.dataset.view, name = Menubar?.label?.(v) || v;
+  setTimeout(() => Tree.showMenu({ clientX: e.clientX, clientY: e.clientY }, [[`Open ${name}`, () => show(v)], ['⧉ Open in a new window', () => Popout.popPage(v)]]));
+});
+
+document.addEventListener('click', e => { const b = e.target.closest('[data-pagepop]'); if (b && typeof Popout !== 'undefined') Popout.popPage(b.dataset.pagepop); });

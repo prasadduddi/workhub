@@ -1812,3 +1812,39 @@ body.popout #askTop { display: none !important; }
 /* the message box: one line until you write more; the hint stays on one line */
 #tbox.tbox { min-height: 0; line-height: 1.45; }
 #tbox.tbox:empty::before { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+#pagePop { margin-left: 6px; min-height: 30px; padding: 3px 6px; color: var(--muted); } #pagePop:hover { color: var(--accent); }
+/* a crowded top bar: the search box gets narrower instead of pushing ⚙ off the screen */
+header.appbar .gsearch { flex: 0 1 auto; min-width: 0; }
+header.appbar .gsearch #search { min-width: 110px; }
+
+body.popout .pagepop { display: none !important; }
+.api-side-tools .pagepop, .tree-tools .pagepop { flex: none; }
+/* the API list's toolbar: + New, Import, new window — the filter box on its own row */
+.api-side-tools { flex-wrap: wrap; }
+.api-side-tools > input[type=search], .api-side-tools > input:not([type=file]) { flex: 1 1 100%; order: 9; min-width: 0; }
+
+/* 📡 Capture traffic */
+dialog.pcap-dlg { width: min(1300px, 96vw); height: min(860px, 92vh); display: none; flex-direction: column; gap: 6px; }
+dialog.pcap-dlg[open] { display: flex; }
+.pc-head { display: flex; align-items: center; } .pc-head h3 { margin: 0; }
+.pc-ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.pc-ctl label { display: flex; flex-direction: column; gap: 2px; font-size: calc(12px * var(--ui-scale)); color: var(--muted); }
+.pc-ctl label.grow { flex: 1 1 320px; } .pc-ctl label.grow input { width: 100%; box-sizing: border-box; }
+.pc-ctl input[data-pc=iface] { width: 110px; }
+.pc-ctl input { font-family: var(--mono); }
+.pc-ctl .pc-chk { flex-direction: row; align-items: center; gap: 5px; padding-bottom: 6px; color: var(--text); }
+.pc-status { min-height: 1.3em; } .pc-status.pc-bad { color: #b42318; }
+.pc-find { display: flex; gap: 10px; align-items: center; } .pc-find input { flex: 1; }
+.pc-table { flex: 1 1 60%; min-height: 160px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.pc-table table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: calc(12px * var(--ui-scale)); }
+.pc-table th { position: sticky; top: 0; background: var(--panel2); text-align: left; padding: 4px 8px; font-weight: 600; z-index: 1; }
+.pc-table td { padding: 2px 8px; white-space: nowrap; border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+.pc-table td:last-child { white-space: normal; }
+.pc-table tr { cursor: pointer; } .pc-table tr:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.pc-table tr.sel td { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.pc-table tr.pc-http td, .pc-table tr.pc-tls td { background: color-mix(in srgb, #3fb950 9%, transparent); }
+.pc-table tr.pc-dns td { background: color-mix(in srgb, #58a6ff 10%, transparent); }
+.pc-table tr.pc-tns td, .pc-table tr.pc-pgsql td { background: color-mix(in srgb, #d29922 10%, transparent); }
+.pc-table tr.pc-icmp td, .pc-table tr.pc-icmpv6 td, .pc-table tr.pc-arp td { background: color-mix(in srgb, #a371f7 9%, transparent); }
+.pc-hex { flex: 0 1 30%; min-height: 90px; overflow: auto; margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); font-size: calc(12px * var(--ui-scale)); }

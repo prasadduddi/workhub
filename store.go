@@ -120,6 +120,7 @@ type Settings struct {
 	NoShots       bool            `json:"no_shots,omitempty"`        // don't capture copied screenshots
 	Monitor       MonitorSettings `json:"monitor"`                   // server monitoring (monitor.go)
 	NoUpdateFetch bool            `json:"no_update_fetch,omitempty"` // don't download new versions in the background
+	NoUpdateCheck bool            `json:"no_update_check,omitempty"` // don't ask GitHub for new versions by itself (only ⟳ Check for updates)
 	LastSession   *SessionSnap    `json:"last_session,omitempty"`    // reopened after a restart or update
 	NoReopen      bool            `json:"no_reopen,omitempty"`       // don't offer to reopen the last session
 }
