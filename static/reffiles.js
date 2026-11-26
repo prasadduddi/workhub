@@ -131,11 +131,11 @@ const Ref = {
     const it = this.item(p); if (it) { it.size = new Blob([this.cm.getValue()]).size; it.mod = new Date().toISOString(); }
   },
 
-  okToLeave() { return !this.dirty || confirm(`${this.base(this.loaded)} has unsaved changes. Discard them?`); },
+  async okToLeave() { return !this.dirty || await askYes(`${this.base(this.loaded)} has unsaved changes. Discard them?`); },
 
-  select(p) {
+  async select(p) {
     if (p === this.sel) return;
-    if (!this.okToLeave()) return;
+    if (!await this.okToLeave()) return;
     this.dirty = false; this.sel = p; this.persist(); this.render();
   },
 
@@ -181,7 +181,7 @@ const Ref = {
 
   async newFolder() {
     const at = this.folderOf(this.sel);
-    const name = prompt(`New folder ${at ? 'inside ' + at : 'at the top level'}:`, ''); if (!name?.trim()) return;
+    const name = await askText(`New folder ${at ? 'inside ' + at : 'at the top level'}:`, ''); if (!name?.trim()) return;
     try {
       const r = await api('POST', '/api/ref/folder', { path: this.join(at, name.trim()) });
       if (at) this.open.add(at);
@@ -191,7 +191,7 @@ const Ref = {
 
   async newFile() {
     const at = this.folderOf(this.sel);
-    const name = prompt(`New file in ${at || 'the top level'} (e.g. app.properties, config.yaml, sample.json):`, ''); if (!name?.trim()) return;
+    const name = await askText(`New file in ${at || 'the top level'} (e.g. app.properties, config.yaml, sample.json):`, ''); if (!name?.trim()) return;
     const r = await fetch('/api/ref/file?new=1&path=' + encodeURIComponent(this.join(at, name.trim())), { method: 'PUT', body: '' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return toast(j.error || 'Could not create the file', true);
@@ -234,12 +234,12 @@ const Ref = {
 
   async rename() {
     const p = this.sel; if (!p) return;
-    const name = prompt('New name:', this.base(p)); if (!name?.trim() || name.trim() === this.base(p)) return;
+    const name = await askText('New name:', this.base(p)); if (!name?.trim() || name.trim() === this.base(p)) return;
     await this.moveTo(p, this.join(this.parent(p), name.trim()));
   },
 
   async moveTo(from, to) {
-    if (from === this.loaded && !this.okToLeave()) return;
+    if (from === this.loaded && !await this.okToLeave()) return;
     try {
       const r = await api('POST', '/api/ref/move', { from, to });
       const wasOpen = [...this.open].filter(o => o === from || o.startsWith(from + '/'));
@@ -252,12 +252,12 @@ const Ref = {
     const p = this.sel; if (!p) return;
     const isDir = this.isDir(p), it = this.item(p);
     if (it?.link) {
-      if (!confirm(`Remove the link "${this.base(p)}"?\n\nOnly the link is removed — ${it.link} and its files are not touched.`)) return;
+      if (!await askYes(`Remove the link "${this.base(p)}"?\n\nOnly the link is removed — ${it.link} and its files are not touched.`)) return;
       try { await api('DELETE', '/api/ref/file?path=' + encodeURIComponent(p)); this.dirty = false; this.loaded = ''; this.sel = this.parent(p); this.persist(); await this.load(); toast('Link removed'); }
       catch (err) { toast(err.message, true); }
       return;
     }
-    if (!confirm(`Delete ${isDir ? 'the folder' : ''} "${p}"${isDir ? ' and everything in it' : ''}?\n\nIt is moved to "reference-deleted" in your data folder, so it can still be recovered.`)) return;
+    if (!await askYes(`Delete ${isDir ? 'the folder' : ''} "${p}"${isDir ? ' and everything in it' : ''}?\n\nIt is moved to "reference-deleted" in your data folder, so it can still be recovered.`)) return;
     try { await api('DELETE', '/api/ref/file?path=' + encodeURIComponent(p)); this.dirty = false; this.loaded = ''; this.sel = this.parent(p); this.persist(); await this.load(); toast('Deleted (kept in reference-deleted)'); }
     catch (err) { toast(err.message, true); }
   },
@@ -288,13 +288,13 @@ $('#refLinkFolderBtn').onclick = async () => { const r = await api('POST', '/api
 $('#refLinkFileBtn').onclick = async () => { const r = await api('POST', '/api/local/pickfile', {}).catch(err => (toast(err.message, true), {})); if (r.ok) $('#refLinkPath').value = r.path; };
 let refSearchTimer;
 $('#refSearch').addEventListener('input', e => { clearTimeout(refSearchTimer); refSearchTimer = setTimeout(() => Ref.search(e.target.value.trim()), 250); });
-$('#refTree').addEventListener('click', e => {
+$('#refTree').addEventListener('click', async e => {
   const n = e.target.closest('[data-rp]'); if (!n) return;
   const p = n.dataset.rp;
   if (e.target.closest('[data-radd]')) { // the + on a folder: add inside it
     e.stopPropagation();
     const r = e.target.getBoundingClientRect();
-    if (p !== Ref.sel) { if (!Ref.okToLeave()) return; Ref.dirty = false; Ref.sel = p; }
+    if (p !== Ref.sel) { if (!await Ref.okToLeave()) return; Ref.dirty = false; Ref.sel = p; }
     Ref.open.add(p); Ref.persist(); Ref.render();
     return setTimeout(() => Tree.showMenu({ clientX: r.left, clientY: r.bottom }, [
       ['📁 New sub-folder…', () => Ref.newFolder()], ['📄 New file…', () => Ref.newFile()],

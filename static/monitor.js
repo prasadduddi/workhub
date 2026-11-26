@@ -81,21 +81,21 @@ const Monitor = {
     });
   },
   async custom() {
-    const t = prompt('What to check?\n• a web address, e.g. http://dev-app-01:8080/manager/html\n• or host:port, e.g. dev-db-01:1521', '');
+    const t = await askText('What to check?\n• a web address, e.g. http://dev-app-01:8080/manager/html\n• or host:port, e.g. dev-db-01:1521', '');
     if (!t?.trim()) return;
     const v = t.trim(), http = /^https?:\/\//i.test(v);
     let host = v; try { host = http ? new URL(v).hostname : v.split(':')[0]; } catch { /* checked by the server */ }
-    const name = prompt('A name for it', http ? 'Web page' : 'Port ' + (v.split(':')[1] || '')) || v;
+    const name = await askText('A name for it', http ? 'Web page' : 'Port ' + (v.split(':')[1] || '')) || v;
     const known = S.entries.find(e => (e.host || '').toLowerCase() === host.toLowerCase() && e.env);
-    if (known && ['PROD', 'UAT', 'DR'].includes(known.env) && !this.data.allow_prod && !confirm(`${host} is a ${known.env} server — it won't be checked unless “also PROD / UAT” is on. Add it anyway?`)) return;
+    if (known && ['PROD', 'UAT', 'DR'].includes(known.env) && !this.data.allow_prod && !await askYes(`${host} is a ${known.env} server — it won't be checked unless “also PROD / UAT” is on. Add it anyway?`)) return;
     await this.save({ checks: [...this.data.checks, { name, kind: http ? 'http' : 'tcp', target: v, group: 'Custom', host, env: known?.env || '', entry_id: known?.id || '' }] });
     this.load(true);
   },
 };
 $('#monOn').onchange = e => Monitor.save({ on: e.target.checked }).then(() => e.target.checked && Monitor.load(true));
 $('#monInterval').onchange = e => Monitor.save({ interval: +e.target.value });
-$('#monProd').onchange = e => {
-  if (e.target.checked && !confirm('Also check PROD, UAT and DR servers?\n\nThe checks only open the page or port (no login), but this sends requests to those servers every interval.')) { e.target.checked = false; return; }
+$('#monProd').onchange = async e => {
+  if (e.target.checked && !await askYes('Also check PROD, UAT and DR servers?\n\nThe checks only open the page or port (no login), but this sends requests to those servers every interval.')) { e.target.checked = false; return; }
   Monitor.save({ allow_prod: e.target.checked });
 };
 $('#monRun').onclick = () => Monitor.load(true);

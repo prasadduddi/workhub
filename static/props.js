@@ -191,7 +191,7 @@ const Props = {
   },
 
   async add(parentId) {
-    const name = prompt(parentId ? 'Name of the sub-node (e.g. UAT, PROD, Batch)' : 'Application name');
+    const name = await askText(parentId ? 'Name of the sub-node (e.g. UAT, PROD, Batch)' : 'Application name');
     if (!name || !name.trim()) return;
     const n = await api('POST', '/api/props', { name: name.trim(), parent_id: parentId || '', order: this.kids(parentId).length });
     if (parentId) this.open.add(parentId), this.persistOpen();
@@ -249,14 +249,14 @@ $('#propDetail').addEventListener('click', async e => {
   const n = Props.node(Props.selected);
   const a = e.target.closest('[data-pa]')?.dataset.pa;
   if (a === 'child') return Props.add(n.id);
-  if (a === 'rename') { const v = prompt('Rename', n.name); if (v && v.trim()) { await api('POST', '/api/props', { ...n, name: v.trim() }); Props.load(); } return; }
+  if (a === 'rename') { const v = await askText('Rename', n.name); if (v && v.trim()) { await api('POST', '/api/props', { ...n, name: v.trim() }); Props.load(); } return; }
   if (a === 'delete') {
     const sub = Props.nodes.filter(x => x.parent_id === n.id).length;
-    if (!confirm(`Delete "${n.name}"${sub ? ' and everything under it' : ''}, including its files and screenshots?`)) return;
+    if (!await askYes(`Delete "${n.name}"${sub ? ' and everything under it' : ''}, including its files and screenshots?`)) return;
     await api('DELETE', '/api/props/' + n.id); Props.selected = n.parent_id || ''; Props.store(); return Props.load();
   }
   if (a === 'newfile') {
-    const name = prompt('File name', 'application.properties'); if (!name) return;
+    const name = await askText('File name', 'application.properties'); if (!name) return;
     const fd = new FormData(); fd.append('file', new Blob(['# ' + name + '\n'], { type: 'text/plain' }), name);
     const r = await fetch(`/api/props/${n.id}/files`, { method: 'POST', body: fd }); const d = await r.json();
     await Props.load(); Props.editing = d[0]?.id; return Props.renderDetail();
@@ -272,7 +272,7 @@ $('#propDetail').addEventListener('click', async e => {
   const del = e.target.closest('[data-pdel]');
   if (del) {
     const f = n.files.find(x => x.id === del.dataset.pdel);
-    if (!confirm(`Delete ${f.name}?`)) return;
+    if (!await askYes(`Delete ${f.name}?`)) return;
     await api('DELETE', '/api/props/files/' + f.id); if (Props.editing === f.id) Props.editing = null; return Props.load();
   }
   const img = e.target.closest('[data-pimg]');

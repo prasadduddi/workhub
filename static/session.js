@@ -53,7 +53,7 @@ const Session = {
     const ssh = (s.ssh || []).map(byIdOk).filter(Boolean), sql = (s.sql || []).map(byIdOk).filter(Boolean);
     const skipped = [...ssh, ...sql].filter(e => needsCreds(e));
     let prod = [...ssh, ...sql].filter(e => e.env === 'PROD' && !needsCreds(e));
-    if (prod.length && !confirm(`Reopen these PROD connections too?\n\n${prod.map(e => '• ' + (e.name || e.host)).join('\n')}\n\nOK = yes · Cancel = only the others`)) prod = prod.map(e => e.id);
+    if (prod.length && !await askYes(`Reopen these PROD connections too?\n\n${prod.map(e => '• ' + (e.name || e.host)).join('\n')}\n\nOK = yes · Cancel = only the others`)) prod = prod.map(e => e.id);
     else prod = [];
     const go = e => !needsCreds(e) && !prod.includes(e.id);
     for (const e of ssh.filter(go)) { try { await Term.open(e, { confirmed: true }); } catch { /* shown in its tab */ } }

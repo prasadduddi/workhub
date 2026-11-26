@@ -61,7 +61,13 @@ with sync_playwright() as p:
     pg = ctx.new_page()
     errors = []
     pg.on("pageerror", lambda e: errors.append(str(e)))
-    pg.on("dialog", lambda d: d.accept())
+    native = []  # the browser's own pop-ups ("127.0.0.1 says") — there should be none
+    pg.on("dialog", lambda d: (native.append(d.type + ": " + d.message[:80]), d.accept()))
+    # WorkHub's own yes/no box (askYes) replaces the browser's confirm(): OK it like the browser's was,
+    # unless a check sets window.__askManual to answer it itself
+    pg.add_init_script("""new MutationObserver(() => { if (window.__askManual) return;
+        for (const d of document.querySelectorAll('dialog.askyes[open]')) d.querySelector('[data-ask=ok]')?.click(); })
+        .observe(document, { childList: true, subtree: true });""")
     pg.goto(URL)
     pg.wait_for_function("typeof S !== 'undefined' && S.entries.length > 0", timeout=20000)
     pg.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
@@ -393,6 +399,19 @@ with sync_playwright() as p:
         card.locator("[data-att=copy]").click(); pg.wait_for_timeout(400)
         expect(ev("navigator.clipboard.readText()") == "echo changed\n", "Copy didn't give the saved text")
         expect(ev("guessSnippetName('SELECT * FROM dual')").endswith(".sql") and ev("guessSnippetName('{\"a\": 1}')").endswith(".json"), "name guessing")
+
+    @check("threads use the bundled Lato (Slack's type): 15px body, black names, fonts load")
+    def _():
+        ev("show('tasks')")
+        tid = ev("Work.list.find(w => w.title.startsWith('Incident')).id")
+        ev(f"Work.open('{tid}')"); pg.wait_for_timeout(600)
+        st = ev("""(async () => { await document.fonts.ready; const b = document.querySelector('#tposts .tbody'), n = document.querySelector('#tposts .tname');
+            const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
+            return { fam: getComputedStyle(b).fontFamily, px: parseFloat(getComputedStyle(b).fontSize) / scale, w: getComputedStyle(n).fontWeight,
+              ok: document.fonts.check('900 15px "WH Lato"') && document.fonts.check('15px "WH Lato"'),
+              loaded: [...document.fonts].filter(f => f.family.includes('WH Lato') && f.status === 'loaded').length }; })()""")
+        expect(st["fam"].startswith('"WH Lato"') and abs(st["px"] - 15) < 0.2 and st["w"] == "900", f"style: {st}")
+        expect(st["loaded"] >= 2, f"Lato not loaded: {st}")
 
     @check("move a message to another thread and back")
     def _():
@@ -835,6 +854,24 @@ with sync_playwright() as p:
         pg.keyboard.press("?"); pg.wait_for_timeout(200)
         expect(ev("!!document.getElementById('keysDlg')?.open"), "sheet did not open")
         close_dialogs()
+
+    @check("questions are WorkHub boxes titled WorkHub, never the browser's “127.0.0.1 says”")
+    def _():
+        ev("window.__askManual = true; window._ans = 'pending'; askYes('Delete the thing?').then(v => _ans = v); 0")
+        pg.wait_for_selector("dialog.askyes[open]")
+        expect("WorkHub" in pg.inner_text("dialog.askyes .ask-head") and "127.0.0.1" not in pg.inner_text("dialog.askyes"), "no WorkHub title")
+        expect("danger" in pg.get_attribute("dialog.askyes [data-ask=ok]", "class"), "Delete question should have the delete-style OK")
+        pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+        expect(ev("_ans") is False, f"Esc should answer no: {ev('_ans')}")
+        ev("askYes('Go on?').then(v => _ans = v); 0"); pg.wait_for_selector("dialog.askyes[open]")
+        pg.keyboard.press("Enter"); pg.wait_for_timeout(200)
+        expect(ev("_ans") is True, "Enter should answer yes")
+        ev("askText('Name?', 'abc').then(v => _ans = v); 0"); pg.wait_for_selector("dialog.askbox[open]")
+        expect("WorkHub" in pg.inner_text("dialog.askbox .ask-head"), "question box title")
+        pg.keyboard.type("xyz"); pg.keyboard.press("Enter"); pg.wait_for_timeout(200)
+        expect(ev("_ans") == "xyz", f"askText answer: {ev('_ans')}")
+        ev("window.__askManual = false")
+        expect(not native, f"browser pop-ups appeared: {native[:3]}")
 
     @check("no page errors during the whole run")
     def _():

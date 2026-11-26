@@ -92,7 +92,7 @@ const Groups = {
   async openAll(kind, g = this.get(this.selected)) {
     const c = this.collect(g);
     const list = kind === 'putty' ? c.servers.filter(canSSH) : c.links;
-    if (list.length > 6 && !confirm(`Open ${list.length} ${kind === 'putty' ? 'PuTTY sessions' : 'links'}?`)) return 0;
+    if (list.length > 6 && !await askYes(`Open ${list.length} ${kind === 'putty' ? 'PuTTY sessions' : 'links'}?`)) return 0;
     for (const e of list) { if (kind === 'putty') await Term.open(e); else openURL(e); }
     return list.length;
   },
@@ -118,9 +118,9 @@ $('#groupList').addEventListener('click', e => {
   Groups.render();
 });
 $('#groupNew').onclick = async () => {
-  const pats = prompt('What should this group gather? Server names, hosts, projects or words — separated by commas.\n(e.g. app-prod-01, ora-uat, payments)');
+  const pats = await askText('What should this group gather? Server names, hosts, projects or words — separated by commas.\n(e.g. app-prod-01, ora-uat, payments)');
   if (!pats) return;
-  const name = prompt('Group name', pats.split(',')[0].trim());
+  const name = await askText('Group name', pats.split(',')[0].trim());
   if (name) Groups.create(name.trim(), pats.split(','));
 };
 $('#groupMain').addEventListener('click', async e => {
@@ -136,7 +136,7 @@ $('#groupMain').addEventListener('click', async e => {
     }]]));
   }
   if (a === 'edit') {
-    const v = prompt('Patterns (comma separated; * wildcard, /regex/ allowed)', g.patterns.join(', '));
+    const v = await askText('Patterns (comma separated; * wildcard, /regex/ allowed)', g.patterns.join(', '));
     if (v !== null) { g.patterns = v.split(',').map(x => x.trim()).filter(Boolean); return Groups.save(Groups.all()); }
     return;
   }

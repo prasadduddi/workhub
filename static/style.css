@@ -1573,7 +1573,7 @@ body.side-collapsed:not(.side-top) .brand { flex-direction: column; gap: 6px; }
 #view-dashboard.home .tc-row { padding: 5px 4px; }
 
 /* WorkHub's own question box (instead of the browser's prompt) */
-.askbox { position: fixed; z-index: 10001; width: min(380px, 92vw); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.2); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.askbox { position: fixed; margin: 0; inset: auto; z-index: 10001; color: var(--text); width: min(380px, 92vw); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.2); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .askbox label { font-weight: 600; font-size: calc(13px * var(--ui-scale)); }
 .askbox input { width: 100%; box-sizing: border-box; }
 
@@ -1652,3 +1652,42 @@ mark.tfind { background: color-mix(in srgb, #ffd400 60%, transparent); color: in
 .snip-dlg label { align-items: stretch; text-align: left; width: 100%; }
 .snip-dlg label input { width: 100%; box-sizing: border-box; font-family: var(--mono); }
 .snip-dlg #snipNote { font-family: inherit; }
+
+/* WorkHub's own question / yes-no boxes (not the browser's "127.0.0.1 says") */
+.askbox::backdrop { background: transparent; }
+.ask-head { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: calc(12px * var(--ui-scale)); color: var(--muted); }
+.ask-logo { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; background: #2f6fde; color: #fff; font-size: 11px; font-weight: 800; }
+.askbox label { white-space: pre-line; }
+.askyes { width: min(480px, 92vw); padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text); box-shadow: 0 16px 40px rgba(0,0,0,.25); }
+.askyes::backdrop { background: rgba(0,0,0,.25); }
+.askyes .ask-msg { white-space: pre-line; margin: 10px 0 14px; font-size: calc(14px * var(--ui-scale)); line-height: 1.45; max-height: 60vh; overflow: auto; overflow-wrap: anywhere; }
+.askyes .row { gap: 8px; }
+.askyes button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+/* ---- Threads in Slack's type: Lato 15px / 1.46668, names in Lato Black, small grey times ----
+   Lato is an open font (SIL OFL 1.1, static/fonts/Lato-OFL.txt), shipped with WorkHub (Latin subset). */
+@font-face { font-family: 'WH Lato'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/Lato-Regular.woff2) format('woff2'); }
+@font-face { font-family: 'WH Lato'; font-style: italic; font-weight: 400; font-display: swap; src: url(fonts/Lato-Italic.woff2) format('woff2'); }
+@font-face { font-family: 'WH Lato'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/Lato-Bold.woff2) format('woff2'); }
+@font-face { font-family: 'WH Lato'; font-style: italic; font-weight: 700; font-display: swap; src: url(fonts/Lato-BoldItalic.woff2) format('woff2'); }
+@font-face { font-family: 'WH Lato'; font-style: normal; font-weight: 900; font-display: swap; src: url(fonts/Lato-Black.woff2) format('woff2'); }
+:root { --thread-font: 'WH Lato', 'Lato', 'Helvetica Neue', Helvetica, 'Segoe UI', Tahoma, Arial, sans-serif; --thread-code: Monaco, Menlo, Consolas, 'Courier New', monospace; }
+#workList, .thead .wtitle, .tposts, .tpanel, .tcompose .tbox, .rbox, .tpcompose, .tday { font-family: var(--thread-font); -webkit-font-smoothing: antialiased; }
+.tmsg .tbody, .tpanel .tbody, .tcompose .tbox, .rbox { font-size: calc(15px * var(--ui-scale)); line-height: 1.46668; font-variant-ligatures: common-ligatures; }
+.tmsg .tbody b, .tmsg .tbody strong, .tpanel .tbody b, .tpanel .tbody strong { font-weight: 700; }
+.thdr .tname { font-size: calc(15px * var(--ui-scale)); font-weight: 900; line-height: 1.46668; }
+.thdr .ttime { font-size: calc(12px * var(--ui-scale)); color: var(--muted); font-weight: 400; }
+.thdr .tfrom, .thdr .muted.tiny { font-size: calc(12px * var(--ui-scale)); }
+.tday { font-size: calc(13px * var(--ui-scale)); font-weight: 700; }
+.tmsg .tbody code, .tpanel .tbody code { font-family: var(--thread-code); font-size: calc(12px * var(--ui-scale)); color: #e01e5a; background: rgba(29,28,29,.04); border: 1px solid rgba(29,28,29,.13); border-radius: 3px; padding: 2px 3px 1px; }
+.tmsg .tbody pre, .tpanel .tbody pre { font-family: var(--thread-code); font-size: calc(12px * var(--ui-scale)); line-height: 1.50001; background: rgba(29,28,29,.04); border: 1px solid rgba(29,28,29,.13); border-radius: 4px; padding: 8px; }
+.tmsg .tbody pre code, .tpanel .tbody pre code { color: inherit; background: none; border: 0; padding: 0; }
+.tmsg .tbody p, .tpanel .tbody p { margin: 0; }
+.tmsg .tbody p + p, .tpanel .tbody p + p { margin-top: 4px; }
+.tmsg .tbody ul, .tmsg .tbody ol { margin: 2px 0; }
+.tbody a { color: #1264a3; } .tbody a:hover { text-decoration: underline; }
+@media (prefers-color-scheme: dark) {
+  .tmsg .tbody code, .tpanel .tbody code { color: #e8912d; background: rgba(232,232,232,.06); border-color: rgba(232,232,232,.13); }
+  .tmsg .tbody pre, .tpanel .tbody pre { background: rgba(232,232,232,.04); border-color: rgba(232,232,232,.13); }
+  .tbody a { color: #1d9bd1; }
+}

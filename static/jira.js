@@ -198,5 +198,5 @@ $('#jiraDetail').addEventListener('click', async e => {
   if (b.dataset.ja === 'open') return openExternal(b.dataset.url);
   if (b.dataset.ja === 'thread') return Work.forJira(j.key, j.summary);
   if (b.dataset.ja === 'refresh') { Jira.issues = await api('POST', '/api/jira/refresh', { key: j.key }); return Jira.render(); }
-  if (b.dataset.ja === 'remove' && confirm(`Stop tracking ${j.key} in WorkHub?\n\nNothing changes in Jira — WorkHub only reads from it.`)) { await api('DELETE', '/api/jira/' + encodeURIComponent(j.key)); Jira.sel = null; return Jira.load(); }
+  if (b.dataset.ja === 'remove' && await askYes(`Stop tracking ${j.key} in WorkHub?\n\nNothing changes in Jira — WorkHub only reads from it.`)) { await api('DELETE', '/api/jira/' + encodeURIComponent(j.key)); Jira.sel = null; return Jira.load(); }
 });

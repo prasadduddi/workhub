@@ -4,6 +4,10 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.15.9', title: 'Slack-style threads, questions in WorkHub’s own boxes', items: [
+    ['🔤', 'Threads look like Slack', 'Threads use Lato — the font Slack uses — at 15px with Slack’s line spacing, names in heavy black, small grey times and Slack-style `code`. The font comes with WorkHub, so it looks the same on every PC; Settings → Text size still applies.', 'tasks'],
+    ['🪟', 'No more “127.0.0.1 says”', 'Every question — delete?, rename, new folder, the ⚠ PROD warnings — now opens in WorkHub’s own box titled WorkHub (Enter = OK, Esc = Cancel) instead of the browser’s pop-up with the address on top.', ''],
+  ] },
   { v: '1.15.8', title: 'Search inside a thread, words in yellow, tidier trees and dialogs', items: [
     ['📄', 'Attach scripts and snippets as files', 'The + next to the message box: “Attach copied text as a file” puts what you copied (a script, query, log) in a window — the name is guessed (.sh, .sql, .py, .json…) — and attaches it to the thread as a file instead of message text. Files show as a card with View (edit and save there), Copy and Download. “Attach files from this PC” too.', 'tasks'],
     ['💬', 'Forward to Teams, add from Teams', 'Right-click a message → 💬 Forward to Teams…: Teams opens on the chat with the text typed in (pictures: Ctrl+V). Thread ⋯ → 📥 Add from Teams… adds the messages you copied in Teams. With ⚙ Settings → Teams (an app IT registers), it sends directly with pictures and lets you pick chat messages to bring in.', 'tasks'],

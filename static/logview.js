@@ -87,7 +87,7 @@ const LogView = {
     }
     const list = Object.values(byHost);
     if (!list.length) return toast('No SSH servers here', true);
-    if (list.length > 12 && !confirm(`Follow a log on ${list.length} servers at once?`)) return;
+    if (list.length > 12 && !await askYes(`Follow a log on ${list.length} servers at once?`)) return;
     // Servers without a saved login: ask once, use it for all of them.
     let shared = null;
     const need = list.filter(needsCreds);

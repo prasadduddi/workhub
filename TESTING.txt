@@ -139,3 +139,6 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] (once IT registers the app) Settings -> Teams -> Tenant + Client ID -> Sign in with the code; Forward sends directly; Add from Teams lists chats
   [ ] Copy a script -> thread + -> Attach copied text as a file: name guessed (.sh/.sql/.ps1), Attach -> card with View / Copy / Download
   [ ] View -> change a line -> Save changes -> Copy gives the new text; Download opens/saves the file
+  [ ] Delete a thread / rename a folder / Quit: the question is a WorkHub box (title WorkHub), never "127.0.0.1 says"; Enter = OK, Esc = Cancel
+  [ ] PROD terminal: paste several lines -> WorkHub box asks first; Cancel pastes nothing
+  [ ] Windows: open a thread -> messages, names, thread list and message box in Lato (Slack's font), even without Lato installed

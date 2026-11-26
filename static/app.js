@@ -90,21 +90,47 @@ document.addEventListener('mousedown', e => { lastClick = { x: e.clientX, y: e.c
 function askText(label, value = '', ok = 'OK') {
   return new Promise(done => {
     document.querySelector('.askbox')?.dispatchEvent(new Event('cancel'));
-    const box = Object.assign(document.createElement('div'), { className: 'askbox' });
-    box.innerHTML = `<label>${esc(label)}</label><input type="text"><div class="row end"><button type="button" data-ask="no">Cancel</button><button type="button" class="primary" data-ask="ok">${esc(ok)}</button></div>`;
-    const input = box.querySelector('input'); input.value = value;
+    const box = Object.assign(document.createElement('dialog'), { className: 'askbox' });
+    box.innerHTML = `<div class="ask-head"><span class="ask-logo">W</span>WorkHub</div><label>${esc(label)}</label><input type="text"><div class="row end"><button type="button" data-ask="no">Cancel</button><button type="button" class="primary" data-ask="ok">${esc(ok)}</button></div>`;
+    const input = box.querySelector('input'); input.value = value ?? '';
     document.body.append(box);
+    box.showModal(); // on top of any open window, which stays as it is
     const r = box.getBoundingClientRect(), near = lastClick && Date.now() - lastClick.t < 1500;
     const x = near ? lastClick.x + 14 : (innerWidth - r.width) / 2, y = near ? lastClick.y - 12 : innerHeight / 3;
     box.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
     box.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
-    const finish = v => { document.removeEventListener('mousedown', outside, true); box.remove(); done(v); };
-    const outside = e => { if (!box.contains(e.target)) finish(null); };
-    setTimeout(() => document.addEventListener('mousedown', outside, true), 0);
-    box.addEventListener('cancel', () => finish(null));
+    let over = false;
+    const finish = v => { if (over) return; over = true; box.close(); box.remove(); done(v); };
+    box.addEventListener('cancel', e => { e.preventDefault(); finish(null); });
+    box.addEventListener('close', () => finish(null)); // closed from elsewhere = cancelled
+    box.addEventListener('mousedown', e => { // a click outside the box (on the dimmed page) = cancel
+      if (e.target !== box) return; const b = box.getBoundingClientRect();
+      if (e.clientX < b.left || e.clientX > b.right || e.clientY < b.top || e.clientY > b.bottom) finish(null);
+    });
     box.addEventListener('click', e => { const b = e.target.closest('[data-ask]'); if (b) finish(b.dataset.ask === 'ok' ? input.value : null); });
     input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); finish(input.value); } if (e.key === 'Escape') { e.preventDefault(); finish(null); } });
     input.focus(); input.select();
+  });
+}
+
+// WorkHub's own yes/no box (instead of the browser's confirm(), which shows
+// "127.0.0.1 says"). Resolves true (OK) or false (Cancel / Esc). Enter = OK.
+// A warning (⚠, Delete, Remove, Stop) gets the delete-style OK button (slate: red is kept for PROD).
+function askYes(message, opts = {}) {
+  return new Promise(done => {
+    const box = Object.assign(document.createElement('dialog'), { className: 'askyes' });
+    const danger = opts.danger ?? /^(⚠|Delete|Remove|Quit|Turn off|Stop|Discard)/i.test(message.trim());
+    box.innerHTML = `<div class="ask-head"><span class="ask-logo">W</span>WorkHub</div><div class="ask-msg"></div><div class="row end"><button type="button" data-ask="no">${esc(opts.no || 'Cancel')}</button><button type="button" class="${danger ? 'danger' : 'primary'}" data-ask="ok">${esc(opts.ok || 'OK')}</button></div>`;
+    box.querySelector('.ask-msg').textContent = message;
+    document.body.append(box);
+    let over = false;
+    const finish = v => { if (over) return; over = true; box.close(); box.remove(); done(v); };
+    box.addEventListener('cancel', e => { e.preventDefault(); finish(false); });
+    box.addEventListener('close', () => finish(false));
+    box.addEventListener('click', e => { const b = e.target.closest('[data-ask]'); if (b) finish(b.dataset.ask === 'ok'); });
+    box.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.target.closest('[data-ask="no"]')) { e.preventDefault(); finish(true); } });
+    box.showModal();
+    box.querySelector('[data-ask=ok]').focus();
   });
 }
 
@@ -566,8 +592,8 @@ async function saveSettings(patch) {
   labelCache.clear();
   renderSettings();
 }
-$('#wsName').onclick = () => {
-  const n = prompt('Workspace name (e.g. the client this laptop is for)', S.settings.workspace || '');
+$('#wsName').onclick = async () => {
+  const n = await askText('Workspace name (e.g. the client this laptop is for)', S.settings.workspace || '');
   if (n && n.trim()) saveSettings({ workspace: n.trim() });
 };
 $('#capBtn').onclick = () => $('#watchToggle').click(); // the same switch, always in reach at the top
@@ -586,7 +612,7 @@ $('#importBtn').onclick = async () => {
   } catch (err) { toast(err.message, true); }
 };
 $('#dataLocBtn').onclick = async () => {
-  if (S.dataDir && !confirm(`Your WorkHub data is in:\n${S.dataDir}\n\nChoose a different folder?`)) return;
+  if (S.dataDir && !await askYes(`Your WorkHub data is in:\n${S.dataDir}\n\nChoose a different folder?`)) return;
   toast('Choose a folder in the window that opened (it may be behind the browser)');
   try {
     const r = await api('POST', '/api/datadir/pick');
@@ -594,10 +620,10 @@ $('#dataLocBtn').onclick = async () => {
     if (r.current) return toast('That folder is already in use');
     let mode;
     if (r.has_data) {
-      if (!confirm(`Switch to the WorkHub data in:\n${r.path}\n\nWorkHub restarts and opens that data. Your current data stays where it is.`)) return;
+      if (!await askYes(`Switch to the WorkHub data in:\n${r.path}\n\nWorkHub restarts and opens that data. Your current data stays where it is.`)) return;
       mode = 'use';
     } else {
-      if (!confirm(`Move this workspace's data to:\n${r.path}\n\nYour data is copied there (the old copy stays as a backup) and WorkHub restarts using it.`)) return;
+      if (!await askYes(`Move this workspace's data to:\n${r.path}\n\nYour data is copied there (the old copy stays as a backup) and WorkHub restarts using it.`)) return;
       mode = 'copy';
     }
     await api('POST', '/api/datadir/set', { path: r.path, mode });
@@ -649,7 +675,7 @@ async function restartApp() {
     ...SQL.tabs.filter(t => t.inTx).map(t => `${t.entry.name}: uncommitted SQL changes will be rolled back`),
     ...(typeof Ref !== 'undefined' && Ref.dirty ? ['the file open in Folders has unsaved changes'] : []),
   ];
-  if ((conns || warn.length) && !confirm(`Restart WorkHub?${conns ? `\n\nOpen connections (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && o.ftp + ' FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')}) reconnect by themselves afterwards.` : ''}${warn.length ? '\n\n⚠ ' + warn.join('\n⚠ ') : ''}`)) return;
+  if ((conns || warn.length) && !await askYes(`Restart WorkHub?${conns ? `\n\nOpen connections (${[o.ssh.length && o.ssh.length + ' SSH', o.ftp && o.ftp + ' FTP', o.sql && o.sql + ' SQL'].filter(Boolean).join(', ')}) reconnect by themselves afterwards.` : ''}${warn.length ? '\n\n⚠ ' + warn.join('\n⚠ ') : ''}`)) return;
   for (const d of Notes.docs.filter(d => d.dirty)) await Notes.save(d).catch(() => {});
   Session.save();
   try { await api('POST', '/api/restart'); }
@@ -664,7 +690,7 @@ function stoppedScreen(html) {
   document.body.append(d);
 }
 $('#quitBtn').onclick = async () => {
-  if (!confirm('Quit WorkHub? Open terminals and transfers will stop.')) return;
+  if (!await askYes('Quit WorkHub? Open terminals and transfers will stop.')) return;
   await api('POST', '/api/quit').catch(() => {});
   stoppedScreen('<h2>WorkHub has stopped.</h2><p>You can close this tab.</p>');
 };
@@ -1082,7 +1108,7 @@ const Saved = {
   },
   async save() {
     const q = $('#search').value.trim(); if (!q) return;
-    const name = prompt('Name for this search (shown in the sidebar):', q.replace(/\b\w+:/g, '').trim() || q); if (!name?.trim()) return;
+    const name = await askText('Name for this search (shown in the sidebar):', q.replace(/\b\w+:/g, '').trim() || q); if (!name?.trim()) return;
     await this.put([...this.all().filter(x => x.name !== name.trim()), { name: name.trim(), query: q }]);
     toast(`Saved “${name.trim()}” — it's in the sidebar`);
   },
@@ -1517,7 +1543,7 @@ $('#board').addEventListener('click', async ev => {
       case 'more': { const r = b.getBoundingClientRect(); return setTimeout(() => Tree.menu({ clientX: r.left, clientY: r.bottom }, { dataset: { id: e.id } }, 'board')); }
       case 'fav': await api('POST', '/api/entries', { ...entryInput(e), favorite: !e.favorite }); return poll();
       case 'rename-project': {
-        const to = prompt('Rename project', b.dataset.project);
+        const to = await askText('Rename project', b.dataset.project);
         if (to && to !== b.dataset.project) { await api('POST', '/api/projects/rename', { from: b.dataset.project, to }); poll(); }
       }
     }
@@ -1735,8 +1761,8 @@ $('#savedSearches').addEventListener('contextmenu', ev => {
   ev.preventDefault();
   const i = +b.dataset.saved, list = Saved.all(), x = list[i];
   Tree.showMenu(ev, [
-    ['Rename…', () => { const n = prompt('Name:', x.name); if (n?.trim()) Saved.put(list.map((y, j) => j === i ? { ...y, name: n.trim() } : y)); }],
-    ['Change the search…', () => { const q = prompt('Search (words and filters like env:prod app:batch):', x.query); if (q?.trim()) Saved.put(list.map((y, j) => j === i ? { ...y, query: q.trim() } : y)); }],
+    ['Rename…', async () => { const n = await askText('Name:', x.name); if (n?.trim()) Saved.put(list.map((y, j) => j === i ? { ...y, name: n.trim() } : y)); }],
+    ['Change the search…', async () => { const q = await askText('Search (words and filters like env:prod app:batch):', x.query); if (q?.trim()) Saved.put(list.map((y, j) => j === i ? { ...y, query: q.trim() } : y)); }],
     ['Delete', () => Saved.put(list.filter((_, j) => j !== i))]]);
 });
 // Desktop version: Ctrl+Alt+W anywhere in Windows brings WorkHub up with the search box ready.
@@ -1762,11 +1788,11 @@ const Bulk = {
 $('#bulkBar').addEventListener('click', async ev => {
   const b = ev.target.closest('[data-bulk]'); if (!b) return;
   switch (b.dataset.bulk) {
-    case 'move': { const p = prompt('Move to folder (use / for subfolders):', Bulk.entries()[0]?.project || ''); if (p?.trim()) await Bulk.each('Moved', e => Bulk.save(e, { project: p.trim() })); break; }
-    case 'tag': { const t = prompt('Add tag(s), comma separated:'); const add = (t || '').split(',').map(x => x.trim()).filter(Boolean); if (add.length) await Bulk.each('Tagged', e => Bulk.save(e, { tags: [...new Set([...(e.tags || []), ...add])] })); break; }
+    case 'move': { const p = await askText('Move to folder (use / for subfolders):', Bulk.entries()[0]?.project || ''); if (p?.trim()) await Bulk.each('Moved', e => Bulk.save(e, { project: p.trim() })); break; }
+    case 'tag': { const t = await askText('Add tag(s), comma separated:'); const add = (t || '').split(',').map(x => x.trim()).filter(Boolean); if (add.length) await Bulk.each('Tagged', e => Bulk.save(e, { tags: [...new Set([...(e.tags || []), ...add])] })); break; }
     case 'test': return retest(Bulk.entries());
     case 'key': return Bulk.each('Marked as key login', e => Bulk.save(e, { extra: { ...(e.extra || {}), auth: 'key' } }));
-    case 'delete': { const list = Bulk.entries(); if (list.length < 10 || confirm(`Delete ${list.length} entries?`)) { Bulk.picked.clear(); await deleteEntries(list); } break; }
+    case 'delete': { const list = Bulk.entries(); if (list.length < 10 || await askYes(`Delete ${list.length} entries?`)) { Bulk.picked.clear(); await deleteEntries(list); } break; }
     case 'clear': Bulk.picked.clear(); renderBoard(); break;
   }
 });
@@ -1827,7 +1853,7 @@ $('#pwAllPw').addEventListener('keydown', ev => { if (ev.key === 'Enter') PwAll.
 async function retest(list) {
   list = list.filter(isConn).filter(e => !S.sshOff || !canSSH(e) || canDB(e) || isFTP(e)); // SSH switched off: not tried
   if (!list.length) return toast('No connections to test here', true);
-  if (list.length > 10 && !confirm(`Test ${list.length} connections now? Each one logs in once with its saved details.`)) return;
+  if (list.length > 10 && !await askYes(`Test ${list.length} connections now? Each one logs in once with its saved details.`)) return;
   let done = 0, ok = 0; const queue = [...list];
   const work = async () => { for (let e; (e = queue.shift());) {
     try { const r = await api('POST', '/api/test', entryInput(e)); if (r.ok) ok++; } catch { /* counted as failed */ }
@@ -2067,18 +2093,18 @@ const Term = {
 
   async open(e, opts = {}) {
     if (sshBlocked(e)) return; // SSH switched off (local prompts don't come here)
-    if (isProd(e) && !opts.confirmed && !confirm(`⚠ PROD — open a terminal on a production server?\n\n${prodName(e)}\n\nCommands you type there run on PROD.`)) return;
+    if (isProd(e) && !opts.confirmed && !await askYes(`⚠ PROD — open a terminal on a production server?\n\n${prodName(e)}\n\nCommands you type there run on PROD.`)) return;
     let creds = {};
     if (needsCreds(e)) { creds = await askCreds(e); if (!creds) return; }
     this.create(e, creds, null);
   },
 
   // Pasting several lines runs several commands: on PROD, ask first.
-  pasteOK(t, txt) {
+  async pasteOK(t, txt) {
     if (t.local || !isProd(t.entry)) return true;
     const lines = txt.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
     if (lines.length < 2 && !/\n$/.test(txt.replace(/\r\n?/g, '\n'))) return true;
-    return confirm(`⚠ PROD — paste and run ${lines.length} line${lines.length > 1 ? 's' : ''} on ${t.entry.host}?\n\n${lines.slice(0, 8).join('\n')}${lines.length > 8 ? '\n…' : ''}`);
+    return await askYes(`⚠ PROD — paste and run ${lines.length} line${lines.length > 1 ? 's' : ''} on ${t.entry.host}?\n\n${lines.slice(0, 8).join('\n')}${lines.length > 8 ? '\n…' : ''}`);
   },
 
   // A command prompt on this PC (cmd, PowerShell, Git Bash, or the Mac shell).
@@ -2103,11 +2129,11 @@ const Term = {
     term.onSelectionChange(() => { const s = term.getSelection(); if (s) navigator.clipboard.writeText(s).catch(() => {}); });
     el.addEventListener('contextmenu', async ev => {
       ev.preventDefault();
-      try { const txt = await navigator.clipboard.readText(); if (txt && !t.closed && this.pasteOK(t, txt)) t.ws.send(JSON.stringify({ t: 'd', d: txt })); } catch { toast('Allow clipboard access to paste with right-click (or use Ctrl+V)', true); }
+      try { const txt = await navigator.clipboard.readText(); if (txt && !t.closed && await this.pasteOK(t, txt)) t.ws.send(JSON.stringify({ t: 'd', d: txt })); } catch { toast('Allow clipboard access to paste with right-click (or use Ctrl+V)', true); }
     });
-    term.onData(d => {
+    term.onData(async d => { // keys go straight through; only a paste of several lines waits for the PROD question
       if (t.closed) { if (d === '\r') this.connect(t); return; }
-      if (d.length > 1 && !this.pasteOK(t, d)) return; // Ctrl+V of several lines on PROD
+      if (d.length > 1 && !await this.pasteOK(t, d)) return; // Ctrl+V of several lines on PROD
       t.ws.send(JSON.stringify({ t: 'd', d }));
     });
     term.onResize(({ cols, rows }) => { if (!t.closed) t.ws.send(JSON.stringify({ t: 'r', cols, rows })); });
@@ -2142,12 +2168,12 @@ const Term = {
 
   // "Run macros": the saved commands are typed in one at a time, each when
   // the output has been quiet for a moment (so the prompt is back).
-  startMacros(t) {
+  async startMacros(t) {
     t.macroKick = null;
     const ex = t.entry.extra || {};
     if (t.local || ex.run_macros !== '1' || !ex.commands) return;
     const queue = ex.commands.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
-    if (t.entry.env === 'PROD' && !confirm(`${t.entry.name} is a PRODUCTION server.\n\nRun these commands on it now?\n\n${queue.join('\n')}`)) return toast('Commands not run (PROD)');
+    if (t.entry.env === 'PROD' && !await askYes(`${t.entry.name} is a PRODUCTION server.\n\nRun these commands on it now?\n\n${queue.join('\n')}`)) return toast('Commands not run (PROD)');
     let timer = null, seen = false;
     const next = () => {
       if (t.closed || t.ws?.readyState !== 1) { t.macroKick = null; return; }
@@ -2317,7 +2343,7 @@ $('#localPane').addEventListener('click', async e => {
     } catch (err) { toast(err.message, true); }
   }
   if (a === 'mkdir' && !Local.roots) {
-    const n = prompt('New folder name'); if (!n) return;
+    const n = await askText('New folder name'); if (!n) return;
     try { await api('POST', '/api/local/mkdir', { path: Local.join(n) }); Local.load(Local.path); } catch (err) { toast(err.message, true); }
   }
 });
@@ -2414,9 +2440,9 @@ $('#remotePane').addEventListener('click', async e => {
   const sel = Remote.selected();
   if (a === 'up') Remote.load(Remote.parent);
   if (a === 'refresh') Remote.load(Remote.path);
-  if (a === 'mkdir') { const n = prompt('New folder name'); if (n) op({ op: 'mkdir', path: Remote.join(n) }); }
-  if (a === 'rename' && sel.length === 1) { const n = prompt('Rename to', sel[0].name); if (n && n !== sel[0].name) op({ op: 'rename', path: Remote.join(sel[0].name), to: Remote.join(n) }); }
-  if (a === 'delete' && sel.length && confirm(`Delete on server:\n${sel.map(f => f.name + (f.dir ? '/ (and everything in it)' : '')).join('\n')}`)) {
+  if (a === 'mkdir') { const n = await askText('New folder name'); if (n) op({ op: 'mkdir', path: Remote.join(n) }); }
+  if (a === 'rename' && sel.length === 1) { const n = await askText('Rename to', sel[0].name); if (n && n !== sel[0].name) op({ op: 'rename', path: Remote.join(sel[0].name), to: Remote.join(n) }); }
+  if (a === 'delete' && sel.length && await askYes(`Delete on server:\n${sel.map(f => f.name + (f.dir ? '/ (and everything in it)' : '')).join('\n')}`)) {
     for (const f of sel) await op({ op: 'delete', path: Remote.join(f.name) });
   }
 });
@@ -2864,9 +2890,9 @@ const Tree = {
   async duplicate(list, fromFolder, label) {
     if (!list.length) return;
     const def = fromFolder ? fromFolder + ' (copy)' : list[0].project || 'General';
-    const to = prompt(`Copy ${list.length} connection${list.length > 1 ? 's' : ''}${label ? ` (${label})` : ''} into folder (use / for subfolders):`, def);
+    const to = await askText(`Copy ${list.length} connection${list.length > 1 ? 's' : ''}${label ? ` (${label})` : ''} into folder (use / for subfolders):`, def);
     if (to == null || !to.trim()) return;
-    const rep = prompt('Change host names in the copies? Type old→new, e.g. uat01→sit02 (or old=>new). Leave empty to keep them.', '');
+    const rep = await askText('Change host names in the copies? Type old→new, e.g. uat01→sit02 (or old=>new). Leave empty to keep them.', '');
     if (rep == null) return;
     const m = rep.trim().match(/^(.+?)\s*(?:→|=>|->)\s*(.*)$/);
     if (rep.trim() && !m) return toast('Use old→new, e.g. uat01→sit02', true);
@@ -2939,7 +2965,7 @@ const Tree = {
           try { const c = await api('POST', '/api/entries', { ...entryInput(e), id: '', name: copyName(e.name, new Set(S.entries.map(x => x.name))), password: e.password }); await poll(); toast('Copy made — change what differs and Save'); openEntryDialog(byId(c.id) || c); }
           catch (err) { toast(err.message, true); }
         }],
-        ['Move to folder…', () => { const p = prompt('Folder (use / for subfolders)', e.project); if (p) this.move(e, p.trim(), e.env); }],
+        ['Move to folder…', async () => { const p = await askText('Folder (use / for subfolders)', e.project); if (p) this.move(e, p.trim(), e.env); }],
         ['Delete', () => deleteEntries([e])]);
     } else if (node?.dataset.srvhost) { // a server with several logins
       const h = node.dataset.srvhost, port = +node.dataset.srvport || 0, sib = S.entries.find(x => x.host === h && (x.port || 0) === port);
@@ -2951,13 +2977,13 @@ const Tree = {
     } else if (node?.dataset.project) {
       const proj = node.dataset.project;
       items.push(['New connection here…', () => openEntryDialog({ project: proj, env: node.dataset.env })],
-        ['New subfolder…', () => { const n = prompt('Subfolder name'); if (n) openEntryDialog({ project: proj + '/' + n.trim(), env: node.dataset.env }); }]);
+        ['New subfolder…', async () => { const n = await askText('Subfolder name'); if (n) openEntryDialog({ project: proj + '/' + n.trim(), env: node.dataset.env }); }]);
       const inside = this.nodeEntries(node.dataset.key, mode);
       if (inside.length) items.push([`Duplicate ${inside.length} connection${inside.length > 1 ? 's' : ''}…`, () => this.duplicate(inside, proj, node.querySelector('.nm')?.textContent || node.dataset.env || proj)]);
       items.push(...this.disconnectItem(inside, node.dataset.env && !node.querySelector('.nm') ? `${proj} / ${node.dataset.env}` : proj));
       items.push(...this.tailItem(inside));
       if (!node.dataset.env) items.push(['Rename folder…', async () => {
-        const to = prompt('Rename folder', proj);
+        const to = await askText('Rename folder', proj);
         if (to && to !== proj) { await api('POST', '/api/projects/rename', { from: proj, to: to.trim() }); poll(); }
       }]);
     } else if (node?.dataset.key && node.dataset.gmode && node.dataset.gmode !== 'top') { // env / app / type / user… groups
@@ -2967,7 +2993,7 @@ const Tree = {
       items.push(...this.tailItem(inside));
     } else {
       items.push(['New connection…', () => openEntryDialog(null)],
-        ['New folder…', () => { const n = prompt('Folder name (use / for subfolders)'); if (n) openEntryDialog({ project: n.trim() }); }]);
+        ['New folder…', async () => { const n = await askText('Folder name (use / for subfolders)'); if (n) openEntryDialog({ project: n.trim() }); }]);
     }
     this.showMenu(ev, items);
   },
@@ -3556,7 +3582,7 @@ $('#bmNameRules').onclick = openNameRules;
 
 $('#bmBlocked').onclick = async () => {
   const cur = (S.settings.blocked_sites || []).join(', ');
-  const v = prompt('Sites never imported or captured in this workspace (comma separated, e.g. facebook.com, example.org).\nWell-known adult sites are always blocked.', cur);
+  const v = await askText('Sites never imported or captured in this workspace (comma separated, e.g. facebook.com, example.org).\nWell-known adult sites are always blocked.', cur);
   if (v === null) return;
   await saveSettings({ blocked_sites: v.split(',').map(x => x.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')).filter(Boolean) });
   await poll();
@@ -3630,7 +3656,7 @@ const SQL = {
     const ex = e.extra || {};
     let database = '';
     if (!(ex.service || ex.service_name || ex.database || ex.db_name || ex.dbname || ex.sid || (kind === 'postgres' && /\/\w/.test((e.url || '').replace(/^.*?\/\/[^/]*/, ''))))) {
-      database = prompt(kind === 'oracle' ? `Oracle service name for ${e.host} (e.g. ORCLPDB1):` : `PostgreSQL database on ${e.host}:`, kind === 'oracle' ? '' : 'postgres');
+      database = await askText(kind === 'oracle' ? `Oracle service name for ${e.host} (e.g. ORCLPDB1):` : `PostgreSQL database on ${e.host}:`, kind === 'oracle' ? '' : 'postgres');
       if (database === null) { this.expanded.delete(e.id); Tree.render(); return; }
     }
     if (!this.active) { $('#sqlEmpty').innerHTML = `Connecting to ${esc(e.host)}…`; $('#sqlEmpty').hidden = false; }
@@ -3684,7 +3710,7 @@ const SQL = {
   // Reconnect: new session, same tab (SQL text, output and history kept).
   async reconnect(t = this.active) {
     if (!t) return;
-    if (t.inTx && !confirm(`${t.entry.name} has uncommitted changes. Reconnecting rolls them back. Continue?`)) return;
+    if (t.inTx && !await askYes(`${t.entry.name} has uncommitted changes. Reconnecting rolls them back. Continue?`)) return;
     api('POST', '/api/db/close', { sid: t.sid }).catch(() => {});
     this.say(t, `<span class="cmd">Reconnecting to ${esc(t.entry.host)}…</span>\n`);
     this.connecting.add(t.entry.id); Tree.render();
@@ -3707,7 +3733,7 @@ const SQL = {
   },
 
   async close(t) {
-    if (t.inTx && !confirm(`${t.entry.name} has uncommitted changes. Close and roll them back?`)) return;
+    if (t.inTx && !await askYes(`${t.entry.name} has uncommitted changes. Close and roll them back?`)) return;
     api('POST', '/api/db/close', { sid: t.sid }).catch(() => {});
     this.tabs = this.tabs.filter(x => x !== t);
     this.expanded.delete(t.entry.id);
@@ -3738,9 +3764,9 @@ const SQL = {
       const writes = stmts.filter(x => !readOnlySQL(x.sql)), name = `${t.entry.name || t.entry.host} (${t.info.user || t.entry.username || ''})`;
       if (writes.length) {
         const show = writes.slice(0, 3).map(x => x.sql.length > 300 ? x.sql.slice(0, 300) + '…' : x.sql).join('\n\n');
-        if (!confirm(`⚠ PROD — run ${writes.length === 1 ? 'this statement' : writes.length + ' statements that change data'} on ${name}?\n\n${show}${writes.length > 3 ? '\n\n…' : ''}${!$('#sqlAuto').checked ? '\n\n(Auto-commit is off: nothing is kept until you press Commit.)' : '\n\nAuto-commit is ON: the change is kept at once.'}`)) return;
+        if (!await askYes(`⚠ PROD — run ${writes.length === 1 ? 'this statement' : writes.length + ' statements that change data'} on ${name}?\n\n${show}${writes.length > 3 ? '\n\n…' : ''}${!$('#sqlAuto').checked ? '\n\n(Auto-commit is off: nothing is kept until you press Commit.)' : '\n\nAuto-commit is ON: the change is kept at once.'}`)) return;
       } else if (!t.prodReadOK) {
-        if (!confirm(`⚠ PROD — run read-only queries on ${name}?\n\nYou won't be asked again for SELECTs in this tab; anything that changes data is always asked.`)) return;
+        if (!await askYes(`⚠ PROD — run read-only queries on ${name}?\n\nYou won't be asked again for SELECTs in this tab; anything that changes data is always asked.`)) return;
         t.prodReadOK = true;
       }
     }
@@ -3993,7 +4019,7 @@ $('#sqlReconnect').onclick = () => SQL.reconnect();
 $('#sqlDisconnect').onclick = () => SQL.active && SQL.close(SQL.active);
 $('#sqlScript').onclick = () => SQL.run(true);
 $('#sqlStop').onclick = () => SQL.active && api('POST', '/api/db/cancel', { sid: SQL.active.sid }).catch(() => {});
-$('#sqlCommit').onclick = () => { const t = SQL.active; if (t && isProd(t.entry) && !confirm(`⚠ PROD — commit the changes on ${t.entry.name || t.entry.host}?`)) return; SQL.tx('commit'); };
+$('#sqlCommit').onclick = async () => { const t = SQL.active; if (t && isProd(t.entry) && !await askYes(`⚠ PROD — commit the changes on ${t.entry.name || t.entry.host}?`)) return; SQL.tx('commit'); };
 $('#sqlRollback').onclick = () => SQL.tx('rollback');
 $('#sqlAuto').checked = (() => { try { return localStorage.getItem('sqlAuto') === '1'; } catch { return false; } })();
 $('#sqlAuto').onchange = e => { try { localStorage.setItem('sqlAuto', e.target.checked ? '1' : '0'); } catch { /* ignore */ } };
@@ -4043,9 +4069,9 @@ const Snippets = {
     const sql = this.current();
     if (!sql) return toast('Write or select a query first', true);
     const first = sql.split('\n')[0].replace(/\s+/g, ' ').slice(0, 60);
-    const name = prompt('Name for this snippet:', first);
+    const name = await askText('Name for this snippet:', first);
     if (!name?.trim()) return;
-    const shared = confirm('Use it on every connection?\n\nOK = all connections · Cancel = only this one');
+    const shared = await askYes('Use it on every connection?\n\nOK = all connections · Cancel = only this one');
     await api('POST', '/api/snippets', { name: name.trim(), sql, conn: shared ? '' : SQL.active.entry.id }).catch(err => toast(err.message, true));
     toast('Snippet saved'); this.load();
   },
@@ -4062,11 +4088,11 @@ const Snippets = {
   menu(x, ev) {
     Tree.showMenu(ev, [
       ['Put in the editor', () => this.put(x)], ['Put in and run', () => this.put(x, true)], ['Copy SQL', () => copyText(x.sql, 'SQL copied')], '-',
-      ['Rename…', async () => { const n = prompt('Snippet name', x.name); if (n?.trim()) { await api('POST', '/api/snippets', { ...x, name: n.trim() }); this.load(); } }],
+      ['Rename…', async () => { const n = await askText('Snippet name', x.name); if (n?.trim()) { await api('POST', '/api/snippets', { ...x, name: n.trim() }); this.load(); } }],
       ['Replace with the current statement', async () => { const sql = this.current(); if (!sql) return toast('Select or write the new SQL first', true); await api('POST', '/api/snippets', { ...x, sql }); toast('Snippet updated'); this.load(); }],
       x.conn ? ['Use on all connections', async () => { await api('POST', '/api/snippets', { ...x, conn: '' }); this.load(); }]
         : SQL.active && ['Only for this connection', async () => { await api('POST', '/api/snippets', { ...x, conn: SQL.active.entry.id }); this.load(); }],
-      '-', ['Delete', async () => { if (confirm(`Delete the snippet “${x.name}”?`)) { await api('DELETE', `/api/snippets/${x.id}`); this.load(); } }],
+      '-', ['Delete', async () => { if (await askYes(`Delete the snippet “${x.name}”?`)) { await api('DELETE', `/api/snippets/${x.id}`); this.load(); } }],
     ].filter(Boolean));
   },
 };
@@ -4331,7 +4357,7 @@ $('#gitFind').onclick = async () => {
   try {
     const found = (await api('GET', '/api/git/find')).filter(p => !Git.repos().includes(p));
     if (!found.length) return toast('No new repositories found');
-    if (!confirm(`Found ${found.length} repositories:\n\n${found.slice(0, 25).join('\n')}${found.length > 25 ? '\n…' : ''}\n\nAdd them all?`)) return;
+    if (!await askYes(`Found ${found.length} repositories:\n\n${found.slice(0, 25).join('\n')}${found.length > 25 ? '\n…' : ''}\n\nAdd them all?`)) return;
     await Git.saveRepos([...Git.repos(), ...found]);
     if (!Git.repo) Git.open(found[0]);
   } catch (err) { toast(err.message, true); }

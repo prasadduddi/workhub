@@ -122,7 +122,7 @@ $('#settingsBody').addEventListener('click', async e => {
 Settings.install = async () => {
   const removeOld = !!Settings.inst && !Settings.inst.installed;
   const desktop = $('[data-set="inst-desktop"]')?.checked, startup = $('[data-set="inst-startup"]')?.checked;
-  if (removeOld && !confirm(`Install WorkHub for easy access?\n\n• Copies it to ${Settings.inst.target}\n• Adds WorkHub to the Start menu${desktop ? ' and the Desktop' : ''}${startup ? '\n• Starts it when you sign in to Windows' : ''}\n• Restarts WorkHub from there and deletes the copy in\n  ${Settings.inst.exe}\n\nOpen sessions (SSH, FTP, SQL) close. Your data is not moved.`)) return Settings.render();
+  if (removeOld && !await askYes(`Install WorkHub for easy access?\n\n• Copies it to ${Settings.inst.target}\n• Adds WorkHub to the Start menu${desktop ? ' and the Desktop' : ''}${startup ? '\n• Starts it when you sign in to Windows' : ''}\n• Restarts WorkHub from there and deletes the copy in\n  ${Settings.inst.exe}\n\nOpen sessions (SSH, FTP, SQL) close. Your data is not moved.`)) return Settings.render();
   try {
     const r = await api('POST', '/api/install', { desktop, startup, removeold: removeOld });
     if (r.moved) {

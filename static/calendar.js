@@ -125,10 +125,10 @@ const Cal = {
 
   async del(ev, day) {
     if (ev.repeat) {
-      const one = confirm(`"${ev.title}" repeats. OK = delete only ${day}, Cancel = more choices`);
+      const one = await askYes(`"${ev.title}" repeats. OK = delete only ${day}, Cancel = more choices`);
       if (one) { await api('DELETE', `/api/events/${ev.id}?day=${day}`); return this.load(); }
-      if (!confirm(`Delete every "${ev.title}"?`)) return;
-    } else if (!confirm(`Delete "${ev.title}"?`)) return;
+      if (!await askYes(`Delete every "${ev.title}"?`)) return;
+    } else if (!await askYes(`Delete "${ev.title}"?`)) return;
     await api('DELETE', `/api/events/${ev.id}`); this.load();
   },
 

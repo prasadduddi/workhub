@@ -30,8 +30,8 @@ const Api = {
   },
 
   // ---- the request being edited ----
-  edit(r, quiet) {
-    if (!quiet && this.dirty && !confirm('Leave this request without saving your changes?')) return false;
+  async edit(r, quiet) {
+    if (!quiet && this.dirty && !await askYes('Leave this request without saving your changes?')) return false;
     this.cur = JSON.parse(JSON.stringify({ ...this.blank(), ...r, auth: { type: '', ...(r.auth || {}) } }));
     const c = this.cur;
     $('#apiName').value = c.name; $('#apiMethod').value = c.method || 'GET'; $('#apiURL').value = c.url;
@@ -134,10 +134,10 @@ const Api = {
   async save() {
     const c = this.read();
     if (!c.name) {
-      const n = prompt('Name for this request:', `${c.method} ${c.url.replace(/^\{\{\w+\}\}/, '').replace(/^https?:\/\/[^/]+/, '') || c.url}`.slice(0, 80));
+      const n = await askText('Name for this request:', `${c.method} ${c.url.replace(/^\{\{\w+\}\}/, '').replace(/^https?:\/\/[^/]+/, '') || c.url}`.slice(0, 80));
       if (!n?.trim()) return; c.name = n.trim(); $('#apiName').value = c.name;
     }
-    if (!c.id) { const f = prompt('Folder (optional, use / for subfolders):', this.lastFolder || ''); if (f === null) return; c.folder = f.trim(); this.lastFolder = c.folder; }
+    if (!c.id) { const f = await askText('Folder (optional, use / for subfolders):', this.lastFolder || ''); if (f === null) return; c.folder = f.trim(); this.lastFolder = c.folder; }
     try {
       const saved = await api('POST', '/api/http/req', c);
       this.cur.id = saved.id; this.dirty = false; $('#apiSave').classList.remove('dirty');
@@ -148,10 +148,10 @@ const Api = {
     Tree.showMenu(ev, [
       ['Open', () => this.edit(r)],
       ['⧉ Duplicate', async () => { await api('POST', '/api/http/req', { ...r, id: '', name: r.name + ' (copy)' }); this.load(); }],
-      ['Rename…', async () => { const n = prompt('Name', r.name); if (n?.trim()) { await api('POST', '/api/http/req', { ...r, name: n.trim() }); if (this.cur?.id === r.id) $('#apiName').value = n.trim(); this.load(); } }],
-      ['Move to folder…', async () => { const f = prompt('Folder (empty = none)', r.folder || ''); if (f !== null) { await api('POST', '/api/http/req', { ...r, folder: f.trim() }); this.load(); } }],
+      ['Rename…', async () => { const n = await askText('Name', r.name); if (n?.trim()) { await api('POST', '/api/http/req', { ...r, name: n.trim() }); if (this.cur?.id === r.id) $('#apiName').value = n.trim(); this.load(); } }],
+      ['Move to folder…', async () => { const f = await askText('Folder (empty = none)', r.folder || ''); if (f !== null) { await api('POST', '/api/http/req', { ...r, folder: f.trim() }); this.load(); } }],
       ['Copy as curl', () => copyText(this.curl(r), 'curl command copied (passwords and tokens shown as variables)')],
-      '-', ['Delete', async () => { if (!confirm(`Delete “${r.name}”?`)) return; await api('DELETE', `/api/http/req/${r.id}`); if (this.cur?.id === r.id) this.edit(this.blank(), true); this.load(); }],
+      '-', ['Delete', async () => { if (!await askYes(`Delete “${r.name}”?`)) return; await api('DELETE', `/api/http/req/${r.id}`); if (this.cur?.id === r.id) this.edit(this.blank(), true); this.load(); }],
     ]);
   },
   // curl with {{variables}} left as they are, so no secrets end up in the copy.
@@ -180,8 +180,8 @@ const Api = {
   // ---- environments editor ----
   async editEnvs() {
     const env = this.env() || this.envs[0];
-    const pickName = () => prompt('Name for the environment (e.g. UAT):', '');
-    if (!env) { const n = pickName(); if (!n?.trim()) return; const e = await api('POST', '/api/http/env', { name: n.trim(), vars: [{ k: 'baseUrl', v: '', on: true }] }); await this.load(); this.selectEnv(e.id); return this.editEnvs(); }
+    const pickName = async () => await askText('Name for the environment (e.g. UAT):', '');
+    if (!env) { const n = await pickName(); if (!n?.trim()) return; const e = await api('POST', '/api/http/env', { name: n.trim(), vars: [{ k: 'baseUrl', v: '', on: true }] }); await this.load(); this.selectEnv(e.id); return this.editEnvs(); }
     const d = $('#apiEnvDlg') || Object.assign(document.createElement('dialog'), { id: 'apiEnvDlg', className: 'apienv' });
     if (!d.isConnected) document.body.append(d);
     const draw = e => {
@@ -204,9 +204,9 @@ const Api = {
       if (a === 'close') return d.close();
       if (a === 'export') { e.vars = readVars(); return ApiImport.exportEnv(e); }
       if (a === 'save') { e.vars = readVars(); await api('POST', '/api/http/env', e); await this.load(); this.selectEnv(e.id); d.close(); return toast(`${e.name} saved`); }
-      if (a === 'new' || a === 'copy') { const n = pickName(); if (!n?.trim()) return; const x = await api('POST', '/api/http/env', { name: n.trim(), vars: a === 'copy' ? readVars() : [{ k: 'baseUrl', v: '', on: true }] }); await this.load(); return draw(JSON.parse(JSON.stringify(this.envs.find(y => y.id === x.id)))); }
-      if (a === 'rename') { const n = prompt('Name', e.name); if (n?.trim()) { e.name = n.trim(); e.vars = readVars(); await api('POST', '/api/http/env', e); await this.load(); draw(e); } return; }
-      if (a === 'del') { if (!confirm(`Delete the environment “${e.name}”?`)) return; await api('DELETE', `/api/http/env/${e.id}`); await this.load(); return this.envs.length ? draw(JSON.parse(JSON.stringify(this.envs[0]))) : d.close(); }
+      if (a === 'new' || a === 'copy') { const n = await pickName(); if (!n?.trim()) return; const x = await api('POST', '/api/http/env', { name: n.trim(), vars: a === 'copy' ? readVars() : [{ k: 'baseUrl', v: '', on: true }] }); await this.load(); return draw(JSON.parse(JSON.stringify(this.envs.find(y => y.id === x.id)))); }
+      if (a === 'rename') { const n = await askText('Name', e.name); if (n?.trim()) { e.name = n.trim(); e.vars = readVars(); await api('POST', '/api/http/env', e); await this.load(); draw(e); } return; }
+      if (a === 'del') { if (!await askYes(`Delete the environment “${e.name}”?`)) return; await api('DELETE', `/api/http/env/${e.id}`); await this.load(); return this.envs.length ? draw(JSON.parse(JSON.stringify(this.envs[0]))) : d.close(); }
       if (a === 'conn') {
         const r = ev.target.getBoundingClientRect();
         const conns = S.entries.filter(x => x.host || x.url).sort((x, y) => usageScore(y) - usageScore(x)).slice(0, 25);
@@ -264,7 +264,7 @@ $('#apiMore').onclick = e => {
   setTimeout(() => Tree.showMenu({ clientX: r.left - 150, clientY: r.bottom }, [
     ['Copy as curl', () => copyText(Api.curl(c), 'curl command copied (passwords and tokens shown as variables)')],
     ['⧉ Duplicate', () => Api.edit({ ...c, id: '', name: c.name ? c.name + ' (copy)' : '' })],
-    ...(c.id ? [['Delete', async () => { if (!confirm(`Delete “${c.name}”?`)) return; await api('DELETE', `/api/http/req/${c.id}`); Api.edit(Api.blank(), true); Api.load(); }]] : []),
+    ...(c.id ? [['Delete', async () => { if (!await askYes(`Delete “${c.name}”?`)) return; await api('DELETE', `/api/http/req/${c.id}`); Api.edit(Api.blank(), true); Api.load(); }]] : []),
   ]));
 };
 $('#apiList').addEventListener('click', e => {
@@ -295,7 +295,7 @@ $('#apiList').addEventListener('contextmenu', e => {
   e.preventDefault();
   Tree.showMenu(e, [['⬆ Export as Postman collection (Bruno imports it too)…', () => ApiImport.exportFolder(f.dataset.folder)],
     ['Rename folder…', async () => {
-      const from = f.dataset.folder, to = prompt('Folder name', from); if (!to?.trim() || to.trim() === from) return;
+      const from = f.dataset.folder, to = await askText('Folder name', from); if (!to?.trim() || to.trim() === from) return;
       for (const r of Api.reqs.filter(x => x.folder === from || x.folder.startsWith(from + '/'))) await api('POST', '/api/http/req', { ...r, folder: to.trim() + r.folder.slice(from.length) });
       Api.load();
     }]]);

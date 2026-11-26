@@ -123,7 +123,7 @@ const Lock = {
   },
 
   async remove() {
-    if (!confirm('Remove the PIN? WorkHub will no longer lock.')) return;
+    if (!await askYes('Remove the PIN? WorkHub will no longer lock.')) return;
     try { await api('POST', '/api/lock/set', { current: $('#pinCur').value, remove: true }); this.enabled = false; $('#pinDlg').close(); toast('PIN removed'); }
     catch (err) { toast(err.message, true); }
   },
@@ -225,7 +225,7 @@ const Master = {
   },
   async off() {
     if (!$('#masterCur').value) return this.msg('Type the current master password to turn it off', '#masterCur');
-    if (!confirm('Turn off the master password? WorkHub will open your data without asking (only your Windows login protects it).')) return;
+    if (!await askYes('Turn off the master password? WorkHub will open your data without asking (only your Windows login protects it).')) return;
     try {
       await api('POST', '/api/master/remove', { current: $('#masterCur').value });
       $('#masterDlg').close(); this.on = false;

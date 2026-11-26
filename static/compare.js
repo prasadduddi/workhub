@@ -114,11 +114,11 @@ const Compare = {
       if (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); this.jump(e.key === 'ArrowDown' ? 1 : -1); }
       if (e.key === 'Enter' && (e.target.classList.contains('cmp-in') || e.target.classList.contains('cmp-rpath'))) $('[data-cgo]', d)?.click();
     });
-    d.addEventListener('cancel', e => { if (!this.okToClose()) e.preventDefault(); });
+    d.addEventListener('cancel', async e => { e.preventDefault(); if (await this.okToClose()) d.close(); });
     d.showModal();
     return d;
   },
-  okToClose() { const f = this.st?.file; return !f || !(f.dirtyA || f.dirtyB) || confirm('Close without saving your changes?'); },
+  async okToClose() { const f = this.st?.file; return !f || !(f.dirtyA || f.dirtyB) || await askYes('Close without saving your changes?'); },
 
   // ---- file compare ----
   async openFiles(a, b, back) {
@@ -262,7 +262,7 @@ const Compare = {
   async copyFile(rel, to) {
     const st = this.st, from = to === 'b' ? st.a : st.b, dest = to === 'b' ? st.b : st.a;
     const en = st.entries.find(x => x.rel === rel), replaces = to === 'b' ? en?.b : en?.a;
-    if (!confirm(`Copy ${rel} ${to === 'b' ? 'left → right' : 'right → left'}?\n\n${replaces ? `This replaces the file in ${dest.path}${dest.kind === 'ref' ? ' (the old copy is kept in its history)' : ' (a backup copy is kept)'}.` : `It is added to ${dest.path}.`}`)) return;
+    if (!await askYes(`Copy ${rel} ${to === 'b' ? 'left → right' : 'right → left'}?\n\n${replaces ? `This replaces the file in ${dest.path}${dest.kind === 'ref' ? ' (the old copy is kept in its history)' : ' (a backup copy is kept)'}.` : `It is added to ${dest.path}.`}`)) return;
     const src = this.child(from, rel), dst = this.child(dest, rel);
     try {
       if (src.kind === 'ref' && dst.kind === 'ref') { // any file, byte for byte
@@ -283,7 +283,7 @@ const Compare = {
   // ---- events ----
   async click(e) {
     const d = $('#cmpDlg'), st = this.st;
-    if (e.target.closest('[data-cclose]')) { if (this.okToClose()) d.close(); return; }
+    if (e.target.closest('[data-cclose]')) { if (await this.okToClose()) d.close(); return; }
     const pc = e.target.closest('[data-cpc]');
     if (pc) {
       const r = await api('POST', pc.dataset.cpc === 'file' ? '/api/local/pickfile' : '/api/local/pick', {}).catch(err => (toast(err.message, true), {}));
@@ -315,7 +315,7 @@ const Compare = {
     if (a === 'next') return this.jump(1);
     if (a === 'saveA' || a === 'saveB') return this.saveSide(a.slice(-1));
     if (a === 'refresh') return this.loadDirs();
-    if (a === 'back') { if (!this.okToClose()) return; this.st = st.back; return this.loadDirs(); }
+    if (a === 'back') { if (!await this.okToClose()) return; this.st = st.back; return this.loadDirs(); }
     if (a === 'swap') {
       if (st.mode === 'dir') { [st.a, st.b] = [st.b, st.a]; return this.loadDirs(); }
       const f = st.file;[st.a, st.b, f.A, f.B, f.eolA, f.eolB, f.dirtyA, f.dirtyB] = [st.b, st.a, f.B, f.A, f.eolB, f.eolA, f.dirtyB, f.dirtyA];

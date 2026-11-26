@@ -255,14 +255,14 @@ const ApiImport = {
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   },
-  exportFolder(folder) {
+  async exportFolder(folder) {
     const n = Api.reqs.filter(r => r.folder === folder || r.folder.startsWith(folder + '/')).length;
     if (!n) return toast('No requests in that folder', true);
-    if (!confirm(`Export ${n} request${n > 1 ? 's' : ''} in “${folder}” as a Postman collection?\n\nTokens and passwords typed straight into requests are included — {{variables}} stay as they are. Bruno can import this file too.`)) return;
+    if (!await askYes(`Export ${n} request${n > 1 ? 's' : ''} in “${folder}” as a Postman collection?\n\nTokens and passwords typed straight into requests are included — {{variables}} stay as they are. Bruno can import this file too.`)) return;
     this.download(`${folder.replace(/[\\/:*?"<>|]+/g, '_')}.postman_collection.json`, this.toPostman(folder));
   },
-  exportEnv(e) {
-    if (!confirm(`Export the environment “${e.name}” as a Postman environment?\n\nIts values are included in the file (secrets too).`)) return;
+  async exportEnv(e) {
+    if (!await askYes(`Export the environment “${e.name}” as a Postman environment?\n\nIts values are included in the file (secrets too).`)) return;
     this.download(`${e.name.replace(/[\\/:*?"<>|]+/g, '_')}.postman_environment.json`, { name: e.name, values: e.vars.map(v => ({ key: v.k, value: v.v, enabled: v.on !== false, type: /pass|secret|token|key/i.test(v.k) ? 'secret' : 'default' })), _postman_variable_scope: 'environment' });
   },
 };

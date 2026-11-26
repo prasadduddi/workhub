@@ -220,7 +220,7 @@ const Work = {
   async linkJira() {
     const w = this.current;
     const guess = w.jira || (w.title.toUpperCase().match(/\b[A-Z][A-Z0-9_]+-\d+\b/) || [''])[0];
-    const v = prompt('Jira issue key or link for this thread (empty to remove the link):', guess);
+    const v = await askText('Jira issue key or link for this thread (empty to remove the link):', guess);
     if (v === null) return;
     const key = (v.toUpperCase().match(/\b[A-Z][A-Z0-9_]+-\d+\b/) || [''])[0];
     if (v.trim() && !key) return toast('That doesn\'t look like a Jira key (e.g. PAY-123)', true);
@@ -516,7 +516,7 @@ const Work = {
     const all = this.list.filter(w => w.id !== except && !w.archived);
     const open = all.filter(w => w.status !== 'done').slice(0, 12);
     const other = async () => {
-      const q = prompt('Which thread? Type part of its name:'); if (!q?.trim()) return;
+      const q = await askText('Which thread? Type part of its name:'); if (!q?.trim()) return;
       const hits = this.list.filter(w => w.id !== except && w.title.toLowerCase().includes(q.trim().toLowerCase()));
       if (!hits.length) return toast(`No thread called “${q.trim()}”`, true);
       if (hits.length === 1) return then(hits[0].id, hits[0].title);
@@ -730,7 +730,7 @@ page.addEventListener('click', async e => {
       '-',
       ['Open the work-items folder', () => api('POST', `/api/work/${w.id}/word?what=folder`).catch(err => toast(err.message, true))],
       ['Delete this thread…', async () => {
-        if (!confirm(`Delete the thread "${w.title}" and everything in it?`)) return;
+        if (!await askYes(`Delete the thread "${w.title}" and everything in it?`)) return;
         if (w.id === S.settings.active_thread) await saveSettings({ active_thread: '' });
         await api('DELETE', '/api/work/' + w.id); Work.current = null; await Work.loadList(); Work.show();
       }]]));
@@ -1023,7 +1023,7 @@ $('#workList').addEventListener('contextmenu', e => {
     '-',
     [w.archived ? '↩ Unarchive' : '🗄 Archive', () => Work.archive(w, !w.archived)],
     ...(w.general ? [] : [['Delete…', async () => {
-      if (!confirm(`Delete the thread "${w.title}" and everything in it?`)) return;
+      if (!await askYes(`Delete the thread "${w.title}" and everything in it?`)) return;
       if (w.id === S.settings.active_thread) await saveSettings({ active_thread: '' });
       await api('DELETE', '/api/work/' + w.id); if (Work.current?.id === w.id) Work.current = null; await Work.loadList(); Work.show();
     }]])]));
@@ -1175,7 +1175,7 @@ const Attach = {
       ta.addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); document.execCommand('insertText', false, '  '); } });
       d.addEventListener('click', async e => {
         const b = e.target.closest('[data-av]'); if (!b) return;
-        if (b.dataset.av === 'close') { if (ta.value !== d.orig && !confirm('Close without saving your changes?')) return; d.close(); }
+        if (b.dataset.av === 'close') { if (ta.value !== d.orig && !await askYes('Close without saving your changes?')) return; d.close(); }
         if (b.dataset.av === 'copy') copyText(ta.value, 'Copied ' + d.nm);
         if (b.dataset.av === 'save') {
           const r = await fetch('/api/props/files/' + d.aid, { method: 'PUT', body: ta.value });
