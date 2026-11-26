@@ -82,6 +82,8 @@ PAGES = {
     "9002": ("Refund limits per merchant tier", "PAY", "<p>Tier A merchants may refund up to 5000 EUR per day, tier B 2500 EUR, tier C 1000 EUR. Limits are approved by the risk team; changes go through a CM change.</p>"),
     "9003": ("Release checklist 4.2", "PAY", "<p>Before the PROD release: freeze merges, run the regression pack, get CM approval, announce the window in the release channel.</p>"),
     "9004": ("Team lunch menu", "SOCIAL", "<p>Pizza on Fridays.</p>"),
+    "9005": ("Restarting payment services after an outage", "OPS", "<p>If payments stop after an outage, restarting the payment API pods usually clears stuck connections. Check the ORA errors in the log first.</p>"),
+    "9006": ("Certificate renewal procedure", "OPS", "<p>Certificates on the batch servers expire yearly. Renew them in the keystore and restart the batch afterwards.</p>"),
 }
 DESC = {"PAY-123": "Merchants need a daily refund limit. Limits per tier come from the risk team.", "PAY-205": "Blocked: waiting for the tier list (refund limits per merchant tier) from the merchant team.",
         "OPS-77": "Renew the TLS certificates on the batch servers before they expire; restart the batch after.", "PAY-201": "Refunds above the merchant limit need a second approver."}
@@ -105,7 +107,19 @@ class H(BaseHTTPRequestHandler):
             return self.send({}, 401)
         parts = u.path.split("/")
         if u.path == "/wiki/rest/api/space":
-            return self.send({"results": [{"key": "PAY"}], "size": 1})
+            return self.send({"results": [{"key": "OPS", "name": "Operations"}, {"key": "PAY", "name": "Payments"}, {"key": "SOCIAL", "name": "Social"}], "size": 3})
+        if u.path == "/wiki/rest/api/content/search":  # the local copy: a space's pages, two per answer
+            from urllib.parse import unquote_plus, quote
+            import re
+            cql = unquote_plus(q.get("cql", "")); m = re.search(r'space = "([^"]+)"', cql)
+            mine = [(pid, v) for pid, v in PAGES.items() if m and v[1] == m.group(1)]
+            start = int(q.get("cursor", "0")); chunk = mine[start:start + 2]
+            res = [{"id": pid, "type": "page", "title": t, "version": {"number": 1, "when": "2026-11-18T09:00:00.000Z"}, "space": {"key": sp, "name": {"OPS": "Operations", "PAY": "Payments"}.get(sp, sp)},
+                    "body": {"storage": {"value": body}}, "_links": {"webui": f"/spaces/{sp}/pages/{pid}"}} for pid, (t, sp, body) in chunk]
+            links = {"base": "http://127.0.0.1:47990/wiki"}
+            if start + 2 < len(mine) and "lastmodified" not in cql:
+                links["next"] = "/rest/api/content/search?cql=" + quote(cql) + "&expand=body.storage,version,space&limit=50&cursor=" + str(start + 2)
+            return self.send({"results": res if "lastmodified" not in cql else [], "_links": links})
         if u.path == "/wiki/rest/api/search":
             from urllib.parse import unquote_plus
             import re

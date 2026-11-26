@@ -282,7 +282,7 @@ const Work = {
       ${this.pinsHTML(w)}
       <div id="tfindSub" class="tfind-sub" hidden></div>
       <div class="twrap">
-        <div class="tmainc">
+        <div class="tmainc ${this.newestFirst() ? 'newest' : ''}">
           <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
           <div class="tcompose">
             <button id="tplus" type="button" class="tplus" title="Attach — copied text or a script as a file, or files from this PC">+</button>

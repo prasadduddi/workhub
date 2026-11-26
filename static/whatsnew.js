@@ -4,6 +4,13 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.16.1', title: 'A local copy of Confluence for Ask, search Confluence / Jira, a pinned menu', items: [
+    ['☑', 'Confluence, Jira or both', 'Two ticks next to the question on the Ask page: Confluence (on by default), Jira, or both — remembered. Ask also says what it searched, and uses your Jira login for Confluence when Confluence was never set up.', 'ask'],
+    ['↕', 'Message box follows the order', 'With ↓ Newest first the message box moves to the top, above the newest message; with ↑ Oldest first it stays at the bottom.', 'tasks'],
+    ['📌', 'Pin the left menu', 'The pin next to « keeps the left menu as it is: SSH, FTP, SQL and Tasks no longer shrink it, and double-click, Ctrl+B and « leave it alone until you unpin it.', ''],
+    ['🔎', 'Ask at the top', 'An Ask button next to 💬 at the top opens Ask Confluence & Jira from any page.', 'ask'],
+    ['📚', 'Local copy of Confluence', '⚙ Settings → Ask → Keep a local copy: pick spaces and WorkHub downloads their pages (encrypted, not in backups). 🔎 Ask then searches them instantly — offline too — matching word endings (restart ≈ restarting) and scoring the best passage of each page; AI answers use those passages. Changed pages are fetched every hour (you can change it); once a day every page is checked, so deleted pages drop out.', 'ask'],
+  ] },
   { v: '1.16.0', title: 'Ask Confluence & Jira, sub-threads, newest first, new windows per page, colours in viewers, a tidier Dashboard', items: [
     ['🔎', 'Ask Confluence & Jira', 'The new Ask page (left menu) searches Confluence pages and Jira issues together from a question in plain words, best matches first with the matching sentences in yellow. Confluence signs in like Jira — the same login on Atlassian Cloud, a token, or 🔑 Sign in with browser in WorkHub-Desktop (⚙ Settings → Ask). Optional ✨ AI answers (off by default) write a short answer with links to the sources, using your own Anthropic API key.', 'ask'],
     ['⧉', 'New window next to each tree', 'SSH, FTP and SQL trees and the thread list have ⧉ New window: that whole page in its own window. A thread still has ⧉ Only this thread.', ''],

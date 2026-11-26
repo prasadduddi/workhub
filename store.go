@@ -167,7 +167,8 @@ type State struct {
 	Jira         JiraConfig       `json:"jira"`
 	Teams        TeamsConfig      `json:"teams,omitempty"`
 	Confluence   ConfluenceConfig `json:"confluence,omitzero"` // Ask: Confluence sign-in (the token never leaves the server)
-	Ask          AskConfig        `json:"ask,omitzero"`        // Ask: AI answers (off by default) and the Anthropic API key // ⚙ Settings → Teams (Microsoft Graph); the refresh token never leaves the server
+	Ask          AskConfig        `json:"ask,omitzero"`
+	ConfIndex    ConfIndexConfig  `json:"conf_index,omitzero"` // Ask: Confluence spaces kept as a local copy (confindex.go)        // Ask: AI answers (off by default) and the Anthropic API key // ⚙ Settings → Teams (Microsoft Graph); the refresh token never leaves the server
 	JiraIssues   []*JiraIssue     `json:"jira_issues,omitempty"`
 	Events       []*Event         `json:"events,omitempty"` // Calendar
 	Snippets     []*Snippet       `json:"sql_snippets,omitempty"`

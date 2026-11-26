@@ -1784,3 +1784,27 @@ button.winbtn { display: inline-grid; place-items: center; padding: 4px 7px; min
 body.popout #pageTitle { display: none; } /* the window's own bar names it */
 
 #popDock.winbtn { padding: 5px 9px; } #popDock .ico-win { width: 19px; height: 19px; }
+
+/* 📚 Confluence local copy */
+.set-h { margin: 14px 0 2px; font-weight: 700; font-size: calc(13px * var(--ui-scale)); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+dialog.ci-pick { width: min(560px, 94vw); }
+.ci-pick .ci-filter { width: 100%; box-sizing: border-box; margin: 6px 0; }
+.ci-pick .ci-list { max-height: 50vh; overflow: auto; display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.ci-pick .ci-list label { display: flex; gap: 8px; align-items: center; padding: 5px 6px; border-radius: 6px; }
+.ci-pick .ci-list label:hover { background: var(--panel2); }
+.ask-in { display: inline-flex; gap: 10px; white-space: nowrap; } .ask-in label { display: inline-flex; gap: 4px; align-items: center; }
+
+/* 📌 pin for the left menu */
+#sidePin[aria-pressed="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+#sidePin[aria-pressed="true"] svg { fill: currentColor; }
+body.side-pinned #sideSplit { pointer-events: none; }
+body.side-pinned #sideToggle { opacity: .35; }
+body.side-top #sidePin { display: none; }
+/* 🔎 Ask at the top, next to 💬 */
+#gsearch #askTop { flex: none; display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 9px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; }
+#gsearch #askTop svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+#gsearch #askTop:hover { color: var(--accent); border-color: var(--accent); }
+body.popout #askTop { display: none !important; }
+
+/* ↓ Newest first: the message box sits on top, above the newest message */
+.tmainc.newest .tcompose { order: -1; border-top: 0; border-bottom: 1px solid var(--border); }

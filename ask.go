@@ -184,6 +184,8 @@ type askReply struct {
 	Answer  []answerPart `json:"answer,omitempty"`
 	AIError string       `json:"ai_error,omitempty"`
 	AIUsed  int          `json:"ai_used,omitempty"` // how many results went to the AI
+	Index   string       `json:"index,omitempty"`   // "local copy of 3 spaces · synced 12 min ago"
+	Sources []string     `json:"sources,omitempty"` // what was searched
 }
 
 type answerPart struct {
@@ -191,14 +193,29 @@ type answerPart struct {
 	Cites []int  `json:"cites,omitempty"` // indexes into Results
 }
 
-func (a *App) askSearch(q string) askReply {
+// askSearch searches Confluence and/or Jira (the checkboxes on the Ask page).
+func (a *App) askSearch(q string, inConf, inJira bool) askReply {
 	words := askWords(q)
 	rep := askReply{Words: words, Results: []askResult{}}
 	conf := a.store.ConfluenceConfig()
-	useConf := conf.BaseURL != "" || conf.Mode == "jira"
-	useJira := jiraReady(a.store.JiraConfig())
+	jiraOK := jiraReady(a.store.JiraConfig())
+	useJira := inJira && jiraOK
+	useConf := inConf && (conf.BaseURL != "" || conf.Mode == "jira" || (conf.Mode == "" && jiraOK)) // never set up: Jira's login
+	if c, err := a.confEffective(); useConf && err == nil {
+		rep.Sources = append(rep.Sources, "Confluence ("+c.BaseURL+")")
+	}
+	if useJira {
+		rep.Sources = append(rep.Sources, "Jira ("+a.store.JiraConfig().BaseURL+")")
+	}
 	if !useConf && !useJira {
-		rep.Errors = append(rep.Errors, "Set up Confluence and/or Jira first — ⚙ Settings → Ask (and Jira settings)")
+		switch {
+		case inConf && !inJira:
+			rep.Errors = append(rep.Errors, "Confluence: not set up yet")
+		case inJira && !inConf:
+			rep.Errors = append(rep.Errors, "Jira isn't set up yet — Jira page → ⚙ Jira settings")
+		default:
+			rep.Errors = append(rep.Errors, "Set up Confluence and/or Jira first — ⚙ Settings → Ask (and Jira settings)")
+		}
 		return rep
 	}
 	run := func(anyWord bool) ([]askResult, []askResult, []string) {
@@ -256,9 +273,27 @@ func (a *App) askSearch(q string) askReply {
 		return cr, jr, errs
 	}
 	cr, jr, errs := run(false)
-	if len(cr)+len(jr) < 2 && len(words) > 1 && len(errs) == 0 { // (almost) nothing with all the words: any of them
+	if len(cr)+len(jr) == 0 && len(words) > 1 && len(errs) == 0 { // nothing with all the words: any of them
 		cr2, jr2, errs2 := run(true)
 		cr, jr, errs = mergeResults(cr, cr2), mergeResults(jr, jr2), errs2
+	}
+	// the local copy of chosen spaces: first, and it still works when Confluence can't be reached
+	if ic := a.store.ConfIndexConfig(); ic.On && inConf {
+		if local := a.ciSearch(q, 15); len(local) > 0 || a.ciPages() > 0 {
+			if len(local) > 0 {
+				var keep []string
+				for _, e := range errs {
+					if !strings.HasPrefix(e, "Confluence:") { // live search down: the local copy answers
+						keep = append(keep, e)
+					}
+				}
+				errs = keep
+			}
+			cr = mergeResults(local, cr)
+			cidx.mu.RLock()
+			rep.Index = fmt.Sprintf("local copy of %d space%s (%d pages) · synced %s", len(ic.Spaces), map[bool]string{true: "", false: "s"}[len(ic.Spaces) == 1], len(cidx.Pages), ago(cidx.LastSync))
+			cidx.mu.RUnlock()
+		}
 	}
 	rep.Errors = errs
 	rep.Results = rankAsk(words, cr, jr)
@@ -331,7 +366,13 @@ func (a *App) askAI(q string, rep *askReply) {
 	texts := make([]string, len(top))
 	var wg sync.WaitGroup
 	for i, r := range top {
-		if r.Source == "confluence" {
+		if r.Source == "confluence" && r.text != "" { // from the local copy: its best passages
+			t := r.text
+			if len([]rune(t)) > 6000 {
+				t = string([]rune(t)[:6000]) + " …"
+			}
+			texts[i] = t
+		} else if r.Source == "confluence" {
 			wg.Add(1)
 			go func(i int, id string) { defer wg.Done(); texts[i] = a.confPageText(id, 6000) }(i, r.ID)
 		} else {
@@ -424,14 +465,20 @@ func (a *App) askAI(q string, rep *askReply) {
 
 func (a *App) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Q  string `json:"q"`
-		AI bool   `json:"ai"` // the page asks for the AI answer (only when it's switched on)
+		Q       string   `json:"q"`
+		AI      bool     `json:"ai"`      // the page asks for the AI answer (only when it's switched on)
+		Sources []string `json:"sources"` // "confluence", "jira" (none given: Confluence)
 	}
 	if err := readJSON(r, &in); err != nil || strings.TrimSpace(in.Q) == "" {
 		writeErr(w, 400, errors.New("type a question"))
 		return
 	}
-	rep := a.askSearch(in.Q)
+	inConf, inJira := len(in.Sources) == 0, false
+	for _, s := range in.Sources {
+		inConf = inConf || s == "confluence"
+		inJira = inJira || s == "jira"
+	}
+	rep := a.askSearch(in.Q, inConf, inJira)
 	if in.AI {
 		a.askAI(in.Q, &rep)
 	}

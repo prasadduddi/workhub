@@ -169,6 +169,14 @@ const HELP_TOPICS = [
     'Confluence pages and Jira issues that match are listed together, best first, with the matching sentences in yellow; click one to open it, or 🧵 post its link in a thread.',
     'Set up Confluence in ⚙ Settings → Ask: “Same as my Jira login” on Atlassian Cloud, a token for Server / Data Center, or 🔑 Sign in with browser in WorkHub-Desktop (SSO / MFA — the window hides when you are in).',
     'Optional ✨ AI answers (off by default): add your Anthropic API key and switch them on — the best matches are then sent to Anthropic and you get a short answer with numbered links to its sources. Check your company allows this first.'] },
+  { t: 'Pin the left menu', k: 'pin lock sidebar left menu keep open stop shrinking collapse', v: '', s: [
+    'Click 📌 next to « at the top of the left menu: it stays as it is (full or icons only).',
+    'While pinned, the SSH, FTP, SQL and Tasks pages don\'t shrink it, and double-click, Ctrl+B and « don\'t change it. Click 📌 again to unpin.'] },
+  { t: 'Keep a local copy of Confluence (for Ask)', k: 'confluence local copy index offline spaces download sync every hour delete rebuild', v: 'ask', s: [
+    '⚙ Settings → Ask (Confluence) → Keep a local copy → Choose spaces… → tick the spaces → Save and download.',
+    'Ask then searches those pages on your laptop: instantly, offline too, word endings matched. Pages from other spaces still come from the live search when Confluence can be reached.',
+    'Changed and new pages are fetched every hour (Fetch changed pages: 15 minutes to once a day); every page is checked once a day, so deleted or moved pages drop out. ↻ Sync now / Rebuild do it at once.',
+    'Delete the copy removes the downloaded pages from this laptop. The copy is encrypted and left out of backups.'] },
   { t: 'Sub-threads (a thread under another)', k: 'sub thread child parent tree nest drag drop under move top level search', v: 'tasks', s: [
     'In the thread list, drag a thread onto another: it moves under it (indented). ▾ / ▸ folds the sub-threads.',
     'Drop it on a section heading (Threads, Starred, Done) to make it a top-level thread again — or right-click → ↳ Put under another thread… / ↰ Move to the top level.',

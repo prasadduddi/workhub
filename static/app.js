@@ -426,7 +426,15 @@ function animateSide() {
   document.body.classList.add('side-anim');
   clearTimeout(sideAnimT); sideAnimT = setTimeout(() => { document.body.classList.remove('side-anim'); fitActiveTerm?.(); }, 260);
 }
+// 📌 Pinned: the left menu stays as it is — pages don't shrink it, double-click, Ctrl+B, « and dragging its edge don't change it.
+const sidePinned = () => document.body.classList.contains('side-pinned');
+function setSidePin(on) {
+  document.body.classList.toggle('side-pinned', on); store.set('sidePinned', on);
+  const b = $('#sidePin'); if (b) { b.setAttribute('aria-pressed', on); b.title = on ? 'Pinned — click to unpin (then pages can shrink the menu again)' : "Pin the menu: it stays as it is now (pages don't shrink it, double-click and Ctrl+B don't change it)"; }
+  if (on) S.autoSide = false;
+}
 function roomForWork() {
+  if (sidePinned()) return;
   if (document.body.classList.contains('side-top')) return; // a bar across the top takes no room from the tree
   if (S.userSide || document.body.classList.contains('side-collapsed')) return;
   animateSide();
@@ -479,7 +487,7 @@ $('#nav').addEventListener('click', e => {
   const b = e.target.closest('button[data-view]'); if (!b) return;
   // Clicking the page you are on again (SSH, FTP, SQL, Tasks…) switches the
   // sidebar between icons only and full size.
-  if (b.classList.contains('active') && !document.body.classList.contains('side-top')) {
+  if (b.classList.contains('active') && !document.body.classList.contains('side-top') && !sidePinned()) {
     const collapsed = document.body.classList.contains('side-collapsed');
     animateSide();
     if (collapsed) { document.body.classList.remove('side-collapsed'); S.autoSide = false; S.userSide = WORK_VIEWS.includes(b.dataset.view); $('#sideToggle').textContent = '«'; } // "keep it open" only matters on the tree pages
@@ -4671,6 +4679,13 @@ function applySideTop(top) {
   // left: 💬 and ✨ sit in the title row (☰ and the layout switch are in the menu bar); top: all in the tools row
   { const b = $('#whatsNewTop'); if (b) top ? $('.brand-tools').insertBefore(b, $('#mainMenuBtn')) : $('.ver-row').append(b); } // left: after the version, bottom left
   $('#gsearch').prepend($('#chatFab')); // 💬 Assistant: at the top, next to ● Capturing (it asks before saving what you copy)
+  if (!$('#askTop')) { // 🔎 Ask (Confluence & Jira) right after it
+    const b = Object.assign(document.createElement('button'), { id: 'askTop', className: 'ghost icon', title: 'Ask Confluence & Jira' });
+    b.setAttribute('aria-label', 'Ask Confluence & Jira');
+    b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/><path d="M8.2 9.2a2.4 2.4 0 1 1 3.3 2.2c-.6.3-1 .8-1 1.4"/><circle cx="10.5" cy="14.6" r=".4"/></svg>';
+    b.onclick = () => { show('ask'); setTimeout(() => $('#askQ')?.focus(), 50); };
+    $('#chatFab').before(b);
+  }
   const b = $('#sideFlip');
   b.title = top ? 'Move this menu back to the left' : 'Move this menu to the top of the window';
   b.innerHTML = top ? '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>' : '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>';
@@ -4700,6 +4715,7 @@ dragBar($('#sideSplit'), {
   done: () => store.set('sideW', parseInt(getComputedStyle(root).getPropertyValue('--side-w'))),
 });
 function toggleSide() {
+  if (sidePinned()) return toast('The menu is pinned 📌 — click the pin to unpin it first');
   animateSide();
   const c = document.body.classList.toggle('side-collapsed');
   S.autoSide = false; S.userSide = !c; // expanded by hand: leave it open until the user collapses it or goes back to the dashboard
@@ -4709,6 +4725,8 @@ function toggleSide() {
 }
 $('#sideToggle').textContent = document.body.classList.contains('side-collapsed') ? '»' : '«';
 $('#sideToggle').onclick = toggleSide;
+setSidePin(!!store.get('sidePinned', false));
+$('#sidePin').onclick = () => { setSidePin(!sidePinned()); toast(sidePinned() ? '📌 Menu pinned — it stays as it is' : 'Menu unpinned'); };
 // Double-click on empty space in the left menu: full menu ⇄ narrow icon rail (not on pages, buttons or boxes)
 $('.side').addEventListener('dblclick', e => {
   if (document.body.classList.contains('side-top') || e.target.closest('button, a, input, select, textarea, label, summary, details, [contenteditable], .navrow')) return;

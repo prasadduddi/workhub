@@ -64,6 +64,9 @@ var confSess struct {
 // effective: the address and login actually used ("jira" borrows Jira's).
 func (a *App) confEffective() (ConfluenceConfig, error) {
 	c := a.store.ConfluenceConfig()
+	if c.Mode == "" && c.BaseURL == "" { // never set up: try the Jira login (Atlassian Cloud: <site>/wiki)
+		c.Mode = "jira"
+	}
 	if c.Mode == "jira" {
 		j := a.store.JiraConfig()
 		if j.BaseURL == "" {

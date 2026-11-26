@@ -43,7 +43,7 @@ func TestAskConfluenceAndJira(t *testing.T) {
 			// Cloud: the description in Atlassian Document Format
 			js(map[string]any{"issues": []any{map[string]any{"key": "OPS-77", "fields": map[string]any{"summary": "Restart batch after cert renewal",
 				"description": map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph", "content": []any{map[string]any{"type": "text", "text": "Restart the batch servers on Sunday"}}}}},
-				"status": map[string]any{"name": "To Do"}, "issuetype": map[string]any{"name": "Task"}, "project": map[string]any{"name": "Ops"},
+				"status":      map[string]any{"name": "To Do"}, "issuetype": map[string]any{"name": "Task"}, "project": map[string]any{"name": "Ops"},
 				"updated": "2026-11-20T10:00:00.000+0000", "comment": map[string]any{"comments": []any{}}}}}})
 		default:
 			w.WriteHeader(404)
@@ -65,7 +65,7 @@ func TestAskConfluenceAndJira(t *testing.T) {
 
 	s, _ := OpenStore(t.TempDir())
 	s.SetJiraConfig(JiraConfig{BaseURL: atl.URL, Mode: "server", Token: "tok"})
-	s.SetConfluenceConfig(ConfluenceConfig{Mode: "jira"}) // the Jira site + /wiki, same login
+	// Confluence never set up: Jira's login is used (the site + /wiki)
 	a := &App{store: s}
 	call := func(body any) askReply {
 		b, _ := json.Marshal(body)
@@ -76,7 +76,17 @@ func TestAskConfluenceAndJira(t *testing.T) {
 		return rep
 	}
 
-	rep := call(map[string]any{"q": "how do I restart the batch?", "ai": true})
+	// the default: Confluence only
+	if only := call(map[string]any{"q": "how do I restart the batch?"}); len(only.Sources) != 1 || len(only.Results) != 1 || only.Results[0].Source != "confluence" {
+		t.Fatalf("default should search Confluence only: %v %+v", only.Sources, only.Results)
+	}
+	if only := call(map[string]any{"q": "how do I restart the batch?", "sources": []string{"jira"}}); len(only.Results) != 1 || only.Results[0].Source != "jira" {
+		t.Fatalf("Jira only: %+v", only.Results)
+	}
+	rep := call(map[string]any{"q": "how do I restart the batch?", "ai": true, "sources": []string{"confluence", "jira"}})
+	if len(rep.Sources) != 2 || !strings.HasPrefix(rep.Sources[0], "Confluence") {
+		t.Fatalf("should search Confluence and Jira: %v", rep.Sources)
+	}
 	if len(rep.Errors) > 0 || len(rep.Results) != 2 {
 		t.Fatalf("results: %+v", rep)
 	}
@@ -100,7 +110,7 @@ func TestAskConfluenceAndJira(t *testing.T) {
 
 	// AI on: the matches go as search results with citations; the answer cites them
 	s.SetAskConfig(AskConfig{AI: true, Key: "sk-test"})
-	rep = call(map[string]any{"q": "how do I restart the batch?", "ai": true})
+	rep = call(map[string]any{"q": "how do I restart the batch?", "ai": true, "sources": []string{"confluence", "jira"}})
 	if aiReq == nil || (aiHeaders.Get("X-Api-Key") != "sk-test" && aiHeaders.Get("Authorization") != "Bearer sk-test") || !strings.Contains(aiHeaders.Get("Anthropic-Beta"), "server-side-fallback-2026-07-01") {
 		t.Fatalf("AI request headers: %v", aiHeaders)
 	}
