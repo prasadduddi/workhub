@@ -142,3 +142,15 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] Delete a thread / rename a folder / Quit: the question is a WorkHub box (title WorkHub), never "127.0.0.1 says"; Enter = OK, Esc = Cancel
   [ ] PROD terminal: paste several lines -> WorkHub box asks first; Cancel pastes nothing
   [ ] Windows: open a thread -> messages, names, thread list and message box in Lato (Slack's font), even without Lato installed
+  [ ] Thread header: ↓ Newest first puts the newest message on top; ↑ Oldest first back
+  [ ] Drag a thread onto another: indented under it; ▾ folds; drop on "Threads" = top again; search the parent finds sub-thread messages
+  [ ] ⧉ Only this thread: window without the thread list; ⧉ New window still opens the Tasks page; right-click SSH server -> Open in its own window
+  [ ] Dashboard: no empty boxes, attention buttons on the Today line; All connections and links: bookmarks as rows
+  [ ] Text a bit bigger by default (Settings -> Text size: Normal)
+  [ ] Thread file View / new snippet / API body: coloured code editor; API answer coloured
+  [ ] Ask page: a question finds Confluence pages and Jira issues together; words yellow; click opens the page/issue
+  [ ] Settings -> Ask: Same as my Jira login (Cloud) -> Test = connected; Server/DC token works
+  [ ] WorkHub-Desktop: Settings -> Ask -> Sign in with browser -> Confluence window, log in (SSO) -> it hides, Test = connected; Jira sign-in still works
+  [ ] (optional) AI answers: add an Anthropic key, switch on -> Ask shows "Answer" with numbered source links
+  [ ] SSH / FTP / SQL tree and thread list: ⧉ New window opens that whole page in its own window; ⇲ Dock back
+  [ ] New window: first time centred; move/resize it, Dock back, open again -> same place and size (FTP and SSH remember their own)

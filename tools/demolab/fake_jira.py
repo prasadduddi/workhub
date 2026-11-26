@@ -76,6 +76,24 @@ CM = {
     "CM-4433": ("Refunds 2.0 go-live", "Scheduled", _at(1, 20), _at(1, 23)),
 }
 
+# A pretend Confluence (at /wiki, same login) for 🔎 Ask: a few pages.
+PAGES = {
+    "9001": ("Batch server restart runbook", "OPS", "<h2>Restart order</h2><p>Stop the refund batch first: <code>/opt/batch/stop.sh</code>, wait for the queue to drain, then restart the app servers.</p><p>Start the batch again with <code>/opt/batch/start.sh</code> and check logs/batch.log for ERROR lines.</p>"),
+    "9002": ("Refund limits per merchant tier", "PAY", "<p>Tier A merchants may refund up to 5000 EUR per day, tier B 2500 EUR, tier C 1000 EUR. Limits are approved by the risk team; changes go through a CM change.</p>"),
+    "9003": ("Release checklist 4.2", "PAY", "<p>Before the PROD release: freeze merges, run the regression pack, get CM approval, announce the window in the release channel.</p>"),
+    "9004": ("Team lunch menu", "SOCIAL", "<p>Pizza on Fridays.</p>"),
+}
+DESC = {"PAY-123": "Merchants need a daily refund limit. Limits per tier come from the risk team.", "PAY-205": "Blocked: waiting for the tier list (refund limits per merchant tier) from the merchant team.",
+        "OPS-77": "Renew the TLS certificates on the batch servers before they expire; restart the batch after.", "PAY-201": "Refunds above the merchant limit need a second approver."}
+
+def words_of(s):
+    import re
+    return [w for w in re.findall(r"[a-z0-9-]+", s.lower()) if len(w) > 1]
+
+def hits(text, words, any_word):
+    t = text.lower()
+    return any(w in t for w in words) if any_word else all(w in t for w in words)
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def send(self, obj, code=200):
@@ -86,9 +104,37 @@ class H(BaseHTTPRequestHandler):
         if self.headers.get("Authorization") != "Bearer demo-token":
             return self.send({}, 401)
         parts = u.path.split("/")
+        if u.path == "/wiki/rest/api/space":
+            return self.send({"results": [{"key": "PAY"}], "size": 1})
+        if u.path == "/wiki/rest/api/search":
+            from urllib.parse import unquote_plus
+            import re
+            cql = unquote_plus(q.get("cql", "")); words = [w for t in re.findall(r'text ~ "([^"]*)"', cql) for w in words_of(t)]
+            res = []
+            for pid, (title, space, body) in PAGES.items():
+                plain = re.sub("<[^>]+>", " ", body)
+                if hits(title + " " + plain, words, False):
+                    res.append({"content": {"id": pid, "type": "page", "title": title}, "title": title, "url": f"/spaces/{space}/pages/{pid}",
+                        "excerpt": " ".join(plain.split())[:160], "lastModified": "2026-11-18T09:00:00.000Z", "resultGlobalContainer": {"title": space}})
+            return self.send({"results": res, "_links": {"base": "http://127.0.0.1:47990/wiki"}})
+        if u.path.startswith("/wiki/rest/api/content/"):
+            pid = parts[5]
+            if pid in PAGES:
+                return self.send({"id": pid, "title": PAGES[pid][0], "body": {"storage": {"value": PAGES[pid][2]}}})
+            return self.send({}, 404)
         if u.path in ("/rest/api/3/search/jql", "/rest/api/2/search"):
             from urllib.parse import unquote_plus
             jql = unquote_plus(q.get("jql", ""))
+            if "text ~" in jql:  # 🔎 Ask: issues whose summary / description has the words
+                import re
+                terms = re.findall(r'text ~ "([^"]*)"', jql); any_word = " OR " in jql
+                words = [w for t in terms for w in words_of(t)]
+                out = []
+                for k, (iid, fields, _) in ISSUES.items():
+                    if hits(fields["summary"] + " " + DESC.get(k, ""), words, any_word):
+                        out.append({"key": k, "fields": {**fields, "description": DESC.get(k, ""), "updated": "2026-11-20T10:00:00.000+0000",
+                            "project": {"name": k.split("-")[0]}, "comment": {"comments": []}}})
+                return self.send({"issues": out})
             if jql.startswith("parent = ") or jql.startswith('"Epic Link" = '):  # child work items (Cloud parent / Server Epic Link)
                 kids = CHILDREN.get(jql.split(" = ")[1].split()[0], [])
                 return self.send({"issues": [{"key": k, "fields": {"summary": s, "status": {"name": st}, "issuetype": {"name": t}}} for k, s, st, t in kids]})

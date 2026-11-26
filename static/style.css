@@ -1,5 +1,5 @@
 :root {
-  --ui-scale: 1.08; /* text size: Settings → Appearance (Normal) */
+  --ui-scale: 1.14; /* text size: Settings → Appearance (Normal) */
   --bg: #f4f5f7; --panel: #ffffff; --panel2: #eef0f3; --border: #dde1e6; --text: #1d2330; --muted: #555d69; /* darker grey: readable small text */
   --accent: #2f6fde; --accent-text: #fff; --danger: #4b5563; /* errors & delete: slate — red is PROD, orange is UAT */ --ok: #1f8a4c;
   --prod: #d64545; --uat: #d9822b; --test: #8e6bd8; --stage: #2a9d8f; --dev: #2f6fde; --dr: #7a7f87;
@@ -1374,7 +1374,11 @@ button.flash { animation: btnflash .8s ease-in-out 3; }
 .popbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--panel2); }
 .popbar .popicon { color: var(--accent); }
 body.popout .side, body.popout #sideSplit, body.popout #menubar, body.popout #gsearch, body.popout .upd-pill, body.popout #popChips,
-body.popout .tree-host, body.popout .tree-split, body.popout #chatFab { display: none !important; }
+body.popout #chatFab { display: none !important; }
+/* one terminal / SQL tab / connection in its own window: no tree, the full width for it.
+   A whole page (⧉ New window next to the tree) keeps its tree of connections. */
+body.popout:not(.pop-page) .tree-host, body.popout:not(.pop-page) .tree-split { display: none !important; }
+body.popout:not(.pop-page) .with-tree { grid-template-columns: minmax(0, 1fr); gap: 0; }
 body.popout main { margin-left: 0; }
 
 /* ⬇ Import connections */
@@ -1691,3 +1695,92 @@ mark.tfind { background: color-mix(in srgb, #ffd400 60%, transparent); color: in
   .tmsg .tbody pre, .tpanel .tbody pre { background: rgba(232,232,232,.04); border-color: rgba(232,232,232,.13); }
   .tbody a { color: #1d9bd1; }
 }
+
+.torder { white-space: nowrap; }
+
+/* a pop-out window with just one thread or one connection */
+body.pop-single .tasks-layout { grid-template-columns: minmax(0, 1fr); }
+body.pop-single .tasks-side { display: none; }
+
+/* the code editor over a text box (snippet, file viewer, API body) */
+.cm-over .CodeMirror { font: var(--fs-editor, 14px)/1.5 var(--mono); border: 1px solid var(--border); border-radius: 6px; }
+.snip-dlg .cm-over .CodeMirror { height: min(52vh, 460px); }
+#view-api .cm-over .CodeMirror { height: 220px; resize: vertical; overflow: hidden; }
+#apiResp.cm-s-wh { color: var(--text); }
+
+/* Dashboard, tidier: boxes grow with what they list (no tall empty boxes), hints for empty ones, attention buttons on the Today line */
+#view-dashboard.home #today { flex: 1 0 auto; min-height: 0; }
+#view-dashboard.home .today-grid { flex: 1 0 auto; grid-auto-rows: minmax(160px, auto); align-items: stretch; }
+#view-dashboard.home .tc-rows { max-height: max(260px, calc((100vh - 360px) / 2)); }
+.today-head { display: flex; align-items: center; gap: 8px; }
+.today-stats { display: inline-flex; gap: 6px; }
+.today-stats .stat { padding: 3px 10px; }
+.today-hints { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: calc(12.5px * var(--ui-scale)); margin: 2px 0 6px; }
+/* bookmarks and links as rows */
+.linkrows { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+.linkrow { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-top: 1px solid var(--border); min-width: 0; }
+.linkrow:first-child { border-top: 0; }
+.linkrow:hover { background: var(--panel2); }
+.linkrow .lr-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38%; }
+.linkrow .lr-url { flex: 1; min-width: 0; color: var(--muted); font-family: var(--mono); font-size: calc(12px * var(--ui-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.linkrow .lr-acts { display: inline-flex; gap: 4px; opacity: .55; } .linkrow:hover .lr-acts { opacity: 1; }
+.cards + .linkrows { margin-top: 8px; }
+.linkrow .lr-name { color: var(--accent); text-decoration: none; } .linkrow .lr-name:hover { text-decoration: underline; }
+
+/* sub-threads in the thread list */
+.tli.sub { margin-left: calc(var(--lvl) * 16px); border-left: 2px solid var(--border); }
+.tli-fold { border: 0; background: none; padding: 0 3px 0 0; min-height: 0; font-size: calc(11px * var(--ui-scale)); color: var(--muted); cursor: pointer; }
+.tkids { margin-left: 6px; font-size: calc(11.5px * var(--ui-scale)); color: var(--muted); font-weight: 400; }
+.tli.dragging { opacity: .45; }
+.tli.dropinto { outline: 2px dashed var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.tsec.droptop { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: 6px; }
+
+/* matches in sub-threads, under the thread's header */
+.tfind-sub { margin: 6px 12px 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel2); max-height: 30vh; overflow: auto; }
+.tfs-head { font-weight: 700; font-size: calc(12.5px * var(--ui-scale)); margin-bottom: 4px; }
+.tfs-row { padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.tfs-row:hover { background: var(--panel); }
+.tfs-t { font-weight: 600; margin-right: 8px; }
+.tfs-snip { font-size: calc(13px * var(--ui-scale)); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.popchip { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* a long thread name can't push ⚙ off */
+
+/* 🔎 Ask Confluence & Jira */
+#view-ask { overflow: auto; }
+.ask-wrap { max-width: 1100px; margin: 0 auto; padding: 8px 4px 30px; }
+.ask-h { margin: 6px 0 10px; font-size: calc(20px * var(--ui-scale)); }
+.ask-bar { display: flex; gap: 8px; align-items: center; }
+.ask-bar #askQ { flex: 1; font-size: calc(16px * var(--ui-scale)); padding: 10px 12px; border-radius: 10px; }
+.ask-ai { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; }
+.ask-setup { margin: 10px 0; padding: 8px 12px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+.ask-tip, .ask-none, .ask-wait { margin: 18px 4px; }
+.ask-err { margin: 10px 0; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, #e0a800 12%, transparent); }
+.ask-answer { margin: 12px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 5%, var(--panel)); white-space: pre-wrap; line-height: 1.5; font-family: var(--thread-font, inherit); font-size: calc(15px * var(--ui-scale)); }
+.ask-ahead { font-weight: 700; margin-bottom: 6px; white-space: normal; }
+.ask-cite { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin: 0 2px; padding: 0 4px; border-radius: 9px; background: var(--accent); color: #fff !important; font-size: 11px; font-weight: 700; text-decoration: none; vertical-align: 2px; }
+.ask-count { margin: 12px 2px 6px; }
+.ask-row { position: relative; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); margin-bottom: 8px; cursor: pointer; }
+.ask-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.ask-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ask-n { color: var(--muted); font-size: calc(12px * var(--ui-scale)); min-width: 16px; }
+.ask-src { font-size: calc(11.5px * var(--ui-scale)); font-weight: 700; border-radius: 4px; padding: 1px 6px; }
+.ask-src.conf { background: #e9f2ff; color: #0c66e4; } .ask-src.jira { background: #e9e6ff; color: #5e4db2; }
+.ask-title { font-weight: 700; font-size: calc(15px * var(--ui-scale)); color: var(--accent); text-decoration: none; }
+.ask-key { font-family: var(--mono); font-size: calc(12px * var(--ui-scale)); color: var(--muted); }
+.ask-snip { margin: 5px 0 0 24px; color: var(--text); line-height: 1.45; }
+.ask-acts { position: absolute; right: 10px; bottom: 8px; display: flex; gap: 6px; opacity: 0; background: var(--panel); } .ask-row:hover .ask-acts { opacity: 1; }
+#askOut mark.tfind { background: color-mix(in srgb, #ffd400 60%, transparent); color: inherit; border-radius: 2px; }
+
+body.popout #workPop { display: none; }
+
+/* new-window / dock-back icons */
+.ico-win { display: block; flex: none; }
+button.winbtn { display: inline-grid; place-items: center; padding: 4px 7px; min-width: 32px; flex: none !important; }
+.tasks-side .row button.winbtn { flex: none; }
+#popDock { display: inline-flex; align-items: center; gap: 7px; }
+.popbar .popicon { display: inline-flex; color: var(--accent); }
+.tab .pop .ico-win, .tab .pop svg { width: 14px; height: 14px; }
+.tab .pop { display: inline-flex; align-items: center; }
+body.popout #pageTitle { display: none; } /* the window's own bar names it */
+
+#popDock.winbtn { padding: 5px 9px; } #popDock .ico-win { width: 19px; height: 19px; }

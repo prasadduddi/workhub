@@ -164,6 +164,19 @@ const HELP_TOPICS = [
     'Without setup Teams opens on that chat with the text typed in — paste pictures with Ctrl+V, then Send.',
     'To bring messages in: select them in Teams, Ctrl+C, then the thread ⋯ → 📥 Add from Teams….',
     'Full connection: ⚙ Settings → Teams — enter the Tenant ID and Client ID IT gives you, then Sign in. Forward then sends directly (pictures too) and Add from Teams lets you pick a chat and tick its messages.'] },
+  { t: 'Ask Confluence & Jira', k: 'ask confluence jira search question rovo wiki pages issues ai answer sign in browser token', v: 'ask', s: [
+    'Open 🔎 Ask in the left menu and type a question in plain words (e.g. how do we restart the batch server?) — Enter.',
+    'Confluence pages and Jira issues that match are listed together, best first, with the matching sentences in yellow; click one to open it, or 🧵 post its link in a thread.',
+    'Set up Confluence in ⚙ Settings → Ask: “Same as my Jira login” on Atlassian Cloud, a token for Server / Data Center, or 🔑 Sign in with browser in WorkHub-Desktop (SSO / MFA — the window hides when you are in).',
+    'Optional ✨ AI answers (off by default): add your Anthropic API key and switch them on — the best matches are then sent to Anthropic and you get a short answer with numbered links to its sources. Check your company allows this first.'] },
+  { t: 'Sub-threads (a thread under another)', k: 'sub thread child parent tree nest drag drop under move top level search', v: 'tasks', s: [
+    'In the thread list, drag a thread onto another: it moves under it (indented). ▾ / ▸ folds the sub-threads.',
+    'Drop it on a section heading (Threads, Starred, Done) to make it a top-level thread again — or right-click → ↳ Put under another thread… / ↰ Move to the top level.',
+    'Searching inside a thread (🔍) also searches all its sub-threads: their matches are listed under the header; click one to open it.'] },
+  { t: 'Open one thread or one connection in its own window', k: 'new window pop out popout single thread connection own window dock', v: 'tasks', s: [
+    'A thread: ⧉ Only this thread in its header (⧉ New window opens the Tasks page with the thread list).',
+    'A connection: right-click it in the SSH, SQL or FTP tree (or ⋯ on its card) → ⧉ Open in its own window.',
+    '⇲ Dock back (or closing the window) puts it back into WorkHub.'] },
   { t: 'Search inside a thread', k: 'search find inside thread message word ctrl+f highlight yellow only matches next previous', v: 'tasks', s: [
     'Open the thread and type in 🔍 Search this thread in its header (or press Ctrl+F on the Tasks page).',
     'Matching words are marked in yellow; ▲ ▼ (or Enter / Shift+Enter) move between the messages — a match in a reply opens its panel.',

@@ -393,8 +393,11 @@ with sync_playwright() as p:
         card = pg.locator(f"#tposts [data-post='{last['id']}'] .tatt")
         expect(card.count() == 1 and card.locator("[data-att=view]").count() == 1, "no attachment card")
         card.locator("[data-att=view]").click(); pg.wait_for_selector("#attView[open]")
-        expect("./start.sh" in pg.input_value("#attView .av-text"), "viewer text")
-        pg.fill("#attView .av-text", "echo changed\n"); pg.click("#attView [data-av=save]"); pg.wait_for_timeout(400)
+        expect("./start.sh" in pg.input_value("#attView textarea.av-text"), "viewer text")
+        expect(ev("document.querySelector('#attView textarea.av-text').cm.getOption('mode')") == "text/x-sh", "viewer not coloured as a shell script")
+        expect(pg.locator("#attView .CodeMirror .cm-comment").count() >= 1, "no highlighted comment in the viewer")
+        ev("document.querySelector('#attView textarea.av-text').cm.setValue('echo changed\\n')"); pg.wait_for_timeout(100)
+        pg.click("#attView [data-av=save]"); pg.wait_for_timeout(400)
         pg.click("#attView [data-av=close]")
         card.locator("[data-att=copy]").click(); pg.wait_for_timeout(400)
         expect(ev("navigator.clipboard.readText()") == "echo changed\n", "Copy didn't give the saved text")
@@ -412,6 +415,60 @@ with sync_playwright() as p:
               loaded: [...document.fonts].filter(f => f.family.includes('WH Lato') && f.status === 'loaded').length }; })()""")
         expect(st["fam"].startswith('"WH Lato"') and abs(st["px"] - 15) < 0.2 and st["w"] == "900", f"style: {st}")
         expect(st["loaded"] >= 2, f"Lato not loaded: {st}")
+
+    @check("thread order: newest first / oldest first, kept")
+    def _():
+        ev("show('tasks')")
+        tid = ev("Work.list.find(w => w.title.startsWith('Incident')).id")
+        ev(f"Work.open('{tid}')"); pg.wait_for_timeout(500)
+        first = lambda: ev("document.querySelector('#tposts .tmsg')?.dataset.post")
+        old = first(); pg.click("#torder"); pg.wait_for_timeout(300)
+        expect("Newest" in pg.inner_text("#torder") and first() != old, "newest first didn't change the order")
+        top = ev("[...Work.current.posts].filter(p => !p.parent).sort((a, b) => new Date(b.at) - new Date(a.at))[0].id")
+        expect(first() == top, "the newest message isn't at the top")
+        pg.click("#torder"); pg.wait_for_timeout(300)
+        expect("Oldest" in pg.inner_text("#torder") and first() == old, "back to oldest first")
+
+    @check("sub-threads: drag a thread onto another; searching the parent finds messages in its sub-threads")
+    def _():
+        ev("show('tasks')")
+        par = ev("Work.list.find(w => w.title.startsWith('PAY-201')).id")
+        kid = ev("Work.list.find(w => w.title.startsWith('Incident')).id")
+        src = pg.locator(f"#workList [data-work='{kid}']"); dst = pg.locator(f"#workList [data-work='{par}']")
+        src.drag_to(dst); pg.wait_for_timeout(800)
+        expect(ev(f"Work.list.find(w => w.id === '{kid}').parent") == par, "drop didn't make it a sub-thread")
+        expect(ev(f"document.querySelector('#workList [data-work=\"{kid}\"]').classList.contains('sub')"), "not indented under its thread")
+        ev(f"Work.open('{par}')"); pg.wait_for_timeout(500)
+        pg.fill("#tfindIn", "deadlock"); pg.dispatch_event("#tfindIn", "input")
+        pg.wait_for_selector("#tfindSub:not([hidden]) .tfs-row", timeout=5000)
+        expect("sub-thread" in pg.inner_text("#tfindN") and pg.locator("#tfindSub mark.tfind").count() > 0, f"counter: {pg.inner_text('#tfindN')}")
+        pg.locator("#tfindSub .tfs-row").first.click(); pg.wait_for_timeout(700)
+        expect(ev("Work.current.id") == kid and ev("Work.find.q") == "deadlock", "clicking a sub-thread match didn't open it there")
+        # a loop is refused; back to the top level
+        r = ev(f"api('POST', '/api/work/{par}/parent', {{ parent: '{kid}' }}).then(() => 'ok', e => e.message)")
+        expect("itself" in r, f"a loop was allowed: {r}")
+        ev(f"Work.setParent('{kid}', '')"); pg.wait_for_timeout(500)
+        expect(not ev(f"Work.list.find(w => w.id === '{kid}').parent"), "back to the top level failed")
+
+    @check("⧉ Only this thread: its own window without the thread list; connections: Open in its own window")
+    def _():
+        ev("show('tasks')")
+        tid = ev("Work.list.find(w => w.title.startsWith('PAY-205')).id")
+        ev(f"Work.open('{tid}')"); pg.wait_for_timeout(500)
+        expect(pg.is_visible("#workPop") and pg.locator("[data-tact=popout]").count() == 0, "⧉ New window should be over the thread list, not in the thread")
+        with ctx.expect_page() as pw:
+            pg.click("[data-tact=popone]")
+        w = pw.value
+        w.wait_for_function("typeof Work !== 'undefined' && Work.current", timeout=15000); w.wait_for_timeout(500)
+        expect(w.evaluate("document.body.classList.contains('pop-single') && !document.querySelector('.tasks-side').offsetParent"), "thread list still shown")
+        expect(w.evaluate(f"Work.current.id") == tid, "wrong thread")
+        w.click("#popDock"); pg.wait_for_timeout(800)
+        expect(w.is_closed() and pg.locator("#popChips .popchip").count() == 0, "didn't dock back")
+        e = ev("S.entries.find(e => canSSH(e))?.id")
+        if e:
+            ev(f"show('terminal'); Tree.menu({{ clientX: 300, clientY: 300 }}, document.querySelector('#view-terminal [data-id=\"{e}\"]') || {{ dataset: {{ id: '{e}' }} }}, 'ssh')"); pg.wait_for_timeout(300)
+            expect(pg.locator("#ctxMenu button:has-text('Open in its own window')").count() == 1, "no 'Open in its own window' on a connection")
+            pg.keyboard.press("Escape")
 
     @check("move a message to another thread and back")
     def _():
@@ -750,11 +807,15 @@ with sync_playwright() as p:
 
     @check("text size: bigger by default, Settings → Appearance changes it")
     def _():
-        expect(float(ev("parseFloat(getComputedStyle(document.body).fontSize)")) > 14.5, "default text not bigger")
+        expect(float(ev("parseFloat(getComputedStyle(document.body).fontSize)")) > 15.5, "default text not bigger")
+        expect(abs(float(ev("Fonts.ui()")) - 1.14) < 0.001, f"Normal should be 1.14: {ev('Fonts.ui()')}")
         pg.click("#settingsTop"); pg.wait_for_timeout(400); pg.click("[data-settab=look]")
-        pg.select_option("#settingsBody select[data-set=uiscale]", "1.25"); pg.wait_for_timeout(300)
-        expect(float(ev("parseFloat(getComputedStyle(document.body).fontSize)")) > 17, "Larger didn't apply")
-        pg.select_option("#settingsBody select[data-set=uiscale]", "1.08"); pg.wait_for_timeout(200)
+        pg.select_option("#settingsBody select[data-set=uiscale]", "1.32"); pg.wait_for_timeout(300)
+        expect(float(ev("parseFloat(getComputedStyle(document.body).fontSize)")) > 18, "Larger didn't apply")
+        pg.select_option("#settingsBody select[data-set=uiscale]", "1.14"); pg.wait_for_timeout(200)
+        # someone who had picked the old "Normal" (1.08) moves up to the new one, once
+        ev("store.set('uiScale', 1.08); store.set('uiScaleV2', false)")
+        expect(abs(float(ev("Fonts.ui()")) - 1.14) < 0.001 and abs(float(ev("Fonts.ui()")) - 1.14) < 0.001, "old Normal not moved up")
         close_dialogs()
 
     @check("thread list: the capture thread says Active; no 'To do' badges")
@@ -785,6 +846,11 @@ with sync_playwright() as p:
         pg.fill("#apiURL", "http://127.0.0.1:47990/rest/api/2/serverInfo")
         pg.click("#apiSend")
         pg.wait_for_function("Api.resp && Api.resp.status > 0", timeout=15000)
+        pg.wait_for_timeout(300)
+        expect(ev("document.querySelector('#apiResp').classList.contains('cm-s-wh')") and "cm-property" in ev("highlightHTML('{\"a\": 1}', 'application/json')"), "answer not coloured")
+        ev("$('#apiBodyType').value = 'json'; $('#apiBodyType').dispatchEvent(new Event('change')); Api.dirty = false; $('#apiBody').value = '{\"id\": 4711}'; 0")
+        expect(ev("$('#apiBody').cm.getOption('mode')") == "application/json" and ev("$('#apiBody').value") == '{"id": 4711}', "body editor")
+        expect(not ev("Api.dirty"), "setting the body from code counted as an edit")
 
     @check("compare two folders and two files")
     def _():
@@ -872,6 +938,79 @@ with sync_playwright() as p:
         expect(ev("_ans") == "xyz", f"askText answer: {ev('_ans')}")
         ev("window.__askManual = false")
         expect(not native, f"browser pop-ups appeared: {native[:3]}")
+
+    @check("dashboard: tidy overview (no empty boxes, attention on the Today line); bookmarks as rows")
+    def _():
+        ev("show('dashboard'); Home.set(false)"); pg.wait_for_timeout(600)
+        expect(pg.locator("#todayStats .stat").count() >= 1 and pg.locator("#stats .stat").count() == 0, "attention buttons not on the Today line")
+        boxes = ev("[...document.querySelectorAll('#today .tcardx')].map(c => c.querySelectorAll('.tc-row').length)")
+        expect(all(n > 0 for n in boxes), f"an empty box is shown: {boxes}")
+        ev("Home.set(true)"); pg.wait_for_timeout(600)
+        rows = pg.locator("#board .linkrows .linkrow").count()
+        expect(rows >= 3, f"bookmarks not shown as rows ({rows})")
+        expect(pg.locator("#board .card .host").filter(has_text="www.bbc.co.uk").count() == 0, "a bookmark is still a card")
+        ev("Home.set(false)")
+
+    @check("⧉ New window in each tree area opens that whole page (SSH, FTP, SQL, Tasks)")
+    def _():
+        for view in ("terminal", "files", "sql"):
+            ev(f"show('{view}')"); pg.wait_for_timeout(300)
+            b = pg.locator(f"#view-{view} .tree-tools [data-tool=popout]")
+            expect(b.count() == 1 and b.is_visible(), f"no ⧉ New window in the {view} tree")
+        ev("show('files')"); pg.wait_for_timeout(300)
+        with ctx.expect_page() as pw:
+            pg.click("#view-files .tree-tools [data-tool=popout]")
+        w = pw.value
+        w.wait_for_function("document.body.classList.contains('popout') && document.querySelector('#view-files').classList.contains('active')", timeout=15000)
+        expect(not w.evaluate("document.body.classList.contains('pop-single')"), "whole FTP page expected")
+        w.wait_for_timeout(800)
+        expect(w.evaluate("!!document.querySelector('#view-files .tree-host').offsetParent && document.querySelectorAll('#view-files .tree .tnode.item').length > 0"), "no connections in the FTP window")
+        expect(w.evaluate("document.querySelector('#view-files .tree-main').getBoundingClientRect().width > innerWidth * 0.5"), "the FTP panes are squeezed")
+        w.click("#popDock"); pg.wait_for_timeout(800)
+        expect(w.is_closed(), "didn't dock back")
+        ev("show('tasks')"); pg.wait_for_timeout(300)
+        with ctx.expect_page() as pw:
+            pg.click("#workPop")
+        w = pw.value
+        w.wait_for_function("document.body.classList.contains('popout') && document.querySelector('#view-tasks').classList.contains('active')", timeout=15000)
+        expect(w.evaluate("!!document.querySelector('.tasks-side').offsetParent"), "the whole Tasks page should keep its thread list")
+        w.click("#popDock"); pg.wait_for_timeout(800)
+
+    @check("new windows open centred the first time, then where that kind of window was when docked back")
+    def _():
+        ev("localStorage.removeItem('wh-popwin:page:files')")
+        p = ev("Popout.place('page', 'files')")
+        cx = ev("screen.availLeft + screen.availWidth / 2"); cy = ev("screen.availTop + screen.availHeight / 2")
+        expect(abs(p["x"] + p["w"] / 2 - cx) <= 2 and abs(p["y"] + p["h"] / 2 - cy) <= 2, f"not centred: {p}")
+        ev("show('files')"); pg.wait_for_timeout(300)
+        with ctx.expect_page() as pw:
+            pg.click("#view-files .tree-tools [data-tool=popout]")
+        w = pw.value; w.wait_for_function("document.body.classList.contains('popout')", timeout=15000)
+        w.evaluate("Popout.savePlace = function () { localStorage.setItem(this.posKey(this.me.kind, this.me.id), JSON.stringify({ x: 40, y: 60, w: 900, h: 640 })); }; 0")  # headless windows can't be moved: pretend it was
+        w.click("#popDock"); pg.wait_for_timeout(600)
+        got = ev("Popout.place('page', 'files')")
+        expect(got == {"x": 40, "y": 60, "w": 900, "h": 640}, f"position not kept: {got}")
+        ev("localStorage.removeItem('wh-popwin:page:files')")
+
+    @check("🔎 Ask: Confluence pages and Jira issues together, words in yellow; ⚙ Settings → Ask has the Confluence sign-in")
+    def _():
+        ev("show('ask')"); pg.wait_for_timeout(500)
+        expect(pg.is_visible("#askQ") and pg.is_hidden("#askAIWrap"), "Ask page / AI should be off by default")
+        pg.fill("#askQ", "how do we restart the batch server?"); pg.press("#askQ", "Enter")
+        pg.wait_for_selector("#askOut .ask-row", timeout=15000)
+        srcs = ev("[...document.querySelectorAll('#askOut .ask-src')].map(x => x.textContent)")
+        expect(any("Confluence" in x for x in srcs) and any("Jira" in x for x in srcs), f"sources: {srcs}")
+        expect("restart runbook" in pg.inner_text("#askOut").lower() and pg.locator("#askOut mark.tfind").count() > 0, "runbook / marks missing")
+        expect(pg.locator("#askOut .ask-err").count() == 0, pg.inner_text("#askOut")[:200])
+        pg.click("#settingsTop"); pg.wait_for_timeout(400); pg.click("[data-settab=ask]"); pg.wait_for_timeout(400)
+        expect(pg.locator("#settingsBody select[data-set=conf-mode]").count() == 1 and "AI answers" in pg.inner_text("#settingsBody"), "no Ask settings")
+        pg.select_option("#settingsBody select[data-set=conf-mode]", "browser"); pg.wait_for_timeout(600)
+        expect(pg.locator("#settingsBody [data-set=conf-signin]").count() == 1, "no Sign in with browser button")
+        pg.select_option("#settingsBody select[data-set=conf-mode]", "jira"); pg.wait_for_timeout(600)
+        pg.click("#settingsBody [data-set=conf-test]"); pg.wait_for_timeout(1500)
+        expect("connected" in pg.inner_text("#confTestState"), f"test: {pg.inner_text('#confTestState')}")
+        expect(ev("api('GET', '/api/ask/config').then(c => c.ai)") is False, "AI must be off by default")
+        close_dialogs()
 
     @check("no page errors during the whole run")
     def _():

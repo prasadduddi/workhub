@@ -154,26 +154,28 @@ type Group struct {
 }
 
 type State struct {
-	Entries      []*Entry     `json:"entries"`
-	Clips        []*Clip      `json:"clips"`
-	Notes        []*Note      `json:"notes"`
-	Recent       []RecentFile `json:"recent"`
-	LocalDir     string       `json:"local_dir,omitempty"`         // last folder in This PC
-	MailFrom     time.Time    `json:"mail_since,omitzero"`         // newest mail already checked
-	MailIDs      []string     `json:"mail_seen,omitempty"`         // EntryIDs already captured
-	Ignored      []string     `json:"ignored_bookmarks,omitempty"` // browser bookmark URLs deleted in WorkHub
-	Props        []*PropNode  `json:"props,omitempty"`             // Properties page tree
-	WorkItems    []*WorkItem  `json:"work_items,omitempty"`        // Notepad++ work item pages
-	Jira         JiraConfig   `json:"jira"`
-	Teams        TeamsConfig  `json:"teams,omitempty"` // ⚙ Settings → Teams (Microsoft Graph); the refresh token never leaves the server
-	JiraIssues   []*JiraIssue `json:"jira_issues,omitempty"`
-	Events       []*Event     `json:"events,omitempty"` // Calendar
-	Snippets     []*Snippet   `json:"sql_snippets,omitempty"`
-	HTTPReqs     []*HTTPReq   `json:"http_requests,omitempty"` // 🌐 API page
-	HTTPEnvs     []*HTTPEnv   `json:"http_envs,omitempty"`
-	HTTPHistory  []HTTPHist   `json:"http_history,omitempty"`
-	HTTPLocalEnv bool         `json:"http_local_env,omitempty"` // the default "localhost" environment was made (once)
-	Settings     Settings     `json:"settings"`
+	Entries      []*Entry         `json:"entries"`
+	Clips        []*Clip          `json:"clips"`
+	Notes        []*Note          `json:"notes"`
+	Recent       []RecentFile     `json:"recent"`
+	LocalDir     string           `json:"local_dir,omitempty"`         // last folder in This PC
+	MailFrom     time.Time        `json:"mail_since,omitzero"`         // newest mail already checked
+	MailIDs      []string         `json:"mail_seen,omitempty"`         // EntryIDs already captured
+	Ignored      []string         `json:"ignored_bookmarks,omitempty"` // browser bookmark URLs deleted in WorkHub
+	Props        []*PropNode      `json:"props,omitempty"`             // Properties page tree
+	WorkItems    []*WorkItem      `json:"work_items,omitempty"`        // Notepad++ work item pages
+	Jira         JiraConfig       `json:"jira"`
+	Teams        TeamsConfig      `json:"teams,omitempty"`
+	Confluence   ConfluenceConfig `json:"confluence,omitzero"` // Ask: Confluence sign-in (the token never leaves the server)
+	Ask          AskConfig        `json:"ask,omitzero"`        // Ask: AI answers (off by default) and the Anthropic API key // ⚙ Settings → Teams (Microsoft Graph); the refresh token never leaves the server
+	JiraIssues   []*JiraIssue     `json:"jira_issues,omitempty"`
+	Events       []*Event         `json:"events,omitempty"` // Calendar
+	Snippets     []*Snippet       `json:"sql_snippets,omitempty"`
+	HTTPReqs     []*HTTPReq       `json:"http_requests,omitempty"` // 🌐 API page
+	HTTPEnvs     []*HTTPEnv       `json:"http_envs,omitempty"`
+	HTTPHistory  []HTTPHist       `json:"http_history,omitempty"`
+	HTTPLocalEnv bool             `json:"http_local_env,omitempty"` // the default "localhost" environment was made (once)
+	Settings     Settings         `json:"settings"`
 }
 
 const (

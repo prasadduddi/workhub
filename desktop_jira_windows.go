@@ -24,13 +24,14 @@ var (
 	pCallWindowProc     = user32.NewProc("CallWindowProcW")
 	pSetForegroundWin   = user32.NewProc("SetForegroundWindow")
 	pIsWindowVisible    = user32.NewProc("IsWindowVisible")
-	jiraWinOrigProc     uintptr
+	signWinProcs        sync.Map // hwnd → its original window procedure
 	jiraWinProcCallback = syscall.NewCallback(func(hwnd, msg, wp, lp uintptr) uintptr {
 		if msg == 0x0010 { // WM_CLOSE: hide, keep the session
 			pShowWindow.Call(hwnd, 0) // SW_HIDE
 			return 0
 		}
-		r, _, _ := pCallWindowProc.Call(jiraWinOrigProc, hwnd, msg, wp, lp)
+		orig, _ := signWinProcs.Load(hwnd)
+		r, _, _ := pCallWindowProc.Call(orig.(uintptr), hwnd, msg, wp, lp)
 		return r
 	})
 )
@@ -40,9 +41,17 @@ type jiraReply struct {
 	body   string
 }
 
-// setupJiraWindow sets the jiraWin* hooks. main is the app's window; all
-// window work is done on its thread through main.Dispatch.
+// setupJiraWindow sets the jiraWin* hooks (Jira) and the confWin* hooks
+// (Confluence: its own window, same WebView2 profile, so SSO is shared).
 func setupJiraWindow(main webview2.WebView) {
+	jiraWinOpen, jiraWinHide, jiraWinShown, jiraWinFetch = newSignInWindow(main, "Jira")
+	confWinOpen, confWinHide, confWinShown, confWinFetch = newSignInWindow(main, "Confluence")
+}
+
+// newSignInWindow: a sign-in window for one site. main is the app's window;
+// all window work is done on its thread through main.Dispatch.
+func newSignInWindow(main webview2.WebView, site string) (
+	open func(u string, show, reload bool) error, hide func(), shown func() bool, fetch func(u string) (int, string, error)) {
 	var (
 		jw      webview2.WebView // only touched on the main thread
 		jwHwnd  uintptr
@@ -58,7 +67,7 @@ func setupJiraWindow(main webview2.WebView) {
 		case err := <-done:
 			return err
 		case <-time.After(60 * time.Second):
-			return errors.New("the Jira sign-in window didn't respond")
+			return errors.New("the " + site + " sign-in window didn't respond")
 		}
 	}
 	create := func(u string) error {
@@ -66,14 +75,15 @@ func setupJiraWindow(main webview2.WebView) {
 			AutoFocus: true,
 			DataPath:  filepath.Join(filepath.Dir(defaultDataDir()), "webview2"),
 			WindowOptions: webview2.WindowOptions{
-				Title: "Sign in to Jira — WorkHub (close this window when you're signed in)", Width: 1000, Height: 780, Center: true, IconId: 1,
+				Title: "Sign in to " + site + " — WorkHub (close this window when you're signed in)", Width: 1000, Height: 780, Center: true, IconId: 1,
 			},
 		})
 		if jw == nil {
-			return errors.New("couldn't open the Jira sign-in window (WebView2)")
+			return errors.New("couldn't open the " + site + " sign-in window (WebView2)")
 		}
 		jwHwnd = uintptr(jw.Window())
-		jiraWinOrigProc, _, _ = pSetWindowLongPtr.Call(jwHwnd, ^uintptr(3) /* GWLP_WNDPROC = -4 */, jiraWinProcCallback)
+		orig, _, _ := pSetWindowLongPtr.Call(jwHwnd, ^uintptr(3) /* GWLP_WNDPROC = -4 */, jiraWinProcCallback)
+		signWinProcs.Store(jwHwnd, orig)
 		_ = jw.Bind("whJiraReply", func(id, status int, body string) {
 			mu.Lock()
 			ch := waiting[id]
@@ -90,7 +100,7 @@ func setupJiraWindow(main webview2.WebView) {
 		return nil
 	}
 
-	jiraWinOpen = func(u string, show, reload bool) error {
+	open = func(u string, show, reload bool) error {
 		if p, err := url.Parse(u); err == nil && p.Host != "" {
 			o := p.Scheme + "://" + p.Host
 			mu.Lock()
@@ -116,7 +126,7 @@ func setupJiraWindow(main webview2.WebView) {
 		})
 	}
 
-	jiraWinHide = func() {
+	hide = func() {
 		_ = onMain(func() error {
 			if jwHwnd != 0 {
 				pShowWindow.Call(jwHwnd, 0)
@@ -125,7 +135,7 @@ func setupJiraWindow(main webview2.WebView) {
 		})
 	}
 
-	jiraWinShown = func() bool {
+	shown = func() bool {
 		shown := false
 		_ = onMain(func() error {
 			if jwHwnd != 0 {
@@ -137,7 +147,7 @@ func setupJiraWindow(main webview2.WebView) {
 		return shown
 	}
 
-	jiraWinFetch = func(u string) (int, string, error) {
+	fetch = func(u string) (int, string, error) {
 		mu.Lock()
 		nextID++
 		id, ch, o := nextID, make(chan jiraReply, 1), origin
@@ -158,7 +168,7 @@ func setupJiraWindow(main webview2.WebView) {
 })();`
 		if err := onMain(func() error {
 			if jw == nil {
-				return errors.New("the Jira sign-in window isn't open")
+				return errors.New("the " + site + " sign-in window isn't open")
 			}
 			jw.Eval(js)
 			return nil
@@ -169,9 +179,10 @@ func setupJiraWindow(main webview2.WebView) {
 		case r := <-ch:
 			return r.status, r.body, nil
 		case <-time.After(45 * time.Second):
-			return 0, "", errors.New("Jira didn't answer in the sign-in window (45 s)")
+			return 0, "", errors.New(site + " didn't answer in the sign-in window (45 s)")
 		}
 	}
+	return open, hide, shown, fetch
 }
 
 func itoa(n int) string { b, _ := json.Marshal(n); return string(b) }

@@ -35,7 +35,7 @@ const Api = {
     this.cur = JSON.parse(JSON.stringify({ ...this.blank(), ...r, auth: { type: '', ...(r.auth || {}) } }));
     const c = this.cur;
     $('#apiName').value = c.name; $('#apiMethod').value = c.method || 'GET'; $('#apiURL').value = c.url;
-    $('#apiBodyType').value = c.body_type || 'none'; $('#apiBody').value = c.body || '';
+    $('#apiBodyType').value = c.body_type || 'none'; $('#apiBody').value = c.body || ''; apiBodyMode();
     $('#apiAuthType').value = c.auth.type || ''; $('#apiAuthUser').value = c.auth.user || ''; $('#apiAuthPass').value = c.auth.pass || '';
     $('#apiAuthToken').value = c.auth.token || ''; $('#apiAuthKey').value = c.auth.key || '';
     $('#apiInsecure').checked = !!c.insecure;
@@ -123,7 +123,10 @@ const Api = {
     let text = this.respTab === 'headers' ? Object.entries(r.headers).sort().map(([k, v]) => `${k}: ${v}`).join('\n')
       : r.base64 ? `(binary answer, ${fmtSize(r.size)}${ct ? ', ' + ct : ''} — not shown)` : this.pretty(r.body, ct);
     const q = $('#apiRespFilter').value.trim();
-    let html = esc(text.length > 2e6 ? text.slice(0, 2e6) + '\n… (shortened)' : text);
+    const shown = text.length > 2e6 ? text.slice(0, 2e6) + '\n… (shortened)' : text, tt = shown.trim();
+    const mode = this.respTab === 'headers' || r.base64 ? '' : /json/i.test(ct) || /^[[{]/.test(tt) ? 'application/json' : /xml|html/i.test(ct) || tt.startsWith('<') ? 'xml' : '';
+    $('#apiResp').classList.add('cm-s-wh');
+    let html = q ? esc(shown) : highlightHTML(shown, mode); // coloured like the editor (plain while filtering)
     if (q) html = html.replace(new RegExp(esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`);
     $('#apiResp').innerHTML = html;
     $('#apiResp mark')?.scrollIntoView({ block: 'center' });
@@ -251,6 +254,10 @@ $('#apiHeaders').addEventListener('input', e => { // typing in the last empty ro
 });
 for (const id of ['#apiName', '#apiURL', '#apiBody', '#apiAuthUser', '#apiAuthPass', '#apiAuthToken', '#apiAuthKey']) $(id).addEventListener('input', () => Api.changed());
 for (const id of ['#apiMethod', '#apiBodyType', '#apiInsecure']) $(id).addEventListener('change', () => Api.changed());
+// the request body in the code editor: JSON / XML coloured as the body type says
+editorOverTextarea($('#apiBody'), { mode: 'application/json', lineNumbers: false, foldGutter: false, gutters: [] });
+function apiBodyMode() { const t = $('#apiBodyType').value; $('#apiBody').cm?.setOption('mode', t === 'json' ? 'application/json' : t === 'xml' ? 'xml' : 'text/plain'); }
+$('#apiBodyType').addEventListener('change', apiBodyMode);
 $('#apiBodyPretty').onclick = () => { const b = $('#apiBody'); b.value = Api.pretty(b.value, $('#apiBodyType').value); Api.changed(); };
 $('#apiReqTabs').addEventListener('click', e => { const t = e.target.closest('[data-rt]'); if (!t) return; $$('#apiReqTabs .tab').forEach(x => x.classList.toggle('active', x === t)); $$('[data-rpane]').forEach(p => { p.hidden = p.dataset.rpane !== t.dataset.rt; }); });
 $('#apiRespTabs').addEventListener('click', e => { const t = e.target.closest('[data-pt]'); if (!t) return; $$('#apiRespTabs .tab').forEach(x => x.classList.toggle('active', x === t)); Api.respTab = t.dataset.pt; Api.renderResp(); });

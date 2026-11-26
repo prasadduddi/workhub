@@ -23,6 +23,7 @@ const Settings = {
     const sel = (act, val, opts) => `<select data-set="${act}">${opts.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
     const latest = backups.backups?.[0];
     const teamsRows = typeof Teams !== 'undefined' ? await Teams.settingsHTML(row, btn) : [];
+    const askRows = typeof Ask !== 'undefined' ? await Ask.settingsHTML(row, btn, sw, sel) : [];
     const ver = $('#appVersion')?.textContent || '';
     // One page per section, chosen on the left: a few related rows each, instead of one long list.
     const sections = [
@@ -38,7 +39,7 @@ const Settings = {
       ]],
       ['look', '🎨', 'Appearance', [
         row('Theme', '', sel('theme', Theme.pref(), [['auto', 'Follow Windows'], ['light', 'Light'], ['dark', 'Dark']])),
-        row('Text size', 'Bigger text for small or high-resolution screens (terminal and editor: A− / A+ there)', sel('uiscale', String(Fonts.ui()), [['1', 'Small'], ['1.08', 'Normal'], ['1.15', 'Large'], ['1.25', 'Larger']])),
+        row('Text size', 'Bigger text for small or high-resolution screens (terminal and editor: A− / A+ there)', sel('uiscale', String(Fonts.ui()), [['1.06', 'Small'], ['1.14', 'Normal'], ['1.22', 'Large'], ['1.32', 'Larger']])),
         row('Menu position', 'Pages on the left, or across the top', sel('menu', document.body.classList.contains('side-top') ? 'top' : 'left', [['left', 'Left'], ['top', 'Top']])),
       ]],
       ['capture', '📥', 'Capture', [
@@ -62,6 +63,7 @@ const Settings = {
       ['connections', '🏷', 'Connections', [
         row('Naming rules', 'Name servers and links by what their host name contains (e.g. -BAT- → Batch); this workspace only', btn('namerules', 'Edit…')),
       ]],
+      ['ask', '🔎', 'Ask (Confluence)', askRows],
       ['teams', '💬', 'Teams', teamsRows],
       ['programs', '↗', 'Programs', [
         row('Programs for “Open in”', 'PuTTY, FileZilla, SQL Developer, DBeaver…', btn('ext', 'Choose…')),

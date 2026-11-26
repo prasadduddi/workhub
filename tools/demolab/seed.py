@@ -217,6 +217,7 @@ def seed_api(sim, port):
     # Jira (pretend server from fake_jira.py)
     try:
         a.call("PUT", "/api/jira/config", {"base_url": "http://127.0.0.1:47990", "mode": "server", "token": "demo-token", "child_prefix": "CM-"})
+        a.call("PUT", "/api/confluence/config", {"mode": "jira"})  # 🔎 Ask: the pretend Confluence at /wiki, same login
         a.call("POST", "/api/jira", {"ref": "PAY-123, PAY-130, OPS-77"})
     except Exception as e:
         print("jira:", e)

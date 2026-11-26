@@ -82,6 +82,10 @@ async function deleteEntries(list) {
   });
 }
 
+// Icons: open in a new window (box, arrow out) / dock back into WorkHub (arrow in)
+const ICON_NEWWIN = '<svg class="ico-win" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg>';
+const ICON_DOCK = '<svg class="ico-win" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4l-8.5 8.5"/><path d="M11 7v6h6"/><path d="M4 9.5v9A1.5 1.5 0 0 0 5.5 20h9"/></svg>';
+
 // WorkHub's own question box (instead of the browser's prompt(), which shows
 // "127.0.0.1 says"): it opens just to the right of where you clicked (kept on
 // screen; centred when opened from the keyboard). Enter = OK, Esc / click outside = cancel.
@@ -446,6 +450,7 @@ function show(view) {
   if (view === 'files') Jobs.tick();
   if (view === 'files' && !Local.loaded) Local.load(lsGet('ftp.local'), true).then(() => { if (!Local.loaded) Local.load(''); });
   if (view === 'notes') { Notes.cm.refresh(); Notes.cm.focus(); }
+  if (view === 'api') setTimeout(() => $('#apiBody')?.cm?.refresh());
   if (view === 'tasks') Work.show();
   if (view === 'bookmarks') {
     Bookmarks.sync(false);
@@ -460,6 +465,7 @@ function show(view) {
   if (view === 'props') Props.load();
   if (view === 'ref') Ref.load();
   if (view === 'api') Api.load();
+  if (view === 'ask' && typeof Ask !== 'undefined') Ask.show();
   if (view === 'jira') Jira.load();
   if (view === 'monitor') Monitor.load();
   if (view === 'cal') Cal.load();
@@ -1040,9 +1046,10 @@ function renderStats(list, home) {
   $('#inboxCount').textContent = capturedToday || '';
   const line = `<div class="stat-line">${counts.filter(([, v], i) => v || i < 2).map(([k, v, f]) => f ? `<a href="#" data-find="${f}">${v} ${k}</a>` : `<span>${v} ${k}</span>`).join(' · ')}</div>`;
   if ($('#search').value.trim()) { $('#stats').innerHTML = list.length ? line : ''; return; } // searching: just what was found
-  if (home) { // the overview: only what asks for something
+  if (home) { // the overview: only what asks for something — on the Today line
     const n = S.entries.filter(e => e.unsorted).length;
-    $('#stats').innerHTML = (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing or a failed login — click to list them"><b>⚠ ${fix}</b><span>need attention</span></button>` : '')
+    $('#stats').innerHTML = ''; const slot = $('#todayStats') || $('#stats');
+    slot.innerHTML = (fix ? `<button class="stat warn" data-find="needs:attention" title="Connections with something missing or a failed login — click to list them"><b>⚠ ${fix}</b><span>need attention</span></button>` : '')
       + (n ? `<button class="stat inbox" data-find="is:unsorted" title="New captures you haven't looked at yet"><b>📥 ${n}</b><span>new to sort</span></button>` : '');
     return;
   }
@@ -1141,12 +1148,13 @@ const Today = {
     const card = (icon, title, n, rows, empty, go) => `<div class="tcardx"><div class="tc-head">${icon} <b>${title}</b>${n ? `<span class="n">${n}</span>` : ''}<span class="spacer"></span>${go ? `<a href="#" data-tgo="${go}" class="tiny">All →</a>` : ''}</div><div class="tc-rows">${rows.join('') || `<div class="muted tiny tc-empty">${empty}</div>`}</div></div>`;
     const kind = e => canDB(e) ? '<span class="dbic-s">SQL</span>' : canSSH(e) ? '<span class="dbic-s">SSH</span>' : canFiles(e) ? '<span class="dbic-s">FTP</span>' : '';
     const host = u => { try { return new URL(u).host; } catch { return ''; } };
-    el.innerHTML = `<div class="today-head">📅 <b>Today</b> <span class="muted tiny">${new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span></div><div class="today-grid">
-      ${card('🔌', 'Recent connections', '', recent.map(e => `<div class="tc-row" data-tconn="${e.id}" title="Connect · ${esc(e.host || e.url || '')}">${STATE_DOT[connState(e)]}${kind(e)}<span class="tc-t">${canDB(e) ? dbLabel(e) : esc(e.name || e.host)}</span>${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="muted tiny">${ago(e.last_used)}</span></div>`), 'Servers and databases you connect to show here.', 'terminal')}
-      ${card('🔗', 'Recent links', '', links.map(e => `<div class="tc-row" data-tlink="${e.id}" title="Open · ${esc(e.url)}">${dot(e)}<span class="tc-t">${esc(e.name || linkLabel(e.url) || host(e.url) || e.url)}</span><span class="muted tiny tc-host">${esc(host(e.url))}</span><span class="muted tiny">${ago(e.last_used)}</span></div>`), 'Links you open show here.', 'bookmarks')}
-      ${card('🧵', 'Open threads', threads.filter(w => w.unread).length ? threads.filter(w => w.unread).length + ' new' : '', threads.map(w => `<div class="tc-row ${w.unread ? 'unread' : ''}" data-tthread="${w.id}"><span class="tc-t">${w.starred ? '★ ' : ''}${esc(w.title)}</span>${w.unread ? `<span class="tunread">${w.unread}</span>` : ''}<span class="muted tiny">${fmtTime(w.updated)}</span></div>`), 'No open threads.', 'tasks')}
+    const hints = [!threads.length && '<span>🧵 No open threads — <a href="#" data-tgo="tasks">start one</a></span>', !recent.length && '<span>🔌 Servers and databases you connect to show here</span>', !links.length && '<span>🔗 Links you open show here</span>'].filter(Boolean);
+    el.innerHTML = `<div class="today-head">📅 <b>Today</b> <span class="muted tiny">${new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span><span class="spacer"></span><span id="todayStats" class="today-stats"></span></div>${hints.length ? `<div class="today-hints">${hints.join('')}</div>` : ''}<div class="today-grid">
+      ${!threads.length ? '' : card('🧵', 'Open threads', threads.filter(w => w.unread).length ? threads.filter(w => w.unread).length + ' new' : '', threads.map(w => `<div class="tc-row ${w.unread ? 'unread' : ''}" data-tthread="${w.id}"><span class="tc-t">${w.starred ? '★ ' : ''}${esc(w.title)}</span>${w.unread ? `<span class="tunread">${w.unread}</span>` : ''}<span class="muted tiny">${fmtTime(w.updated)}</span></div>`), 'No open threads.', 'tasks')}
       ${due.length ? card('⏰', 'Reminders due', due.length, due.map(r => { const late = new Date(r.post.remind_at) < new Date(); return `<div class="tc-row" data-trem="${r.thread}" data-tpost="${r.post.id}"><span class="tc-t">${esc(snip(r.post) || '(a message)')}</span><span class="muted tiny ${late ? 'late' : ''}">${late ? 'due ' : ''}${new Date(r.post.remind_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>`; }), '', '') : ''}
       ${jira.length ? card('◆', 'My Jira issues', jira.length, jira.map(j => `<div class="tc-row" data-tjira="${esc(j.key)}" title="${esc(j.summary || '')}"><b class="jkey">${esc(j.key)}</b><span class="tc-t">${esc(j.summary || '')}</span><span class="jstat">${esc(j.status || '')}</span></div>`), '', 'jira') : ''}
+      ${!recent.length ? '' : card('🔌', 'Recent connections', '', recent.map(e => `<div class="tc-row" data-tconn="${e.id}" title="Connect · ${esc(e.host || e.url || '')}">${STATE_DOT[connState(e)]}${kind(e)}<span class="tc-t">${canDB(e) ? dbLabel(e) : esc(e.name || e.host)}</span>${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}<span class="muted tiny">${ago(e.last_used)}</span></div>`), 'Servers and databases you connect to show here.', 'terminal')}
+      ${!links.length ? '' : card('🔗', 'Recent links', '', links.map(e => `<div class="tc-row" data-tlink="${e.id}" title="Open · ${esc(e.url)}">${dot(e)}<span class="tc-t">${esc(e.name || linkLabel(e.url) || host(e.url) || e.url)}</span><span class="muted tiny tc-host">${esc(host(e.url))}</span><span class="muted tiny">${ago(e.last_used)}</span></div>`), 'Links you open show here.', 'bookmarks')}
     </div>${pins.length ? `<div class="home-pins"><span class="muted tiny">★ Pinned</span>${pins.map(e => `<button class="pinchip" ${e.url && !isConn(e) ? `data-tlink="${e.id}"` : `data-tconn="${e.id}"`} title="${esc(e.url && !isConn(e) ? 'Open ' + e.url : 'Connect · ' + (e.host || ''))}">${dot(e)} ${esc(e.name || e.host || linkLabel(e.url) || e.url)}</button>`).join('')}</div>` : ''}`;
     this.reminders().then(r => { if (r !== this.lastRem) { this.lastRem = r; this.render(Home.on()); } });
   },
@@ -1209,7 +1217,8 @@ function renderBoard() {
   // Searching: the group holding the best match comes first (Object keys keep list order).
   board.innerHTML = back + recent + fixNote + inboxNote + (S.ranked ? Object.keys(groups) : Object.keys(groups).sort()).map(g => {
     const items = groups[g];
-    const body = S.layout === 'table' ? tableHTML(items) : cardsHTML(items);
+    const links = S.layout === 'table' ? [] : items.filter(isLinkOnly), conns = items.filter(e => !links.includes(e));
+    const body = S.layout === 'table' ? tableHTML(items) : (conns.length ? cardsHTML(conns) : '') + (links.length ? linkRowsHTML(links) : '');
     return `<div class="group"><div class="group-head"><h3>${esc(g)}</h3><span class="n">${items.length}</span>
       ${S.groupBy === 'project' ? `<button class="icon ghost" data-act="rename-project" data-project="${esc(g)}" title="Rename project">✎</button>` : ''}</div>${body}</div>`;
   }).join('') + rest;
@@ -1361,6 +1370,21 @@ function jiraResultsHTML(list) {
         ${j.prs.length ? `<div class="muted tiny">⇄ ${j.prs.map(p => `${Jira.prBadge(p.status)} ${esc(p.name)}`).join(' · ')}</div>` : ''}
         ${j.children.length ? `<div class="muted tiny">☑ ${j.children.map(c => `<b>${esc(c.key)}</b> ${esc(c.status)}`).join(' · ')}</div>` : ''}</div>`).join('')}</div>`;
   return `<div class="group"><div class="group-head"><h3>◆ Jira</h3><span class="n">${list.length}</span></div>${body}</div>`;
+}
+
+// Bookmarks and other plain links: one tidy row each (name, address, env, Open, ⋯) instead of cards in columns.
+const isLinkOnly = e => !!e.url && !/^jdbc:/i.test(e.url) && !isConn(e);
+function linkRowsHTML(items) {
+  const host = u => { try { const x = new URL(u); return x.host + (x.pathname !== '/' ? x.pathname : ''); } catch { return u; } };
+  const sorted = S.view.sort || S.ranked ? items : [...items].sort((a, b) => (b.favorite - a.favorite) || usageScore(b) - usageScore(a) || (a.name || a.url).localeCompare(b.name || b.url));
+  return '<div class="linkrows">' + sorted.map(e => `<div class="linkrow env-${esc(e.env || '')}" data-detail="${e.id}">
+    <span class="star ${e.favorite ? 'on' : ''}" data-act="fav" data-id="${e.id}" title="Pin">${e.favorite ? '★' : '☆'}</span>
+    <a class="lr-name" href="${esc(e.url)}" target="_blank" rel="noopener" data-open="${e.id}" title="Open ${esc(e.url)}">${esc(e.name || linkLabel(e.url) || host(e.url))}</a>
+    ${linkLabel(e.url) ? `<span class="ulabel"${ruleStyle(e.url)}>${esc(linkLabel(e.url))}</span>` : ''}
+    <span class="lr-url" title="${esc(e.url)}">${esc(host(e.url))}</span>
+    ${e.env ? `<span class="badge ${esc(e.env)}">${esc(e.env)}</span>` : ''}${S.groupBy !== 'project' && e.project ? `<span class="tag">${esc(e.project)}</span>` : ''}
+    <span class="lr-acts"><button class="icon" data-act="open" data-id="${e.id}">Open ↗</button><button class="icon more" data-act="more" data-id="${e.id}" title="More: copy, edit, move, delete…">⋯</button></span>
+  </div>`).join('') + '</div>';
 }
 
 function cardsHTML(items) {
@@ -2693,7 +2717,7 @@ const Tree = {
   render() {
     for (const host of $$('.tree-host')) {
       if (!host.firstChild) {
-        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="new" title="New connection">+ New</button>${host.dataset.mode === 'ssh' ? ('<button data-tool="sshkeys" ' + (S.sshKeysOff ? 'hidden ' : '') + 'title="My SSH keys: copy your public key for GitHub (read-only — nothing in .ssh is changed)">🔑 Keys</button>') : ''}</div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
+        host.innerHTML = `<div class="tree-tools"><input type="search" placeholder="Filter servers…"><select data-tool="groupby" title="Group servers by">${Object.entries(TREE_GROUPS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><button data-tool="new" title="New connection">+ New</button>${typeof Popout !== 'undefined' && !Popout.me ? `<button data-tool="popout" class="icon winbtn" aria-label="Open in a new window" title="Open the whole ${esc(Menubar?.label?.(host.closest('.view')?.id.replace('view-', '')) || 'page')} page in a new window (Dock back puts it back)">${ICON_NEWWIN}</button>` : ''}${host.dataset.mode === 'ssh' ? ('<button data-tool="sshkeys" ' + (S.sshKeysOff ? 'hidden ' : '') + 'title="My SSH keys: copy your public key for GitHub (read-only — nothing in .ssh is changed)">🔑 Keys</button>') : ''}</div><div class="tree" tabindex="0" title="↑ ↓ move · Enter connects · → ← open / fold"></div>`;
         this.wire(host);
       }
       $('select[data-tool=groupby]', host).value = this.groupMode(host.dataset.mode);
@@ -2746,6 +2770,7 @@ const Tree = {
     host.addEventListener('click', ev => {
       const tool = ev.target.closest('button[data-tool]')?.dataset.tool;
       if (tool === 'new') return openEntryDialog(null);
+      if (tool === 'popout') return Popout.popPage(host.closest('.view').id.replace('view-', ''));
       if (tool === 'rules') return openNameRules();
       if (tool === 'sshkeys') return SSHKeys.open();
       const exp = ev.target.closest('[data-dbexp]');
@@ -2948,6 +2973,7 @@ const Tree = {
         }], ['Stop tunnels', async () => { await api('POST', `/api/tunnels/${e.id}/stop`); toast('Tunnels stopped' + (e.extra.tunnels_auto === '1' ? ' (they restart within a minute while "Start when WorkHub starts" is on)' : '')); Tunnels.load(); }], '-');
       }
       if (problems(e).some(p => p[0] === 'password')) items.push(['🔑 Logs in with a key / SSO (no password)', async () => { await api('POST', '/api/entries', { ...entryInput(e), password: e.password, extra: { ...(e.extra || {}), auth: 'key' } }); poll(); toast(`${e.name}: marked as key login`); }]);
+      if (isConn(e) && typeof Popout !== 'undefined' && !Popout.me) items.push(['⧉ Open in its own window', () => Popout.popConn(e, Popout.connHow(e, mode))]);
       items.push(['🧵 Add to task thread…', () => Work.addEntry(e, ev)]);
       const port = canDB(e) ? e.port || (dbKindOf(e) === 'oracle' ? 1521 : 5432) : canSSH(e) ? sshPort(e) : e.port;
       // Two copy options: Copy = the basics (host, port, user, password…), Copy all = everything.
@@ -4558,13 +4584,54 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 const root = document.documentElement;
 
+// Colour read-only text with an editor language (the API answer…): HTML with cm-* spans,
+// shown inside an element with class cm-s-wh. Big texts are left plain (fast).
+function highlightHTML(text, mode) {
+  if (!text || text.length > 400000 || !mode || mode === 'text/plain') return esc(text || '');
+  const m = CodeMirror.getMode(CodeMirror.defaults, mode); if (!m || m.name === 'null') return esc(text);
+  const st = CodeMirror.startState(m); let out = '';
+  for (const line of text.split('\n')) {
+    const s = new CodeMirror.StringStream(line, 4);
+    if (!line && m.blankLine) m.blankLine(st);
+    while (!s.eol()) {
+      let tok = null; try { tok = m.token(s, st); } catch { s.skipToEnd(); }
+      const piece = esc(s.current());
+      out += tok ? `<span class="${tok.split(' ').map(t => 'cm-' + t).join(' ')}">${piece}</span>` : piece;
+      s.start = s.pos;
+    }
+    out += '\n';
+  }
+  return out.slice(0, -1);
+}
+// Turn a <textarea> into the code editor in place: code reading or setting ta.value keeps
+// working (setting it doesn't count as typing); typing fires 'input' on the textarea.
+function editorOverTextarea(ta, opts = {}) {
+  if (ta.cm) return ta.cm;
+  const host = Object.assign(document.createElement('div'), { className: 'cm-over ' + (ta.className || '') });
+  ta.after(host); ta.hidden = true;
+  const cm = makeEditor(host, { value: ta.value, lineWrapping: true, ...opts });
+  let quiet = false;
+  const proto = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  Object.defineProperty(ta, 'value', { configurable: true, get: () => cm.getValue(), set: v => { quiet = true; cm.setValue(v ?? ''); cm.clearHistory(); quiet = false; proto.set.call(ta, v ?? ''); } });
+  cm.on('change', () => { if (!quiet) ta.dispatchEvent(new Event('input', { bubbles: true })); });
+  ta.focus = () => cm.focus();
+  if (ta.placeholder) cm.setOption('placeholder', ta.placeholder);
+  ta.cm = cm; setTimeout(() => cm.refresh());
+  return cm;
+}
+
 // Text size per pane: A−/A+ buttons or Ctrl + mouse wheel. (Ctrl +/− in the
 // browser still zooms the whole app.)
 const Fonts = {
   sizes: store.get('fonts', { term: 14, editor: 14, sql: 14 }), // a size you chose (A-/A+) is kept
   size(k) { return this.sizes[k] || 14; },
   // Text size of the whole app (Settings → Appearance): every font scales with --ui-scale.
-  ui() { return store.get('uiScale', 1.08); },
+  // 1.16: every size one step bigger (Normal 1.08 → 1.14); a size chosen before moves up with it, once
+  ui() {
+    let v = store.get('uiScale', 1.14);
+    if (!store.get('uiScaleV2', false)) { v = { 1: 1.06, 1.08: 1.14, 1.15: 1.22, 1.25: 1.32 }[v] ?? v; store.set('uiScale', v); store.set('uiScaleV2', true); }
+    return v;
+  },
   setUI(v) { store.set('uiScale', v); root.style.setProperty('--ui-scale', v); window.dispatchEvent(new Event('resize')); },
   set(k, v) {
     this.sizes[k] = clamp(Math.round(v), 8, 32);

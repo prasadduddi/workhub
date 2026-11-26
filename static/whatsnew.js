@@ -4,6 +4,16 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.16.0', title: 'Ask Confluence & Jira, sub-threads, newest first, new windows per page, colours in viewers, a tidier Dashboard', items: [
+    ['🔎', 'Ask Confluence & Jira', 'The new Ask page (left menu) searches Confluence pages and Jira issues together from a question in plain words, best matches first with the matching sentences in yellow. Confluence signs in like Jira — the same login on Atlassian Cloud, a token, or 🔑 Sign in with browser in WorkHub-Desktop (⚙ Settings → Ask). Optional ✨ AI answers (off by default) write a short answer with links to the sources, using your own Anthropic API key.', 'ask'],
+    ['⧉', 'New window next to each tree', 'SSH, FTP and SQL trees and the thread list have ⧉ New window: that whole page in its own window. A thread still has ⧉ Only this thread.', ''],
+    ['🌿', 'Sub-threads', 'Drag a thread onto another in the thread list to put it under it (▾ folds it; drop on a section heading to move it back, or right-click). Searching inside a thread also finds matching messages in all its sub-threads.', 'tasks'],
+    ['↕', 'Newest first', 'The ↑ Oldest first / ↓ Newest first button in a thread’s header switches the order of the messages.', 'tasks'],
+    ['⧉', 'Only this thread / one connection in its own window', '⧉ Only this thread opens just the thread (no thread list) — ⧉ New window still opens the Tasks page. Right-click a connection → ⧉ Open in its own window for just that terminal, SQL or FTP.', ''],
+    ['🎨', 'Colours in viewers and editors', 'Thread files (View), new snippets and the API request body are code editors with colours for their language; the API answer is coloured too.', ''],
+    ['🧹', 'Tidier Dashboard', 'Empty boxes are gone (one line says what will show there), boxes grow with what they list, attention buttons sit on the Today line, and bookmarks are tidy rows instead of cards in columns.', 'dashboard'],
+    ['🔠', 'Bigger text', 'Every Text size is one step bigger; a size you picked moves up with it.', ''],
+  ] },
   { v: '1.15.9', title: 'Slack-style threads, questions in WorkHub’s own boxes', items: [
     ['🔤', 'Threads look like Slack', 'Threads use Lato — the font Slack uses — at 15px with Slack’s line spacing, names in heavy black, small grey times and Slack-style `code`. The font comes with WorkHub, so it looks the same on every PC; Settings → Text size still applies.', 'tasks'],
     ['🪟', 'No more “127.0.0.1 says”', 'Every question — delete?, rename, new folder, the ⚠ PROD warnings — now opens in WorkHub’s own box titled WorkHub (Enter = OK, Esc = Cancel) instead of the browser’s pop-up with the address on top.', ''],

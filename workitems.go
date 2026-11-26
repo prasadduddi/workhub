@@ -32,6 +32,7 @@ type WorkItem struct {
 	Archived bool      `json:"archived,omitempty"`
 	General  bool      `json:"general,omitempty"` // the default thread for captures
 	Starred  bool      `json:"starred,omitempty"`
+	Parent   string    `json:"parent,omitempty"` // the thread this one sits under (sub-threads, see subthreads.go)
 	ReadAt   time.Time `json:"read_at,omitzero"` // posts after this are unread
 	Created  time.Time `json:"created"`
 	Updated  time.Time `json:"updated"`
@@ -139,6 +140,11 @@ func (s *Store) DeleteWorkItem(id string) {
 	for i, w := range s.st.WorkItems {
 		if w.ID == id {
 			s.st.WorkItems = append(s.st.WorkItems[:i], s.st.WorkItems[i+1:]...)
+			for _, x := range s.st.WorkItems { // its sub-threads move up a level, not away
+				if x.Parent == id {
+					x.Parent = w.Parent
+				}
+			}
 			// Its files go too — unless a message moved or copied to another
 			// thread still shows them.
 			for _, b := range w.Blocks {
@@ -296,7 +302,7 @@ func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 				sb.WriteString(" " + strings.ToLower(b.File.Name))
 			}
 		}
-		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated, "archived": wi.Archived, "general": wi.General, "starred": wi.Starred, "unread": wi.unread(),
+		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated, "archived": wi.Archived, "general": wi.General, "starred": wi.Starred, "unread": wi.unread(), "parent": wi.Parent,
 			"notes": n["text"], "links": n["link"], "images": n["image"], "files": n["file"], "posts": n["post"], "search": sb.String()})
 	}
 	writeJSON(w, out)

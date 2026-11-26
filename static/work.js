@@ -115,17 +115,28 @@ const Work = {
     return this.list.some(w => w.id === a) ? a : (this.list.find(w => w.general && !w.archived)?.id || '');
   },
 
+  folded: new Set((() => { try { return JSON.parse(localStorage.getItem('threadFolded') || '[]'); } catch { return []; } })()),
   renderList() {
     const q = ($('#workSearch')?.value || '').trim().toLowerCase();
     const archived = this.list.filter(w => w.archived).length;
     const items = [...this.list].sort((a, b) => (b.general && !b.archived) - (a.general && !a.archived) || new Date(b.updated) - new Date(a.updated)).filter(w => (this.showArchived || !w.archived || w.id === this.current?.id) && (!q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t))));
-    const item = w => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''} ${w.unread ? 'unread' : ''}" data-work="${w.id}">
-      <div class="tli-top">${threadStatusHTML(w)}${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.general ? '<span class="tgen" title="Copied text goes here when no other thread has 📥 Capture here on">default</span>' : ''}<span class="spacer"></span>${w.unread ? `<span class="tunread" title="New since you last looked">${w.unread}</span>` : ''}<button class="tli-star ${w.starred ? 'on' : ''}" data-star="${w.id}" title="${w.starred ? 'Unstar' : 'Star'}">${w.starred ? '★' : '☆'}</button></div>
-      <b>${esc(w.title)}</b><small>${w.jira && !w.title.toUpperCase().includes(w.jira) ? `◆ ${esc(w.jira)} · ` : ''}${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} message${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`;
+    const item = (w, lvl = 0, kids = 0) => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''} ${w.unread ? 'unread' : ''} ${lvl ? 'sub' : ''}" data-work="${w.id}" draggable="true" style="--lvl:${lvl}" title="Drag onto another thread to put it under that one">
+      <div class="tli-top">${kids ? `<button class="tli-fold" data-fold="${w.id}" title="${this.folded.has(w.id) ? 'Show' : 'Hide'} its ${kids} sub-thread${kids > 1 ? 's' : ''}">${this.folded.has(w.id) ? '▸' : '▾'}</button>` : ''}${threadStatusHTML(w)}${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.general ? '<span class="tgen" title="Copied text goes here when no other thread has 📥 Capture here on">default</span>' : ''}<span class="spacer"></span>${w.unread ? `<span class="tunread" title="New since you last looked">${w.unread}</span>` : ''}<button class="tli-star ${w.starred ? 'on' : ''}" data-star="${w.id}" title="${w.starred ? 'Unstar' : 'Star'}">${w.starred ? '★' : '☆'}</button></div>
+      <b>${esc(w.title)}</b>${kids && this.folded.has(w.id) ? `<span class="tkids">+${kids} sub-thread${kids > 1 ? 's' : ''}</span>` : ''}<small>${w.jira && !w.title.toUpperCase().includes(w.jira) ? `◆ ${esc(w.jira)} · ` : ''}${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} message${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`;
+    // sub-threads under their thread (a thread whose parent isn't in this section starts its own branch)
+    const tree = list => {
+      const ids = new Set(list.map(w => w.id)), kids = {};
+      for (const w of list) if (w.parent && ids.has(w.parent)) (kids[w.parent] ||= []).push(w);
+      const out = [], walk = (w, lvl) => { out.push(item(w, lvl, (kids[w.id] || []).length)); if (!this.folded.has(w.id)) for (const k of kids[w.id] || []) walk(k, lvl + 1); };
+      for (const w of list) if (!w.parent || !ids.has(w.parent)) walk(w, 0);
+      return out.join('');
+    };
     // Slack-like sections: ⭐ Starred, Threads, Done
-    const sec = (title, list, key) => list.length ? `<div class="tsec" data-sec="${key}"><span>${title}</span><span class="muted tiny">${list.length}</span></div>${this.collapsed?.has(key) ? '' : list.map(item).join('')}` : '';
-    const starred = items.filter(w => w.starred), rest = items.filter(w => !w.starred);
-    $('#workList').innerHTML = (sec('⭐ Starred', starred, 'star') + sec('Threads', rest.filter(w => w.status !== 'done'), 'open') + sec('✓ Done', rest.filter(w => w.status === 'done'), 'done')
+    const sec = (title, list, key) => list.length ? `<div class="tsec" data-sec="${key}"><span>${title}</span><span class="muted tiny">${list.length}</span></div>${this.collapsed?.has(key) ? '' : tree(list)}` : '';
+    const shown = new Map(items.map(w => [w.id, w]));
+    const rootOf = w => { const seen = new Set(); while (w.parent && shown.has(w.parent) && !seen.has(w.id)) { seen.add(w.id); w = shown.get(w.parent); } return w; }; // a sub-thread goes where its top thread is
+    const starred = items.filter(w => rootOf(w).starred), rest = items.filter(w => !rootOf(w).starred);
+    $('#workList').innerHTML = (sec('⭐ Starred', starred, 'star') + sec('Threads', rest.filter(w => rootOf(w).status !== 'done'), 'open') + sec('✓ Done', rest.filter(w => rootOf(w).status === 'done'), 'done')
       || `<div class="muted tiny" style="padding:8px">${q ? 'No matches' : 'No task threads yet — press + New thread.'}</div>`)
       + (archived ? `<a href="#" class="tmore tarch-toggle" data-toggle-archived>${this.showArchived ? 'Hide archived' : `Show archived (${archived})`}</a>` : '');
   },
@@ -261,13 +272,15 @@ const Work = {
  ${this.jiraChip(w)}
         <button data-tact="capture" class="${capturing ? 'rec' : ''}" title="${capturing ? 'Recording: everything Watch clipboard captures is posted here — click to stop' : 'While on, everything Watch clipboard captures is also posted here'}">${capturing ? '<span class="recdot"></span>Capturing here' : '📥 Capture here'}</button>
         <span class="spacer"></span>
-        ${typeof Popout !== 'undefined' && !Popout.me ? '<button data-tact="popout" title="Open this thread in its own window (⇲ Dock back puts it back)">⧉ New window</button>' : ''}
+        ${typeof Popout !== 'undefined' && !Popout.me ? `<button data-tact="popone" class="icon winbtn" aria-label="Open this thread in a new window" title="Open only this thread in a new window — no thread list (Dock back puts it back)">${ICON_NEWWIN}</button>` : ''}
         <button data-tact="word" title="Open the Word copy (kept in the work-items folder)">Open in Word</button>
+        <button type="button" id="torder" class="torder" title="Order of the messages — click to switch">${this.newestFirst() ? '↓ Newest first' : '↑ Oldest first'}</button>
         <div class="tfind"><input id="tfindIn" type="search" placeholder="🔍 Search this thread (Ctrl+F)" value="${esc(this.find.q)}" autocomplete="off"><span id="tfindN" class="muted tiny"></span><button type="button" class="icon" data-tfind="prev" title="Previous (Shift+Enter)">▲</button><button type="button" class="icon" data-tfind="next" title="Next (Enter)">▼</button><label class="tiny tfind-only" title="Hide the messages that don't match"><input type="checkbox" id="tfindOnly" ${this.find.only ? 'checked' : ''}> only matches</label></div>
         <button data-tact="more" class="icon more" title="More">⋯</button>
       </div>
       ${w.archived ? `<div class="tarch-bar">🗄 This thread is archived (hidden from the list). <button class="icon" data-tact="unarchive">Unarchive</button></div>` : ''}
       ${this.pinsHTML(w)}
+      <div id="tfindSub" class="tfind-sub" hidden></div>
       <div class="twrap">
         <div class="tmainc">
           <div id="tposts" class="tposts">${this.postsHTML(w)}</div>
@@ -287,7 +300,7 @@ const Work = {
     if (scroll) this.scrollEnd(); else if (keep != null) $('#tposts').scrollTop = keep;
     const pb = $('.tpanel .tpbody'); if (pb && this.panelScroll) { pb.scrollTop = pb.scrollHeight; this.panelScroll = false; }
     enhanceAttachments($('#taskMain'));
-    if (this.find.q) this.findApply();
+    if (this.find.q) { this.findApply(); this.drawSub(); }
     if (this.find.focus) { const i = $('#tfindIn'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
   },
 
@@ -305,6 +318,27 @@ const Work = {
     this.find.ids = words.length ? (w.posts || []).filter(p => { const t = this.postText(p).toLowerCase(); return words.every(x => t.includes(x)); }).map(p => p.id) : [];
     this.findApply();
     if (this.find.ids.length) this.findGo(1);
+    this.subSearch(q);
+  },
+  // a thread with sub-threads: their matching messages too, listed under the header
+  hasSubs(id = this.current?.id) { return this.list.some(w => w.parent === id); },
+  subSearch(q) {
+    clearTimeout(this.subT); const id = this.current?.id;
+    if (!q.trim() || !this.hasSubs(id)) { this.find.sub = []; return this.drawSub(); }
+    this.subT = setTimeout(async () => {
+      const hits = await api('GET', `/api/work/${id}/subsearch?q=${encodeURIComponent(q)}`).catch(() => []);
+      if (this.find.q !== q || this.current?.id !== id) return;
+      this.find.sub = hits || []; this.drawSub(); this.findApply();
+    }, 200);
+  },
+  drawSub() {
+    const el = $('#tfindSub'); if (!el) return;
+    const hits = this.find.q ? this.find.sub || [] : [];
+    el.hidden = !hits.length; if (!hits.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="tfs-head">🌿 In sub-threads <span class="muted tiny">${hits.length}</span></div>` + hits.slice(0, 30).map(h => `<div class="tfs-row" data-subgo="${h.thread}" data-subpost="${h.post}" title="Open it in “${esc(h.title)}”">
+      <span class="tfs-t">${esc(h.title)}</span><span class="muted tiny">${esc(h.from || '')} ${esc(fmtTime(h.at))}${h.reply ? ' · reply' : ''}</span><div class="tfs-snip">${esc(h.snip)}</div></div>`).join('')
+      + (hits.length > 30 ? `<div class="muted tiny">and ${hits.length - 30} more — search on the thread itself</div>` : '');
+    markIn(el, this.find.q.toLowerCase().split(/\s+/).filter(Boolean));
   },
   findApply() {
     const words = this.find.q.toLowerCase().split(/\s+/).filter(Boolean), hits = new Set(this.find.ids);
@@ -320,7 +354,8 @@ const Work = {
       if (hit) markIn(el.querySelector('.tbody'), words);
     }
     const n = $('#tfindN');
-    if (n) n.textContent = !words.length ? '' : this.find.ids.length ? `${this.find.i + 1 || 0} / ${this.find.ids.length}` : 'no match';
+    const subs = words.length ? (this.find.sub || []).length : 0;
+    if (n) n.textContent = (!words.length ? '' : this.find.ids.length ? `${this.find.i + 1 || 0} / ${this.find.ids.length}` : subs ? 'none here' : 'no match') + (subs ? ` · +${subs} in sub-threads` : '');
   },
   findGo(step) {
     const ids = this.find.ids; if (!ids.length) return;
@@ -331,7 +366,10 @@ const Work = {
     const el = $(`#taskMain [data-post="${ids[this.find.i]}"]`);
     el?.scrollIntoView({ block: 'center' });
   },
-  scrollEnd() { const el = $('#tposts'); if (el) el.scrollTop = el.scrollHeight; },
+  scrollEnd() { const el = $('#tposts'); if (el) el.scrollTop = this.newestFirst() ? 0 : el.scrollHeight; }, // to the newest message
+  // Message order (the button in the header): oldest first like a chat, or newest first; kept for all threads
+  newestFirst() { try { return localStorage.getItem('threadOrder') === 'desc'; } catch { return false; } },
+  setOrder(desc) { try { localStorage.setItem('threadOrder', desc ? 'desc' : 'asc'); } catch { /* private mode */ } this.render(true); },
 
   // Pinned posts as chips under the header; clicking one jumps to it.
   pinsHTML(w) {
@@ -352,12 +390,17 @@ const Work = {
     if (!w.posts?.length) return '<div class="muted tiny" style="padding:16px">Nothing here yet. Write the first message below.</div>';
     const replies = {};
     for (const p of w.posts) if (p.parent) (replies[p.parent] ||= []).push(p);
-    let day = '', prev = null, newShown = false;
-    return w.posts.filter(p => !p.parent).map(p => {
+    let day = '', prev = null, newShown = false, sawNew = false;
+    const top = w.posts.filter(p => !p.parent);
+    if (this.newestFirst()) top.sort((a, b) => new Date(b.at) - new Date(a.at)); // newest at the top (replies stay in their panel, oldest first)
+    return top.map(p => {
       const d = dayName(new Date(p.at));
       let out = '';
       if (d !== day) { out += `<div class="tday"><span>${esc((day = d))}</span></div>`; prev = null; }
-      if (!newShown && this.readMark && new Date(p.at) > new Date(this.readMark)) { newShown = true; out += '<div class="tnew"><span>New</span></div>'; prev = null; }
+      const isNew = this.readMark && new Date(p.at) > new Date(this.readMark);
+      if (!this.newestFirst() && !newShown && isNew) { newShown = true; out += '<div class="tnew"><span>New</span></div>'; prev = null; }
+      if (this.newestFirst() && !newShown && sawNew && !isNew) { newShown = true; out += '<div class="tnew"><span>New ↑</span></div>'; prev = null; } // under the new ones
+      if (isNew) sawNew = true;
       out += this.msgHTML(p, prev, replies[p.id] || []);
       prev = (replies[p.id] || []).length ? null : p;
       return out;
@@ -637,8 +680,37 @@ $('#workList').addEventListener('click', e => {
   const st = e.target.closest('[data-star]'); if (st) { const x = Work.list.find(w => w.id === st.dataset.star); return x && Work.star(x, !x.starred); }
   const sec = e.target.closest('[data-sec]');
   if (sec) { (Work.collapsed ||= new Set()); Work.collapsed.has(sec.dataset.sec) ? Work.collapsed.delete(sec.dataset.sec) : Work.collapsed.add(sec.dataset.sec); return Work.renderList(); }
+  const fo = e.target.closest('[data-fold]');
+  if (fo) { e.stopPropagation(); Work.folded.has(fo.dataset.fold) ? Work.folded.delete(fo.dataset.fold) : Work.folded.add(fo.dataset.fold); try { localStorage.setItem('threadFolded', JSON.stringify([...Work.folded])); } catch { /* ignore */ } return Work.renderList(); }
   const li = e.target.closest('[data-work]'); if (li) Work.open(li.dataset.work);
 });
+// ---- sub-threads: drag a thread onto another to put it under it; onto a section heading = back to the top ----
+Work.setParent = async function (id, parent) {
+  const w = this.list.find(x => x.id === id), p = this.list.find(x => x.id === parent);
+  if (!w || id === parent || (w.parent || '') === (parent || '')) return;
+  try { await api('POST', `/api/work/${id}/parent`, { parent: parent || '' }); } catch (err) { return toast(err.message, true); }
+  if (parent) this.folded.delete(parent);
+  await this.loadList();
+  toast(parent ? `“${w.title}” is now under “${p?.title}”` : `“${w.title}” is a top-level thread again`, false, () => this.setParent(id, w.parent || ''));
+};
+{
+  const wl = $('#workList'); let dragId = '';
+  const clear = () => wl.querySelectorAll('.dropinto, .droptop').forEach(x => x.classList.remove('dropinto', 'droptop'));
+  wl.addEventListener('dragstart', e => { const li = e.target.closest('[data-work]'); if (!li) return; dragId = li.dataset.work; e.dataTransfer.setData('text/x-wh-thread', dragId); e.dataTransfer.effectAllowed = 'move'; li.classList.add('dragging'); });
+  wl.addEventListener('dragend', () => { dragId = ''; clear(); wl.querySelectorAll('.dragging').forEach(x => x.classList.remove('dragging')); });
+  wl.addEventListener('dragover', e => {
+    if (!dragId) return;
+    const li = e.target.closest('[data-work]'), sec = e.target.closest('[data-sec]');
+    if ((li && li.dataset.work !== dragId) || sec) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; clear(); (li || sec).classList.add(li ? 'dropinto' : 'droptop'); }
+  });
+  wl.addEventListener('dragleave', e => { if (!wl.contains(e.relatedTarget)) clear(); });
+  wl.addEventListener('drop', e => {
+    if (!dragId) return;
+    e.preventDefault(); clear();
+    const li = e.target.closest('[data-work]'), id = dragId; dragId = '';
+    if (li) Work.setParent(id, li.dataset.work); else if (e.target.closest('[data-sec]')) Work.setParent(id, '');
+  });
+}
 $('#captureThread')?.addEventListener('click', e => {
   const go = e.target.closest('[data-gothread]'); if (go) { e.preventDefault(); return Work.open(go.dataset.gothread); }
   if (e.target.closest('[data-stopthread]')) { e.preventDefault(); saveSettings({ active_thread: 'off' }).then(() => { Work.renderCapture(); Work.renderList(); if (Work.current) Work.render(); }); }
@@ -701,6 +773,7 @@ page.addEventListener('click', async e => {
   if (e.target.closest('#tsend')) return Work.send();
   if (act === 'capture') return Work.setCapture(w.id !== Work.active());
   if (act === 'popout') return Popout.popThread(w);
+  if (act === 'popone') return Popout.popThreadOnly(w);
   if (act === 'star') return Work.star(w, !w.starred);
   if (act === 'unarchive') return Work.archive(w, false);
   if (act === 'jiralink') return Work.linkJira();
@@ -1021,6 +1094,9 @@ $('#workList').addEventListener('contextmenu', e => {
     ...(w.unread ? [['✓ Mark as read', () => Work.markRead(w.id)]] : []),
     ['🔗 Copy link to thread', () => copyText(`${location.origin}/#tasks/${w.id}`, 'Link copied')],
     '-',
+    ['↳ Put under another thread…', () => Work.pick(e, id => Work.setParent(w.id, id), w.id)],
+    ...(w.parent ? [['↰ Move to the top level', () => Work.setParent(w.id, '')]] : []),
+    '-',
     [w.archived ? '↩ Unarchive' : '🗄 Archive', () => Work.archive(w, !w.archived)],
     ...(w.general ? [] : [['Delete…', async () => {
       if (!await askYes(`Delete the thread "${w.title}" and everything in it?`)) return;
@@ -1135,9 +1211,10 @@ const Attach = {
       <div class="row end"><span id="snipInfo" class="muted tiny grow"></span><button type="button" data-snip="cancel">Cancel</button><button type="button" class="primary" data-snip="save">Attach to the thread</button></div>`;
     document.body.append(d);
     const name = d.querySelector('#snipName'), text = d.querySelector('#snipText'), info = d.querySelector('#snipInfo');
-    const upd = () => { const t = text.value; info.textContent = t ? `${t.split('\n').length} lines · ${fmtSize(new Blob([t]).size)}` : ''; if (!name.dataset.typed) name.value = t.trim() ? guessSnippetName(t) : ''; };
-    text.addEventListener('input', upd); name.addEventListener('input', () => { name.dataset.typed = name.value ? '1' : ''; });
-    text.addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); document.execCommand('insertText', false, '  '); } if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.save(); } });
+    const cm = editorOverTextarea(text, { mode: 'text/plain', extraKeys: { 'Ctrl-Enter': () => this.save(), 'Cmd-Enter': () => this.save() } });
+    const mode = () => cm.setOption('mode', modeOf(langForPath(name.value || 'x.txt'))); // coloured as the file name says
+    const upd = () => { const t = text.value; info.textContent = t ? `${t.split('\n').length} lines · ${fmtSize(new Blob([t]).size)}` : ''; if (!name.dataset.typed) name.value = t.trim() ? guessSnippetName(t) : ''; mode(); };
+    text.addEventListener('input', upd); name.addEventListener('input', () => { name.dataset.typed = name.value ? '1' : ''; mode(); });
     d.addEventListener('click', e => { const b = e.target.closest('[data-snip]'); if (!b) return; if (b.dataset.snip === 'cancel') d.close(); else this.save(); });
     d.upd = upd;
     return d;
@@ -1147,7 +1224,7 @@ const Attach = {
     const d = this.dlg(), name = d.querySelector('#snipName'), text = d.querySelector('#snipText');
     name.value = ''; delete name.dataset.typed; text.value = ''; d.querySelector('#snipNote').value = '';
     if (fromClipboard) { try { text.value = (await navigator.clipboard.readText()) || ''; } catch { /* not allowed: paste by hand */ } }
-    d.upd(); d.showModal();
+    d.upd(); d.showModal(); text.cm.refresh();
     if (fromClipboard && !text.value) toast('Nothing copied (or the browser blocked it) — paste with Ctrl+V', true);
     (text.value ? name : text).focus();
   },
@@ -1171,8 +1248,8 @@ const Attach = {
         <div class="row end"><span class="muted tiny grow av-info"></span><button type="button" data-av="copy">📋 Copy</button><a class="btn" data-av="dl">⬇ Download</a><button type="button" data-av="save" disabled>Save changes</button><button type="button" class="primary" data-av="close">Close</button></div>`;
       document.body.append(d);
       const ta = d.querySelector('.av-text');
+      editorOverTextarea(ta, { lineWrapping: false });
       ta.addEventListener('input', () => { d.querySelector('[data-av=save]').disabled = ta.value === d.orig; });
-      ta.addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); document.execCommand('insertText', false, '  '); } });
       d.addEventListener('click', async e => {
         const b = e.target.closest('[data-av]'); if (!b) return;
         if (b.dataset.av === 'close') { if (ta.value !== d.orig && !await askYes('Close without saving your changes?')) return; d.close(); }
@@ -1187,10 +1264,11 @@ const Attach = {
     Object.assign(d, { aid, nm, orig: t });
     d.querySelector('.av-title').textContent = '📄 ' + nm;
     d.querySelector('.av-text').value = t;
+    d.querySelector('.av-text').cm.setOption('mode', modeOf(langForPath(nm))); // coloured as its type
     d.querySelector('.av-info').textContent = `${t.split('\n').length} lines · ${fmtSize(new Blob([t]).size)} · edit here and Save changes`;
     const dl = d.querySelector('[data-av=dl]'); dl.href = `/api/props/files/${aid}?download=1`; dl.download = nm;
     d.querySelector('[data-av=save]').disabled = true;
-    d.showModal();
+    d.showModal(); d.querySelector('.av-text').cm.refresh();
   },
 };
 // 📎 links to files in messages → a card: name, and View / Copy for text files
@@ -1210,3 +1288,16 @@ page.addEventListener('click', async e => {
   if (b.dataset.att === 'view') return Attach.view(b.dataset.aid, b.dataset.nm);
   try { copyText(await Attach.text(b.dataset.aid), 'Copied ' + b.dataset.nm); } catch (err) { toast(err.message, true); }
 }, true);
+
+page.addEventListener('click', e => { if (e.target.closest('#torder')) { e.preventDefault(); Work.setOrder(!Work.newestFirst()); } });
+
+// a match in a sub-thread: open it there, with the same search
+page.addEventListener('click', async e => {
+  const r = e.target.closest('[data-subgo]'); if (!r) return;
+  const q = Work.find.q;
+  await Work.open(r.dataset.subgo, r.dataset.subpost);
+  if (q) { const i = $('#tfindIn'); if (i) i.value = q; Work.findRun(q); }
+});
+
+// ⧉ New window over the thread list: the whole Tasks page in its own window
+$('#workPop')?.addEventListener('click', () => Popout.popPage('tasks')); // hidden in a pop-out window (CSS)
