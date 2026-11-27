@@ -91,6 +91,11 @@ const Menubar = {
           ['API request', () => { show('api'); Api.edit(Api.blank()); }],
         ]],
         '-',
+        ['🗂 New workspace…', () => Workspaces.create()],
+        ['🗂 Open workspace…', () => Workspaces.open()],
+        ['🗂 Switch workspace', null, typeof Workspaces !== 'undefined' ? Workspaces.menuItems() : []],
+        ['🗂 Close workspace', () => Workspaces.close()],
+        '-',
         ['⬇ Import', null, [
           ['Connections from DBeaver / PuTTY / FileZilla / SQL Developer…', () => ConnImport.open()],
           '-',

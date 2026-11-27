@@ -96,15 +96,51 @@ func TestLocalShell(t *testing.T) {
 	}
 	defer ws.Close()
 	ws.WriteJSON(map[string]any{"t": "start", "cols": 80, "rows": 24})
-	ws.WriteJSON(map[string]any{"t": "d", "d": "echo work''hub-ok\r"})
-	ws.SetReadDeadline(time.Now().Add(10 * time.Second))
-	var got strings.Builder
-	for !strings.Contains(got.String(), "workhub-ok") {
-		_, b, err := ws.ReadMessage()
-		if err != nil {
-			t.Fatalf("no output (%v): %q", err, got.String())
+	out := make(chan string, 256)
+	go func() { // the shell's output, as it comes
+		for {
+			_, b, err := ws.ReadMessage()
+			if err != nil {
+				close(out)
+				return
+			}
+			out <- string(b)
 		}
-		got.Write(b)
+	}()
+	// Wait until the shell has finished starting (a user's zsh may ask a question first, e.g. oh-my-zsh's
+	// "Ignore insecure files and continue [y]") — typing earlier loses letters to that question.
+	var got strings.Builder
+	answered := false
+	for deadline := time.After(15 * time.Second); ; {
+		select {
+		case b, ok := <-out:
+			if !ok {
+				t.Fatalf("the shell closed: %q", got.String())
+			}
+			got.WriteString(b)
+			if s := got.String(); !answered && strings.Contains(s, "[y]") && strings.Contains(s, "compinit") {
+				ws.WriteJSON(map[string]any{"t": "d", "d": "y"})
+				answered = true
+			}
+			continue
+		case <-time.After(1200 * time.Millisecond): // quiet for a moment: ready
+		case <-deadline:
+		}
+		break
+	}
+	got.Reset()
+	ws.WriteJSON(map[string]any{"t": "d", "d": "echo work''hub-ok\r"})
+	timeout := time.After(10 * time.Second)
+	for !strings.Contains(got.String(), "workhub-ok") {
+		select {
+		case b, ok := <-out:
+			if !ok {
+				t.Fatalf("no output: %q", got.String())
+			}
+			got.WriteString(b)
+		case <-timeout:
+			t.Fatalf("no output: %q", got.String())
+		}
 	}
 }
 

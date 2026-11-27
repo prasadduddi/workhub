@@ -356,8 +356,12 @@ with sync_playwright() as p:
         expect(opened and opened[0].startswith("https://teams.microsoft.com/l/chat/0/0?users=bob%40acme.example.com&message="), f"opened: {opened}")
         expect(ev("Teams.recent()[0]") == "bob@acme.example.com", "recipient not remembered")
         n = ev("Work.current.posts.length")
-        ev("navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob(['<p><b>Bob</b>: restarted app-01</p>'], { type: 'text/html' }), 'text/plain': new Blob(['Bob: restarted app-01'], { type: 'text/plain' }) })])")
+        # what was copied in Teams, as WorkHub's own clipboard read returns it (never the real clipboard in a test)
+        pg.route("**/api/clipboard/html", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps({"html": "<p><b>Bob</b>: restarted app-01</p>", "text": "Bob: restarted app-01"})))
+        ev("window._clipAsked2 = 0; const r2 = navigator.clipboard.read.bind(navigator.clipboard); navigator.clipboard.read = () => (window._clipAsked2++, r2()); 0")
         ev("Teams.addFrom()"); pg.wait_for_function(f"Work.current.posts.length === {n} + 1", timeout=5000)
+        pg.unroute("**/api/clipboard/html")
+        expect(ev("window._clipAsked2") == 0, "Add from Teams asked the browser for the clipboard (Allow / Block box)")
         last = ev("Work.current.posts[Work.current.posts.length - 1]")
         expect(last["from"] == "Teams" and "restarted app-01" in last["html"], f"added: {last}")
 
@@ -647,7 +651,7 @@ with sync_playwright() as p:
         expect(box["x"] >= b["x"] + 20 and abs(box["y"] - (b["y"] - 2)) < 40, f"box not right of the click: {box} vs click {b['x'] + 20},{b['y'] + 10}")
         pg.keyboard.type("SMOKE-1 thread from the box"); pg.keyboard.press("Enter")
         pg.wait_for_function(f"Work.list.length === {n} + 1", timeout=5000)
-        expect(ev("Work.current?.title") == "SMOKE-1 thread from the box", "thread not created")
+        pg.wait_for_function("Work.current?.title === 'SMOKE-1 thread from the box'", timeout=5000)  # it opens a moment later
         pg.click("#workNew"); pg.wait_for_selector(".askbox"); pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
         expect(not pg.query_selector(".askbox") and ev("Work.list.length") == n + 1, "Esc didn't cancel")
 
@@ -1133,6 +1137,30 @@ with sync_playwright() as p:
         pg.fill("#pcapDlg [data-pc=find]", "nothing-matches-this"); pg.wait_for_timeout(200)
         expect(pg.locator("#pcapDlg tbody tr").count() == 0, "row filter")
         close_dialogs()
+
+    @check("🗂 workspaces: File menu; a new workspace with sample data opens separately; listed to switch to")
+    def _():
+        pg.click("#menubar .mb[data-menu=File]"); pg.wait_for_timeout(300)
+        labels = pg.inner_text("#ctxMenu")
+        expect(all(x in labels for x in ("New workspace", "Open workspace", "Switch workspace", "Close workspace")), labels[:300])
+        pg.keyboard.press("Escape")
+        ev("window.open = (u) => { window._wsURL = u; return {}; }; 0")  # catch the new window's address
+        wsn = "Smoke Demo " + str(int(time.time()) % 100000)  # a fresh name each run
+        ev(f"Workspaces.go({{ name: '{wsn}', create: true, sample: true }}, 'new')")
+        pg.wait_for_function("!!window._wsURL", timeout=30000)
+        u = ev("window._wsURL")
+        expect(":%d/" % ev("+location.port") not in u, f"same port as this workspace: {u}")
+        w = ctx.new_page(); w.goto(u)
+        w.wait_for_function("typeof S !== 'undefined' && S.settings && S.entries.length > 0", timeout=20000)
+        w.evaluate("EnvSwitch.set('ALL')"); w.wait_for_timeout(800)  # sample servers are mostly UAT / PROD
+        expect(w.evaluate("S.settings.workspace") == wsn and w.evaluate("S.entries.length") >= 12, f"not the sample workspace: {w.evaluate('S.settings.workspace')} / {w.evaluate('S.entries.length')}")
+        expect(w.evaluate("S.entries.every(e => !e.host || e.host.endsWith('.example.com'))"), "sample data isn't made up")
+        expect(not ev("S.entries.some(e => (e.host || '').endsWith('.acme.example.com'))"), "data leaked into this workspace")
+        ev("Workspaces.load()"); pg.wait_for_timeout(500)
+        names = ev("Workspaces.list.map(w => w.name)")
+        expect(wsn in names, f"not listed: {names}")
+        expect(any(it[0].startswith(wsn) for it in ev("Workspaces.menuItems()")), "not in Switch workspace")
+        w.evaluate("api('POST', '/api/quit').catch(() => {})"); w.close()
 
     @check("no page errors during the whole run")
     def _():

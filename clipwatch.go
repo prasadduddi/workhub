@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -132,6 +133,10 @@ func (a *App) captureClipboard(last *string) bool {
 	if clipExcluded() { // password managers ask monitors to leave their copies alone
 		return true
 	}
+	if !a.activeWorkspace() { // another workspace is the one in use: copies go there, not here too
+		*last = ""
+		return true
+	}
 	owner := clipboardOwnerExe()
 	from := foregroundSource()
 	if isShotTool(owner) {
@@ -245,4 +250,40 @@ func (a *App) handleClipboardText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"text": t})
+}
+
+// cfHTMLFragment: the HTML between StartFragment and EndFragment of Windows' "HTML Format" (byte offsets in
+// its header); the whole HTML part when the header is missing.
+func cfHTMLFragment(raw []byte) string {
+	s := strings.TrimRight(string(raw), "\x00")
+	num := func(key string) int {
+		i := strings.Index(s, key)
+		if i < 0 {
+			return -1
+		}
+		j := i + len(key)
+		k := j
+		for k < len(s) && s[k] >= '0' && s[k] <= '9' {
+			k++
+		}
+		n, err := strconv.Atoi(s[j:k])
+		if err != nil {
+			return -1
+		}
+		return n
+	}
+	if a, b := num("StartFragment:"), num("EndFragment:"); a >= 0 && b > a && b <= len(s) {
+		return s[a:b]
+	}
+	if i := strings.Index(strings.ToLower(s), "<html"); i >= 0 {
+		return s[i:]
+	}
+	return s
+}
+
+// handleClipboardHTML: GET /api/clipboard/html — the clipboard's formatted content and its text, read natively.
+func (a *App) handleClipboardHTML(w http.ResponseWriter, r *http.Request) {
+	h, _ := readClipboardHTML()
+	t, _ := readClipboard()
+	writeJSON(w, map[string]string{"html": h, "text": t})
 }

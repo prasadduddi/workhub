@@ -4,6 +4,11 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.17.0', title: 'Workspaces: a demo workspace, separate data, this window or a new one', items: [
+    ['🗂', 'Several workspaces', 'File → New workspace / Open workspace / Switch workspace / Close workspace. Each workspace has completely separate data; opening one asks whether to use this window or a new one, and WorkHub reopens the last workspace next time.', ''],
+    ['🎬', 'A demo workspace in one click', 'New workspace → “Fill it with sample data”: made-up servers, databases, bookmarks, threads, notes and calendar entries — to present WorkHub without showing real work. A new workspace doesn’t import this PC’s browser bookmarks, and only the workspace you are using captures what you copy.', ''],
+    ['📋', 'Add from Teams without Allow / Block', 'Add from Teams reads the formatted clipboard through WorkHub itself.', 'tasks'],
+  ] },
   { v: '1.16.3', title: 'Capture traffic on a server, every page in its own window', items: [
     ['📡', 'Capture traffic (tcpdump)', 'Right-click a server → Capture traffic…: tcpdump runs there and the packets come in live, Wireshark-style (protocol, addresses, ports, HTTP lines, DNS names), with each packet’s bytes; filter like “port 1521”, and ⬇ Save .pcap to open it in Wireshark.', ''],
     ['📋', 'No more Allow / Block for the clipboard', 'Attach copied text and the terminal’s right-click paste read the clipboard through WorkHub itself, so the browser no longer asks.', 'tasks'],

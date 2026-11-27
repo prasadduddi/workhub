@@ -43,12 +43,15 @@ const Teams = {
     if (st.signed_in) return this.pickChat();
     // no setup: what was copied in Teams (Ctrl+C on the messages)
     let html = '', text = '';
-    try {
-      for (const item of await navigator.clipboard.read()) {
-        if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
-        if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
-      }
-    } catch { /* not allowed: say how */ }
+    try { const r = await api('GET', '/api/clipboard/html'); html = r.html || ''; text = r.text || ''; } catch { /* WorkHub couldn't read it */ }
+    if (!html.trim() && !text.trim()) { // the browser's own clipboard, only as a last resort (it may ask Allow / Block)
+      try {
+        for (const item of await navigator.clipboard.read()) {
+          if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+          if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
+        }
+      } catch { /* not allowed: say how */ }
+    }
     if (!html.trim() && !text.trim()) return toast('Copy the messages in Teams first (select them, Ctrl+C), then choose Add from Teams again — or paste them into the message box', true);
     let body = html.trim() ? sanitizeHTML(html.replace(/<!--[\s\S]*?-->/g, '')) : '<p>' + esc(text).replace(/\r?\n/g, '<br>') + '</p>';
     for (const [, uri, ext] of [...body.matchAll(/src="(data:image\/(\w+);base64,[^"]+)"/g)]) { // pictures that came along: stored

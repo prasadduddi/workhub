@@ -1848,3 +1848,13 @@ dialog.pcap-dlg[open] { display: flex; }
 .pc-table tr.pc-tns td, .pc-table tr.pc-pgsql td { background: color-mix(in srgb, #d29922 10%, transparent); }
 .pc-table tr.pc-icmp td, .pc-table tr.pc-icmpv6 td, .pc-table tr.pc-arp td { background: color-mix(in srgb, #a371f7 9%, transparent); }
 .pc-hex { flex: 0 1 30%; min-height: 90px; overflow: auto; margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); font-size: calc(12px * var(--ui-scale)); }
+
+/* workspaces */
+.ws-box { width: min(560px, 94vw); }
+.ws-box .ws-title { margin: 6px 0 8px; }
+.ws-box label { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.ws-box label input[type=text] { width: 100%; box-sizing: border-box; }
+.ws-box .ws-chk, .ws-box .ws-row { flex-direction: row; align-items: center; gap: 8px; }
+.ws-box .ws-row { padding: 5px 6px; border-radius: 6px; } .ws-box .ws-row:hover { background: var(--panel2); }
+.ws-box .ws-row .muted { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+.ws-box .row.end { margin-top: 12px; }

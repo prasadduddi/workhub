@@ -166,3 +166,8 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] Server without tcpdump / sudo password: the window says why
   [ ] Attach copied text: no Allow / Block box (Desktop and browser)
   [ ] Windows 11: WorkHub-Desktop title bar is light blue
+  [ ] File -> New workspace "Demo" with sample data -> Open in a new window: own window (Desktop), sample servers / threads / notes / calendar; Default untouched
+  [ ] File -> Switch workspace -> Default -> This window: the window shows Default; quit and start WorkHub -> it reopens the last one
+  [ ] With two workspaces open: copy text in one's window -> captured only there
+  [ ] File -> Close workspace (in Demo): Demo stops, Default opens; next start opens Default
+  [ ] Add from Teams: no Allow / Block box (Desktop)

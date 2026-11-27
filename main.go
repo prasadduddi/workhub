@@ -20,7 +20,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +35,7 @@ type App struct {
 	store       *Store
 	dataDir     string
 	workspace   string
+	ownData     bool // started with -data: outside the workspace switching (always captures)
 	recoveryErr string
 	addr        string
 	token       string
@@ -63,21 +63,26 @@ func main() {
 	port := flag.Int("port", defaultPort, "port to listen on (always bound to 127.0.0.1)")
 	dataDir := flag.String("data", "", `data folder (default: %LOCALAPPDATA%\WorkHub\data, or the folder chosen in the app)`)
 	noBrowser := flag.Bool("no-browser", false, "do not open the browser on start")
-	workspace := flag.String("workspace", "", "separate workspace name, e.g. ClientB (own data, key and port)")
+	workspace := flag.String("workspace", "", "separate workspace name, e.g. ClientB (own data, key and port); Default = the default one")
+	serverOnly := flag.Bool("server-only", false, "run without a window (another WorkHub window shows it)")
+	sampleData := flag.Bool("sample-data", false, "a new workspace starts with made-up sample data (for demos)")
 	flag.Parse()
+	wsGiven := false
+	flag.Visit(func(f *flag.Flag) { wsGiven = wsGiven || f.Name == "workspace" || f.Name == "data" })
 
-	ws := strings.TrimSpace(*workspace)
-	if ws != "" && !regexp.MustCompile(`^[A-Za-z0-9 _.-]{1,40}$`).MatchString(ws) {
+	ws := wsName(*workspace)
+	if !wsGiven {
+		ws = lastWorkspace() // started normally: the workspace used last time
+	}
+	if ws != "" && !wsNameRe.MatchString(ws) {
 		fatal("workspace name %q: use letters, digits, space, _ . - (max 40)", ws)
 	}
 	dir := *dataDir
 	if dir == "" {
 		dir = chosenDataDir(ws)
 	}
-	if ws != "" && *port == defaultPort {
-		h := fnv.New32a()
-		h.Write([]byte(strings.ToLower(ws)))
-		*port = defaultPort + 1 + int(h.Sum32()%500) // stable per workspace
+	if *port == defaultPort {
+		*port = workspacePort(ws) // stable per workspace
 	}
 	_, statErr := os.Stat(filepath.Join(dir, "workhub.dat"))
 	firstRun := statErr != nil
@@ -88,6 +93,9 @@ func main() {
 	}
 	if ln == nil { // already running; its window was opened
 		return
+	}
+	if !*serverOnly && *dataDir == "" {
+		setLastWorkspace(ws) // reopened next time
 	}
 
 	app := &App{
@@ -112,6 +120,7 @@ func main() {
 	}
 	if *dataDir != "" {
 		app.lockPath = filepath.Join(dir, "pin-lock.json")
+		app.ownData = true // a data folder given at start: not part of the workspace switching
 	}
 	sw := &switchHandler{}
 
@@ -127,11 +136,17 @@ func main() {
 				}
 				st := store.Settings()
 				st.Workspace = name
+				if ws != "" {
+					st.NoBrowserSync = true // a new workspace doesn't take this PC's browser bookmarks (they'd show in a demo)
+				}
 				store.SetSettings(st)
 				// Old-version folders only ever belong to the default workspace; named
 				// workspaces start empty so clients' data never mixes.
 				if *dataDir == "" && ws == "" && dir == defaultDataDir() {
 					importOldFolders(store, dir)
+				}
+				if *sampleData { // a demo workspace: made-up sample data
+					seedSample(store)
 				}
 			}
 			if _, ok := app.lockConf(); ok && !hasMaster(dir) {
@@ -219,7 +234,7 @@ func main() {
 	fmt.Println("  Data:  ", dir)
 	fmt.Println("Close this window (or use Quit in the app) to stop.")
 	srv := &http.Server{Handler: sw}
-	if isDesktop {
+	if isDesktop && !*serverOnly {
 		// Desktop version: own window; closing it stops WorkHub. Without
 		// WebView2 it carries on in the browser like the web version.
 		go func() { fatal("%v", srv.Serve(ln)) }()
@@ -229,7 +244,7 @@ func main() {
 		openBrowser(url)
 		select {}
 	}
-	if !*noBrowser {
+	if !*noBrowser && !*serverOnly {
 		openBrowser(url)
 	}
 	fatal("%v", srv.Serve(ln))
@@ -680,6 +695,11 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/work/files", a.handleWorkFileSearch)
 	mux.HandleFunc("GET /api/work/search", a.handleThreadSearch)
 	mux.HandleFunc("GET /api/clipboard/text", a.handleClipboardText)
+	mux.HandleFunc("GET /api/clipboard/html", a.handleClipboardHTML)
+	mux.HandleFunc("GET /api/workspaces", a.handleWorkspaces)
+	mux.HandleFunc("POST /api/workspaces/open", a.handleWorkspaceOpen)
+	mux.HandleFunc("POST /api/workspaces/close", a.handleWorkspaceClose)
+	mux.HandleFunc("POST /api/workspaces/active", a.handleWorkspaceActive)
 	mux.HandleFunc("POST /api/pcap/start", a.handlePcapStart)
 	mux.HandleFunc("GET /api/pcap/{id}", a.handlePcapPoll)
 	mux.HandleFunc("POST /api/pcap/{id}/stop", a.handlePcapStop)

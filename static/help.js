@@ -169,6 +169,12 @@ const HELP_TOPICS = [
     'Confluence pages and Jira issues that match are listed together, best first, with the matching sentences in yellow; click one to open it, or 🧵 post its link in a thread.',
     'Set up Confluence in ⚙ Settings → Ask: “Same as my Jira login” on Atlassian Cloud, a token for Server / Data Center, or 🔑 Sign in with browser in WorkHub-Desktop (SSO / MFA — the window hides when you are in).',
     'Optional ✨ AI answers (off by default): add your Anthropic API key and switch them on — the best matches are then sent to Anthropic and you get a short answer with numbered links to its sources. Check your company allows this first.'] },
+  { t: 'Workspaces (a demo workspace, separate data)', k: 'workspace workspaces demo test present new open switch close separate data sample client', v: '', s: [
+    'File → New workspace…: give it a name (e.g. Demo); tick “Fill it with sample data” for a ready-made demo; choose “Open in this window” or “Open in a new window”.',
+    'Each workspace has its own data, key and settings — nothing is shared. A new workspace doesn’t import this PC’s browser bookmarks.',
+    'File → Switch workspace ▸ lists them (● = this one); File → Open workspace… also opens a workspace’s data folder from elsewhere.',
+    'WorkHub reopens the last workspace you used. File → Close workspace stops it (its data stays) and Default takes over.',
+    'Only the workspace whose window you are using captures what you copy.'] },
   { t: 'Capture network traffic on a server (like Wireshark)', k: 'capture traffic tcpdump wireshark packets pcap network sniff port filter', v: 'terminal', s: [
     'Right-click a server in the SSH tree (or ⋯ on its card) → 📡 Capture traffic….',
     'Optional: a filter in tcpdump words — port 1521 · host 10.0.0.31 · port 8443 and host 10.0.0.15 — then ▶ Start.',

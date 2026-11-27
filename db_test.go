@@ -20,8 +20,9 @@ func TestPostgresQueryWindow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("needs a temporary PostgreSQL server")
 	}
+	port := freePort() // not a fixed port: another PostgreSQL may be running on this PC
 	pg := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
-		Port(54329).Username("tester").Password("pw").Database("app").
+		Port(uint32(port)).Username("tester").Password("pw").Database("app").
 		RuntimePath(t.TempDir()).CachePath(os.TempDir() + "/workhub-pg-cache"))
 	if err := pg.Start(); err != nil {
 		t.Fatal(err)
@@ -30,7 +31,7 @@ func TestPostgresQueryWindow(t *testing.T) {
 
 	store, _ := OpenStore(t.TempDir())
 	a := &App{store: store, dbs: newDBManager()}
-	v, _ := store.SaveEntry(EntryInput{Name: "pg", Host: "127.0.0.1", Port: 54329, Protocol: "postgres", Username: "tester", Password: ptr("pw"),
+	v, _ := store.SaveEntry(EntryInput{Name: "pg", Host: "127.0.0.1", Port: port, Protocol: "postgres", Username: "tester", Password: ptr("pw"),
 		Extra: map[string]string{"database": "app"}})
 
 	call := func(h http.HandlerFunc, method, url string, body any) (int, map[string]any) {

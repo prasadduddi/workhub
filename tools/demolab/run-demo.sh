@@ -18,6 +18,8 @@ stop() {
     for i in $(seq 1 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
     rm -f "$f"
   done
+  # workspaces opened from the demo (File → New workspace) run as their own WorkHub: stop those too
+  pkill -f "$SIM/workhub -workspace" 2>/dev/null || true
   return 0
 }
 case "$1" in
