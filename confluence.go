@@ -93,6 +93,12 @@ var confHTTP = &http.Client{Timeout: 30 * time.Second, Transport: &http.Transpor
 
 // confGet reads a Confluence REST path (relative to the base address) as JSON.
 func (a *App) confGet(path string, out any) error {
+	err := a.confGet0(path, out)
+	noteErr("Confluence", err)
+	return err
+}
+
+func (a *App) confGet0(path string, out any) error {
 	c, err := a.confEffective()
 	if err != nil {
 		return err

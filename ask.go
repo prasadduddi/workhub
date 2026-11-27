@@ -438,9 +438,11 @@ func (a *App) askAI(q string, rep *askReply) {
 		} else {
 			rep.AIError = "Couldn't reach the AI service — " + err.Error()
 		}
+		noteErr("AI", err)
 		return
 	}
 	if msg.StopReason == anthropic.BetaStopReasonRefusal {
+		noteErr("AI", fmt.Errorf("declined (refusal)"))
 		rep.AIError = "The AI declined to answer this one — the search results below are what was found"
 		return
 	}

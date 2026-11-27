@@ -1858,3 +1858,24 @@ dialog.pcap-dlg[open] { display: flex; }
 .ws-box .ws-row { padding: 5px 6px; border-radius: 6px; } .ws-box .ws-row:hover { background: var(--panel2); }
 .ws-box .ws-row .muted { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
 .ws-box .row.end { margin-top: 12px; }
+
+/* a pop-out window's own bar: the same light blue as WorkHub's title bar */
+.popbar { background: #dbe6f8; border-bottom-color: #8fb0ea; color: #1b2b4a; }
+@media (prefers-color-scheme: dark) { .popbar { background: #1f2c44; border-bottom-color: #3a5487; color: #dbe6f8; } }
+
+.support-dlg { width: min(760px, 94vw); } .support-text { max-height: 55vh; overflow: auto; background: var(--panel2); padding: 10px; border-radius: 6px; font-size: calc(12px * var(--ui-scale)); white-space: pre-wrap; }
+
+/* 🗑 recycle bin */
+.bin-dlg { width: min(720px, 94vw); }
+.bin-list { max-height: 55vh; overflow: auto; margin: 10px 0; display: flex; flex-direction: column; gap: 4px; }
+.bin-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--panel2); }
+.bin-row .bin-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bin-empty { padding: 18px 6px; }
+
+/* 🎬 Presentation mode */
+.pres-pill { flex: none; background: #fff1c2; border: 1px solid #e0a800; color: #6b4e00; border-radius: 6px; padding: 0 10px; min-height: 34px; font-weight: 700; }
+body.presenting #showPwBtn, body.presenting .upd-pill { display: none !important; }
+body.pres-blur :is(.nm, .dbaddr, .card-head .host, .svc .v, .svc-line, .lr-url, .tbl td, .tc-row .tc-t, .tc-row .muted, #termTabs .tab, #sqlTabs .tab, .ask-key, .pc-table td:nth-child(3), .pc-table td:nth-child(4), #remotePane .path, .tfs-snip) {
+  filter: blur(5px); transition: filter .15s;
+}
+.pc-threads { max-height: 45vh; overflow: auto; }

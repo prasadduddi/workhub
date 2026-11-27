@@ -8,6 +8,8 @@ package main
 // with made-up sample data, to present WorkHub without showing real work.
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -250,4 +252,70 @@ func (a *App) handleWorkspaceActive(w http.ResponseWriter, r *http.Request) {
 		setLastWorkspace(a.workspace)
 	}
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// instancePost sends JSON to another workspace's WorkHub on this PC (with its sign-in key).
+var instancePost = func(dir string, port int, path string, body any) error {
+	tok, err := os.ReadFile(filepath.Join(dir, "session.token"))
+	if err != nil {
+		return err
+	}
+	b, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:%d%s", port, path), bytes.NewReader(b))
+	t := strings.TrimSpace(string(tok))
+	req.Host = fmt.Sprintf("127.0.0.1:%d", port)
+	req.Header.Set("Cookie", fmt.Sprintf("wh%d=%s", port, t))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("the other workspace answered %s", resp.Status)
+	}
+	return nil
+}
+
+// handleWorkspaceCopy: POST /api/workspaces/copy {to, ids} — copies of these connections (passwords too) in
+// another workspace; it is started in the background if needed. Nothing leaves this PC.
+func (a *App) handleWorkspaceCopy(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		To  string   `json:"to"`
+		IDs []string `json:"ids"`
+	}
+	if err := readJSON(r, &in); err != nil || len(in.IDs) == 0 {
+		writeErr(w, 400, errors.New("pick the connections to copy"))
+		return
+	}
+	ws := wsName(in.To)
+	dir := chosenDataDir(ws)
+	if filepath.Clean(dir) == filepath.Clean(a.dataDir) {
+		writeErr(w, 400, errors.New("that is this workspace"))
+		return
+	}
+	if !fileExists(filepath.Join(dir, "workhub.dat")) {
+		writeErr(w, 404, fmt.Errorf("no workspace called “%s”", wsLabel(ws)))
+		return
+	}
+	if _, err := a.startWorkspace(ws, false, false); err != nil {
+		writeErr(w, 502, err)
+		return
+	}
+	n := 0
+	for _, id := range in.IDs {
+		e, ok := a.store.Entry(id)
+		if !ok {
+			continue
+		}
+		pw := e.Password
+		body := EntryInput{Project: e.Project, Name: e.Name, Host: e.Host, Port: e.Port, Protocol: e.Protocol, URL: e.URL, Username: e.Username,
+			Password: &pw, KeyFile: e.KeyFile, Env: e.Env, Tags: e.Tags, Extra: e.Extra, Notes: e.Notes, Favorite: e.Favorite}
+		if err := instancePost(dir, workspacePort(ws), "/api/entries", body); err != nil {
+			writeErr(w, 502, fmt.Errorf("copied %d of %d: %v", n, len(in.IDs), err))
+			return
+		}
+		n++
+	}
+	writeJSON(w, map[string]any{"copied": n, "to": wsLabel(ws)})
 }

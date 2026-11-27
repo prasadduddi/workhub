@@ -204,3 +204,19 @@ func init() {
 	taskbarReborn, _, _ = pRegisterWinMsg.Call(uintptr(unsafe.Pointer(name)))
 	beforeExit = append(beforeExit, trayRemove)
 }
+
+// trayNotify shows a Windows notification from WorkHub's tray icon (🔔 notify.go); the icon is added if needed.
+func trayNotify(title, body string) {
+	if trayHwnd == 0 {
+		return
+	}
+	trayAdd()
+	if !trayShown {
+		return
+	}
+	d := trayData(nifInfo)
+	copyUTF16(d.SzInfoTitle[:], title)
+	copyUTF16(d.SzInfo[:], orDefault(body, " "))
+	d.DwInfoFlags = 1 // NIIF_INFO
+	pShellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(d)))
+}

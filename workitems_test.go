@@ -34,8 +34,14 @@ func TestWorkItems(t *testing.T) {
 		t.Fatalf("edit/move failed: %+v", got.Blocks)
 	}
 	s.DeleteWorkItem(w.ID)
+	// 🗑 in the recycle bin the file stays (the thread can be put back)…
+	if _, err := os.Stat(filepath.Join(dir, "attachments", at.ID)); err != nil {
+		t.Fatal("a thread in the recycle bin lost its screenshot")
+	}
+	// …and goes when the thread is removed for good
+	s.purgeBin(true, "")
 	if _, err := os.Stat(filepath.Join(dir, "attachments", at.ID)); !os.IsNotExist(err) {
-		t.Fatal("screenshot file left behind after deleting the work item")
+		t.Fatal("screenshot file left behind after emptying the recycle bin")
 	}
 }
 

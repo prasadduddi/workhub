@@ -91,6 +91,28 @@ func TestWorkspaces(t *testing.T) {
 	if code, _ = call(a.handleWorkspaceClose, nil); code != 400 {
 		t.Fatal("Default can't be closed")
 	}
+	// 📤 copy connections to another workspace: the copy carries the password; not to itself / unknown ones
+	pw := "Secret#1"
+	e, _ := s.SaveEntry(EntryInput{Name: "app", Host: "app-01.example.com", Protocol: "ssh", Username: "deploy", Password: &pw, Env: "UAT"})
+	var sent []EntryInput
+	oldPost := instancePost
+	defer func() { instancePost = oldPost }()
+	instancePost = func(dir string, port int, path string, body any) error {
+		if path != "/api/entries" || port != workspacePort("Demo WS") {
+			t.Fatalf("posted to %d %s", port, path)
+		}
+		sent = append(sent, body.(EntryInput))
+		return nil
+	}
+	if code, out = call(a.handleWorkspaceCopy, map[string]any{"to": "Demo WS", "ids": []string{e.ID}}); code != 200 || len(sent) != 1 || *sent[0].Password != pw || sent[0].Host != "app-01.example.com" || sent[0].Env != "UAT" {
+		t.Fatalf("copy: %d %v %+v", code, out, sent)
+	}
+	if code, _ = call(a.handleWorkspaceCopy, map[string]any{"to": "Default", "ids": []string{e.ID}}); code != 400 {
+		t.Fatal("copy into the same workspace")
+	}
+	if code, _ = call(a.handleWorkspaceCopy, map[string]any{"to": "Nope", "ids": []string{e.ID}}); code != 404 {
+		t.Fatal("copy into an unknown workspace")
+	}
 	// only the workspace in use captures copies
 	setLastWorkspace("Demo WS")
 	demo := &App{workspace: "Demo WS"}

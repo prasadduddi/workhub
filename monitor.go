@@ -162,6 +162,13 @@ func (a *App) runChecks(s MonitorSettings) {
 				a.mon.status[c.ID] = st
 			}
 			if st.Up == nil || *st.Up != up {
+				if st.Up != nil { // a change (not the first check): 🔔
+					if up {
+						go a.notify("monitor", "✅ Up again — "+c.Name, "Down for "+time.Since(st.Since).Round(time.Second).String(), "monitor", c.ID)
+					} else {
+						go a.notify("monitor", "🔴 Down — "+c.Name, detail, "monitor", c.ID)
+					}
+				}
 				st.Since = time.Now()
 			}
 			st.Up, st.Ms, st.Detail, st.At = &up, int(took.Milliseconds()), detail, time.Now()

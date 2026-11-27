@@ -13,6 +13,35 @@ permissions:
   contents: write
 
 jobs:
+  # Windows: the Go tests, then WorkHub-web.exe started and checked in a browser (every page, Windows-only parts).
+  # Separate from the release build: a failure here is reported, it doesn't stop a release.
+  windows-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Go tests (Windows)
+        shell: bash
+        run: |
+          go vet ./... 2>&1 | grep -v "possible misuse of unsafe.Pointer" || true
+          go test -short -count=1 ./...
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Browser check (Windows)
+        shell: pwsh
+        run: |
+          go build -o workhub.exe .
+          pip install -q playwright
+          python -m playwright install chromium
+          $data = Join-Path $env:RUNNER_TEMP "whdata"
+          Start-Process -FilePath .\workhub.exe -ArgumentList @("-data", $data, "-port", "47960", "-no-browser")
+          for ($i = 0; $i -lt 60 -and -not (Test-Path (Join-Path $data "session.token")); $i++) { Start-Sleep -Milliseconds 500 }
+          $tok = (Get-Content (Join-Path $data "session.token")).Trim()
+          python tools/uitest/win_smoke.py "http://127.0.0.1:47960/?t=$tok"
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -51,6 +80,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-beta') }} # v1.18.0-beta.1: only for the Beta channel
           files: |
             dist/WorkHub-web.exe
             dist/WorkHub-Desktop.exe

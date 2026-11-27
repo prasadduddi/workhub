@@ -4,6 +4,18 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.18.0', title: 'Presentation mode, recycle bin, notifications, support report, and more', items: [
+    ['🎬', 'Presentation mode', 'View → Presentation mode: passwords stay hidden, PROD is hidden, clipboard capture pauses, text is a step bigger — and host names can be blurred. Click 🎬 Presenting at the top to stop; everything goes back as it was.', ''],
+    ['🗑', 'Recycle bin', 'Deleted threads, connections and notes stay in File → Recycle bin for 30 days — Restore puts them back (with their files).', ''],
+    ['🔔', 'Notifications', 'A Windows notification (and a notice here) when a monitor goes down or comes back, a tracked Jira issue changes status, or a thread reminder is due. ⚙ Settings → General switches each off.', ''],
+    ['📋', 'Support report', 'Help → Copy a support report: version, what’s switched on and the last errors of each feature — with no passwords, addresses, host names or emails — to paste when something doesn’t work.', ''],
+    ['📤', 'Copy connections to another workspace', 'Right-click a connection (or select several) → Copy to another workspace…: copies, with their passwords.', ''],
+    ['📡', 'Capture traffic: limits and threads', 'Stop a capture after N packets or N minutes, and keep the .pcap in a thread (🧵 To a thread…).', ''],
+    ['🧪', 'Beta updates', '⚙ Settings → General → Updates: Beta also offers test versions before everyone else.', ''],
+  ] },
+  { v: '1.17.1', title: 'Pop-out windows easy to spot', items: [
+    ['🎨', 'Light blue pop-out windows', 'Windows opened with the new-window icon now have the same light blue title bar as WorkHub (Windows 11), and the bar inside them is light blue too.', ''],
+  ] },
   { v: '1.17.0', title: 'Workspaces: a demo workspace, separate data, this window or a new one', items: [
     ['🗂', 'Several workspaces', 'File → New workspace / Open workspace / Switch workspace / Close workspace. Each workspace has completely separate data; opening one asks whether to use this window or a new one, and WorkHub reopens the last workspace next time.', ''],
     ['🎬', 'A demo workspace in one click', 'New workspace → “Fill it with sample data”: made-up servers, databases, bookmarks, threads, notes and calendar entries — to present WorkHub without showing real work. A new workspace doesn’t import this PC’s browser bookmarks, and only the workspace you are using captures what you copy.', ''],

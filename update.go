@@ -32,6 +32,8 @@ type releaseInfo struct {
 	Notes     string    `json:"body"`
 	URL       string    `json:"html_url"`
 	Published time.Time `json:"published_at"`
+	Pre       bool      `json:"prerelease"`
+	Draft     bool      `json:"draft"`
 	Assets    []struct {
 		Name string `json:"name"`
 		URL  string `json:"browser_download_url"`
@@ -40,11 +42,12 @@ type releaseInfo struct {
 }
 
 var (
-	updMu      sync.Mutex
-	updCache   *releaseInfo
-	updChecked time.Time
-	updateURL  = releasesAPI // tests point this at a local server
-	updPending string        // a version already installed, waiting for the next start
+	updMu         sync.Mutex
+	updCache      *releaseInfo
+	updChecked    time.Time
+	updateURL     = releasesAPI                                                 // tests point this at a local server
+	updateListURL = strings.TrimSuffix(releasesAPI, "/latest") + "?per_page=15" // the Beta channel
+	updPending    string                                                        // a version already installed, waiting for the next start
 )
 
 var updClient = &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}
@@ -55,7 +58,12 @@ func latestRelease(force bool) (*releaseInfo, error) {
 	if !force && updCache != nil && time.Since(updChecked) < 50*time.Minute { // checked hourly
 		return updCache, nil
 	}
-	req, _ := http.NewRequest("GET", updateURL, nil)
+	beta := updChannel == "beta"
+	u := updateURL
+	if beta { // the Beta channel: the newest release, pre-releases included
+		u = updateListURL
+	}
+	req, _ := http.NewRequest("GET", u, nil)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "WorkHub/"+version)
 	resp, err := updClient.Do(req)
@@ -67,15 +75,45 @@ func latestRelease(force bool) (*releaseInfo, error) {
 		return nil, fmt.Errorf("GitHub answered %s", resp.Status)
 	}
 	var r releaseInfo
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+	if beta {
+		var list []releaseInfo
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return nil, err
+		}
+		for _, x := range list {
+			if !x.Draft && (r.Tag == "" || verLess(r.Tag, x.Tag)) {
+				r = x
+			}
+		}
+		if r.Tag == "" {
+			return nil, errors.New("no releases found")
+		}
+	} else if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
 		return nil, err
 	}
 	updCache, updChecked = &r, time.Now()
 	return &r, nil
 }
 
+// updChannel: "" (Stable) or "beta" (⚙ Settings → General → Updates); set from the settings.
+var updChannel = ""
+
+// verLess: version a is older than b (1.18.0-beta.1 < 1.18.0 < 1.18.1).
+func verLess(a, b string) bool {
+	pa, pb := verParts(a), verParts(b)
+	if pa == nil || pb == nil {
+		return false
+	}
+	for i := range pa {
+		if pa[i] != pb[i] {
+			return pa[i] < pb[i]
+		}
+	}
+	return false
+}
+
 var (
-	reVer   = regexp.MustCompile(`^v(\d+)\.(\d+)(?:\.(\d+))?`)
+	reVer   = regexp.MustCompile(`^v(\d+)\.(\d+)(?:\.(\d+))?(?:-beta\.?(\d+))?`)
 	reStamp = regexp.MustCompile(`(\d{4}-\d{2}-\d{2}-\d{4})`)
 )
 
@@ -85,11 +123,15 @@ func verParts(s string) []int {
 		return nil
 	}
 	out := []int{}
-	for _, p := range m[1:] {
+	for _, p := range m[1:4] {
 		n, _ := strconv.Atoi(p)
 		out = append(out, n)
 	}
-	return out
+	beta := 1 << 30 // not a beta: after every beta of the same version
+	if m[4] != "" {
+		beta, _ = strconv.Atoi(m[4])
+	}
+	return append(out, beta)
 }
 
 // isNewer: a release tag above our version, or, for builds without a version
@@ -129,6 +171,7 @@ func (a *App) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rel, err := latestRelease(r.URL.Query().Get("force") == "1")
+	noteErr("Updates", err)
 	if err != nil {
 		writeJSON(w, map[string]any{"current": version, "error": err.Error(), "page": releasesPage})
 		return
@@ -384,4 +427,16 @@ func (a *App) watchUpdates() {
 		a.fetchUpdate()
 		time.Sleep(time.Hour)
 	}
+}
+
+// setUpdChannel switches Stable / Beta (the next check asks again).
+func setUpdChannel(ch string) {
+	if ch != "beta" {
+		ch = ""
+	}
+	updMu.Lock()
+	if ch != updChannel {
+		updChannel, updCache = ch, nil
+	}
+	updMu.Unlock()
 }

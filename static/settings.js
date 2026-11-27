@@ -35,7 +35,13 @@ const Settings = {
           row('Desktop shortcut', '', sw('inst-desktop', inst.desktop))] : []),
         ...(window.WH_DESKTOP ? [row('Close button keeps WorkHub running', 'In the tray by the clock — capture, tunnels and transfers carry on', sw('tray', Tray.on()))] : []),
         row('Reopen last session', 'Offer to reopen your SSH, SQL tabs and thread when WorkHub starts', sw('reopen', !S.settings.no_reopen)),
-        row('Check for new versions automatically', 'Asks GitHub about once an hour (sends only “WorkHub/version”). Off: only when you press ⟳ Check for updates', sw('updcheck', !S.settings.no_update_check)),
+        row('🔔 Notifications', 'A notice (and a Windows notification on Desktop) when…', ''),
+        row('…a monitor goes down or comes back', '', sw('notmon', !S.settings.no_notify_monitor)),
+        row('…a Jira issue you track changes status', '', sw('notjira', !S.settings.no_notify_jira)),
+        row('…a thread reminder is due', '', sw('notrem', !S.settings.no_notify_reminder)),
+        ...(!window.WH_DESKTOP && 'Notification' in window ? [row('Browser notifications', Notification.permission === 'granted' ? 'Allowed — notifications also show outside WorkHub' : Notification.permission === 'denied' ? 'Blocked in this browser’s site settings' : 'Show them outside WorkHub too (the browser asks once)', Notification.permission === 'default' ? btn('notallow', 'Allow') : '')] : []),
+        row('Check for new versions automatically', 'Asks GitHub about once an hour (sends only “WorkHub/version”). Off: only when you press ⟳ Check for updates', sw('autoupd', !S.settings.no_update_check)),
+        row('Updates', 'Beta: also the test versions released before everyone else (they may have rough edges)', sel('updchan', S.settings.update_channel || '', [['', 'Stable'], ['beta', 'Beta']])),
         row('Download updates in the background', 'Nothing is installed until you choose to', sw('updfetch', !S.settings.no_update_fetch)),
       ]],
       ['look', '🎨', 'Appearance', [
@@ -104,6 +110,7 @@ $('#settingsBody').addEventListener('click', async e => {
     case 'install': Settings.install(); break;
     case 'mail': $('#settingsDlg').close(); show('inbox'); $('#mailPanel').open = true; break;
     case 'namerules': openNameRules(); break;
+    case 'notallow': await Notification.requestPermission().catch(() => {}); Settings.render(); break;
     case 'teams-signin': {
       try {
         const r = await api('POST', '/api/teams/signin');
@@ -145,7 +152,11 @@ $('#settingsBody').addEventListener('change', async e => {
     case 'slog': await saveSettings({ session_log: t.checked }); toast(t.checked ? 'SSH sessions you open from now on are saved' : 'SSH sessions are no longer saved'); break;
     case 'tray': Tray.set(t.checked); break;
     case 'reopen': await saveSettings({ no_reopen: !t.checked }); toast(t.checked ? 'You will be offered to reopen your last session' : 'The last session is no longer offered at start (an update still reopens it)'); break;
-    case 'updcheck': await saveSettings({ no_update_check: !t.checked }); toast(t.checked ? 'WorkHub checks for new versions by itself again' : 'No automatic update checks — press ⟳ Check for updates when you want'); break;
+    case 'notmon': await saveSettings({ no_notify_monitor: !t.checked }); break;
+    case 'notjira': await saveSettings({ no_notify_jira: !t.checked }); break;
+    case 'notrem': await saveSettings({ no_notify_reminder: !t.checked }); break;
+    case 'updchan': await saveSettings({ update_channel: t.value }); toast(t.value ? 'Beta updates: test versions are offered too' : 'Stable updates only'); Update.check?.(false); break;
+    case 'autoupd': await saveSettings({ no_update_check: !t.checked }); toast(t.checked ? 'WorkHub checks for new versions by itself again' : 'No automatic update checks — press ⟳ Check for updates when you want'); break;
     case 'updfetch': await saveSettings({ no_update_fetch: !t.checked }); toast(t.checked ? 'New versions download in the background — you choose when to install' : 'New versions are no longer downloaded until you ask'); break;
     case 'watch': if ($('#watchToggle').checked !== t.checked) $('#watchToggle').click(); break; // same as ● Capturing at the top
     case 'capall': await saveSettings({ capture_all: t.checked }); break;

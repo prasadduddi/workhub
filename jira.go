@@ -184,6 +184,12 @@ type jiraClient struct {
 }
 
 func (c *jiraClient) get(path string, out any) error {
+	err := c.get0(path, out)
+	noteErr("Jira", err) // for the support report
+	return err
+}
+
+func (c *jiraClient) get0(path string, out any) error {
 	if c.cfg.Mode == "browser" {
 		return c.browserGet(path, out)
 	}
@@ -404,8 +410,16 @@ func (a *App) refreshJira(keys ...string) {
 			keys = append(keys, j.Key)
 		}
 	}
+	before := map[string]string{}
+	for _, j := range a.store.JiraIssues() {
+		before[j.Key] = j.Status
+	}
 	for _, k := range keys {
-		a.store.putJiraIssue(fetchJira(cfg, k))
+		j := fetchJira(cfg, k)
+		if old := before[k]; old != "" && j.Status != "" && !strings.EqualFold(old, j.Status) { // 🔔 a tracked issue moved
+			go a.notify("jira", "◆ "+k+" is now "+j.Status, j.Summary+" (was "+old+")", "jira", k)
+		}
+		a.store.putJiraIssue(j)
 	}
 }
 

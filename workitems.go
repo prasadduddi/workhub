@@ -145,18 +145,8 @@ func (s *Store) DeleteWorkItem(id string) {
 					x.Parent = w.Parent
 				}
 			}
-			// Its files go too — unless a message moved or copied to another
-			// thread still shows them.
-			for _, b := range w.Blocks {
-				if b.File != nil && s.workAttachment(b.File.ID) == nil {
-					_ = removeFile(s.attachDir(), b.File.ID)
-				}
-			}
-			for _, f := range w.Files {
-				if s.workAttachment(f.ID) == nil {
-					_ = removeFile(s.attachDir(), f.ID)
-				}
-			}
+			// 🗑 kept 30 days with its files (they go when it's removed for good: purgeBin)
+			s.toBin(BinItem{Kind: "thread", Title: w.Title, Thread: w})
 			s.changed()
 			return
 		}

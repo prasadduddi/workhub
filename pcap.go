@@ -11,6 +11,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"os"
@@ -52,6 +53,8 @@ type pcapSess struct {
 	info                           string
 	errs                           []string
 	file                           string
+	maxPkts                        int
+	stopWhy                        string
 	client                         *ssh.Client
 	sess                           *ssh.Session
 	t0                             float64
@@ -121,6 +124,8 @@ func (a *App) handlePcapStart(w http.ResponseWriter, r *http.Request) {
 		HideSSH  bool   `json:"hide_ssh"`
 		Sudo     bool   `json:"sudo"`
 		Snap     int    `json:"snap"`
+		MaxPkts  int    `json:"max_packets"` // stop after this many packets (0 = no limit)
+		MaxMins  int    `json:"max_minutes"` // stop after this many minutes (0 = no limit)
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
@@ -174,7 +179,10 @@ func (a *App) handlePcapStart(w http.ResponseWriter, r *http.Request) {
 	}
 	f, _ := os.CreateTemp("", "workhub-capture-*.pcap")
 	ps := &pcapSess{ID: randomHex(6), Entry: e.ID, Host: e.Host, Filter: in.Filter, Iface: iface, Started: time.Now(), running: true, client: client, sess: sess,
-		data: map[int][]byte{}, info: "starting tcpdump on " + e.Host + "…"}
+		data: map[int][]byte{}, info: "starting tcpdump on " + e.Host + "…", maxPkts: max(in.MaxPkts, 0)}
+	if in.MaxMins > 0 { // stop by itself after N minutes
+		time.AfterFunc(time.Duration(in.MaxMins)*time.Minute, func() { ps.stopNow("stopped after " + strconv.Itoa(in.MaxMins) + " min") })
+	}
 	if f != nil {
 		ps.file = f.Name()
 	}
@@ -194,6 +202,7 @@ func (a *App) handlePcapStart(w http.ResponseWriter, r *http.Request) {
 				ps.info = "capturing on " + e.Host + " (" + line + ")"
 			} else if isErr && len(ps.errs) < 20 {
 				ps.errs = append(ps.errs, msg)
+				noteErr("Capture", errors.New(msg))
 			}
 			ps.mu.Unlock()
 		}
@@ -250,7 +259,12 @@ func (ps *pcapSess) read(out io.Reader, f *os.File) {
 		} else if f != nil {
 			ps.truncated = true
 		}
+		full := ps.maxPkts > 0 && ps.total >= ps.maxPkts
 		ps.mu.Unlock()
+		if full {
+			ps.stopNow("stopped after " + strconv.Itoa(ps.maxPkts) + " packets")
+			return
+		}
 	}
 }
 
@@ -290,7 +304,7 @@ func (a *App) handlePcapPoll(w http.ResponseWriter, r *http.Request) {
 	if len(out) > 2000 {
 		out = out[len(out)-2000:]
 	}
-	writeJSON(w, map[string]any{"packets": out, "total": ps.total, "running": ps.running, "info": ps.info, "errors": ps.errs,
+	writeJSON(w, map[string]any{"packets": out, "total": ps.total, "running": ps.running, "info": ps.info, "errors": ps.errs, "stopped": ps.stopWhy,
 		"bytes": ps.bytes, "truncated": ps.truncated, "host": ps.Host, "filter": ps.Filter, "iface": ps.Iface, "started": ps.Started})
 }
 
@@ -333,4 +347,58 @@ func (a *App) handlePcapClose(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// stopNow ends tcpdump on the server (the packets so far are kept).
+func (ps *pcapSess) stopNow(why string) {
+	ps.mu.Lock()
+	if ps.stopWhy == "" {
+		ps.stopWhy = why
+	}
+	ps.mu.Unlock()
+	_ = ps.sess.Signal(ssh.SIGINT)
+	ps.sess.Close()
+	ps.client.Close()
+}
+
+// handlePcapToThread: POST /api/pcap/{id}/thread {thread} — the .pcap as a file in a thread, with a summary message.
+func (a *App) handlePcapToThread(w http.ResponseWriter, r *http.Request) {
+	ps := pcapGet(r.PathValue("id"))
+	var in struct {
+		Thread string `json:"thread"`
+	}
+	if err := readJSON(r, &in); err != nil || ps == nil || in.Thread == "" {
+		writeErr(w, 400, errors.New("pick a thread"))
+		return
+	}
+	data, err := os.ReadFile(ps.file)
+	if err != nil {
+		writeErr(w, 404, errors.New("the capture file is gone"))
+		return
+	}
+	if len(data) > maxAttachment {
+		writeErr(w, 400, fmt.Errorf("the capture is %d MB — threads take files up to 50 MB; use ⬇ Save .pcap instead", len(data)>>20))
+		return
+	}
+	name := fmt.Sprintf("%s-%s.pcap", regexp.MustCompile(`[^A-Za-z0-9.-]+`).ReplaceAllString(ps.Host, "_"), ps.Started.Format("2006-01-02-1504"))
+	at, err := a.store.storeAttachment(name, data)
+	if err != nil {
+		writeErr(w, 500, err)
+		return
+	}
+	if err := a.store.AddWorkFile(in.Thread, at); err != nil {
+		writeErr(w, 404, err)
+		return
+	}
+	ps.mu.Lock()
+	total, filter, iface := ps.total, ps.Filter, ps.Iface
+	ps.mu.Unlock()
+	html := fmt.Sprintf(`<p>📡 Capture on <b>%s</b> (%s%s) — %d packets, %s</p><p>📎 <a href="/api/props/files/%s?download=1">%s</a></p>`,
+		html.EscapeString(ps.Host), html.EscapeString(iface), map[bool]string{true: ", " + html.EscapeString(filter), false: ""}[filter != ""], total, fmt.Sprintf("%.1f KB", float64(len(data))/1024), at.ID, html.EscapeString(name))
+	p, err := a.store.AddPost(in.Thread, Post{Kind: "note", HTML: html})
+	if err != nil {
+		writeErr(w, 500, err)
+		return
+	}
+	writeJSON(w, map[string]any{"post": p.ID, "file": at.ID})
 }

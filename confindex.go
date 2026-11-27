@@ -496,6 +496,7 @@ func (a *App) ciSync(full bool) error {
 	}
 	if len(errs) > 0 {
 		cidx.lastErr = strings.Join(errs, "; ")
+		noteErr("Local copy", errors.New(cidx.lastErr))
 		return errors.New(cidx.lastErr)
 	}
 	return nil

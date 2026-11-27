@@ -120,6 +120,12 @@ func (a *App) teamsToken() (string, error) {
 
 // graph calls Microsoft Graph; path starts with "/".
 func (a *App) graph(method, path string, body, out any) error {
+	err := a.graph0(method, path, body, out)
+	noteErr("Teams", err)
+	return err
+}
+
+func (a *App) graph0(method, path string, body, out any) error {
 	tok, err := a.teamsToken()
 	if err != nil {
 		return err

@@ -815,7 +815,7 @@ page.addEventListener('click', async e => {
       '-',
       ['Open the work-items folder', () => api('POST', `/api/work/${w.id}/word?what=folder`).catch(err => toast(err.message, true))],
       ['Delete this thread…', async () => {
-        if (!await askYes(`Delete the thread "${w.title}" and everything in it?`)) return;
+        if (!await askYes(`Delete the thread "${w.title}" and everything in it?\n\nIt goes to the 🗑 Recycle bin (File menu) for 30 days.`)) return;
         if (w.id === S.settings.active_thread) await saveSettings({ active_thread: '' });
         await api('DELETE', '/api/work/' + w.id); Work.current = null; await Work.loadList(); Work.show();
       }]]));
@@ -1111,7 +1111,7 @@ $('#workList').addEventListener('contextmenu', e => {
     '-',
     [w.archived ? '↩ Unarchive' : '🗄 Archive', () => Work.archive(w, !w.archived)],
     ...(w.general ? [] : [['Delete…', async () => {
-      if (!await askYes(`Delete the thread "${w.title}" and everything in it?`)) return;
+      if (!await askYes(`Delete the thread "${w.title}" and everything in it?\n\nIt goes to the 🗑 Recycle bin (File menu) for 30 days.`)) return;
       if (w.id === S.settings.active_thread) await saveSettings({ active_thread: '' });
       await api('DELETE', '/api/work/' + w.id); if (Work.current?.id === w.id) Work.current = null; await Work.loadList(); Work.show();
     }]])]));

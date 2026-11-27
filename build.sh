@@ -8,8 +8,14 @@ stamp="$(date +%Y-%m-%d-%H%M)"
 go mod tidy
 if [ "$1" = check ]; then
   go vet ./...
-  go test -count=1 ./...
-  tools/uitest/run.sh
+  # the Go tests and the browser tests at the same time: the check takes as long as the longer one
+  mkdir -p dist
+  (go test -count=1 ./... > dist/gotest.log 2>&1; echo $? > dist/gotest.status) &
+  ui=0; tools/uitest/run.sh || ui=$?
+  wait
+  tail -3 dist/gotest.log
+  [ "$(cat dist/gotest.status)" = 0 ] || { echo "Go tests failed (dist/gotest.log)"; exit 1; }
+  [ "$ui" = 0 ] || exit "$ui"
 fi
 # Two versions from the same code, always built together:
 #   WorkHub-web.exe          web version (opens in the browser, small console window)

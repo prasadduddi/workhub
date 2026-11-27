@@ -21,8 +21,11 @@ copied text, and more. One Go program serves a local web UI.
   - `store.go` — the encrypted data file (`workhub.dat`); add settings/config fields to `state` / `Settings`.
   - `*_windows.go`, `desktop_*_windows.go` (`//go:build windows && desktop`), `sys_other.go` — OS-specific code.
 - `static/` — the UI, embedded into the binary (`//go:embed static`). Plain JavaScript, **no framework, no build
-  step**, one file per feature (`app.js` core, `work.js` threads, `ask.js`, `pcap.js`, `settings.js`, …), all
-  loaded by `index.html` in order. `style.css` (CSS variables; dark theme via `@media (prefers-color-scheme: dark)`
+  step**, one file per feature (`work.js` threads, `ask.js`, `pcap.js`, `settings.js`, `workspaces.js`, …), all
+  loaded by `index.html` in order. The core is split into parts loaded in order and sharing one global scope:
+  `app.js` (helpers, navigation, settings, dashboard) → `app-search.js` → `app-connect.js` (terminal, files, tree) →
+  `app-chat.js` → `app-sql.js` → `app-tools.js` (git, notes, layout) → `app-start.js` (start-up + newer features).
+  Top-level code in a part may only use what earlier parts (or itself) define; new features go in their own file. `style.css` (CSS variables; dark theme via `@media (prefers-color-scheme: dark)`
   blocks, which `Theme` turns into a switch). `whatsnew.js` and `help.js` are user documentation.
   `static/vendor/` (CodeMirror 5, xterm) and `static/fonts/` (Lato, OFL) are bundled — **never load anything from
   the internet** in the page.
@@ -42,7 +45,10 @@ copied text, and more. One Go program serves a local web UI.
   sign-in token is printed and in `dist/sim/workhub.log`.
 - `GOOS=windows GOARCH=amd64 go build -tags desktop -o /dev/null .` and the same without `-tags desktop` —
   **always check both Windows builds compile** after touching Go code (Windows-only files aren't compiled on macOS).
-- `./build.sh` (Windows exes + local binary), `./build.sh check` (vet + tests + browser test first).
+- `./build.sh` (Windows exes + local binary), `./build.sh check` (vet, then the Go tests and the browser test at the
+  same time, then the build).
+- GitHub Actions also runs the Go tests and a browser check on **Windows** (`windows-tests` job,
+  `tools/uitest/win_smoke.py`) on every push — check it's green after pushing.
 
 ## How a change is done
 

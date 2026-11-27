@@ -23,10 +23,13 @@ const Pcap = {
       <div class="pc-ctl">
         <label>Interface <input data-pc="iface" value="any" spellcheck="false" title="any = all interfaces; or eth0, ens192…"></label>
         <label class="grow">Filter <input data-pc="filter" spellcheck="false" placeholder="e.g. port 1521 · host 10.0.0.31 · port 8443 and host 10.0.0.15 (empty = everything)"></label>
+        <label title="Stop by itself after this many packets (empty = no limit)">Stop after <input data-pc="maxp" type="number" min="1" placeholder="packets" style="width:90px"></label>
+        <label title="Stop by itself after this many minutes (empty = no limit)">or <input data-pc="maxm" type="number" min="1" placeholder="minutes" style="width:80px"></label>
         <label class="pc-chk" title="tcpdump needs root: runs it with sudo (with the server's saved password)"><input type="checkbox" data-pc="sudo" checked> use sudo <span class="muted tiny pc-user"></span></label>
         <label class="pc-chk" title="Leave out this SSH connection's own packets, so they don't flood the list"><input type="checkbox" data-pc="hidessh" checked> leave out WorkHub's SSH</label>
         <button type="button" class="primary" data-pc="start">▶ Start</button><button type="button" data-pc="stop" hidden>■ Stop</button>
         <button type="button" data-pc="save" disabled title="Download everything captured as a .pcap file — open it in Wireshark">⬇ Save .pcap</button>
+        <button type="button" data-pc="thread" disabled title="Keep the .pcap in a task thread, with a short summary">🧵 To a thread…</button>
       </div>
       <div class="pc-status muted tiny">Pick a filter (or none) and press Start.</div>
       <div class="pc-find"><input data-pc="find" type="search" placeholder="Show only rows with… (address, protocol, port, text)"><span class="muted tiny pc-count"></span></div>
@@ -37,7 +40,7 @@ const Pcap = {
       const b = e.target.closest('[data-pc]'); const tr = e.target.closest('tr[data-n]');
       if (tr) return this.show(+tr.dataset.n, tr);
       if (!b) return;
-      ({ start: () => this.start(), stop: () => this.stop(), save: () => this.save(), close: () => d.close() })[b.dataset.pc]?.();
+      ({ start: () => this.start(), stop: () => this.stop(), save: () => this.save(), thread: () => this.toThread(e), close: () => d.close() })[b.dataset.pc]?.();
     });
     d.querySelector('[data-pc=filter]').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (!this.running) this.start(); } });
     d.querySelector('[data-pc=find]').addEventListener('input', () => this.draw(true));
@@ -51,7 +54,8 @@ const Pcap = {
     d.querySelector('.pc-hex').textContent = 'Click a packet to see its bytes.';
     let r;
     try {
-      r = await api('POST', '/api/pcap/start', { entry: this.e.id, iface: v('iface').value.trim(), filter: v('filter').value.trim(), sudo: v('sudo').checked, hide_ssh: v('hidessh').checked });
+      r = await api('POST', '/api/pcap/start', { entry: this.e.id, iface: v('iface').value.trim(), filter: v('filter').value.trim(), sudo: v('sudo').checked, hide_ssh: v('hidessh').checked,
+        max_packets: +v('maxp').value || 0, max_minutes: +v('maxm').value || 0 });
     } catch (err) { return this.status(`✕ ${err.message}`, true); }
     this.id = r.id; this.running = true; this.ui();
     this.status('Starting tcpdump…');
@@ -61,6 +65,18 @@ const Pcap = {
     if (this.id) await api('POST', `/api/pcap/${this.id}/stop`).catch(() => {});
   },
   save() { if (this.id) location.href = `/api/pcap/${this.id}/file`; },
+  async toThread(ev) {
+    if (!this.id) return;
+    if (!Work.list.length) await Work.loadList();
+    // a box on top of this window (a menu would open behind it)
+    const list = Work.list.filter(w => !w.archived).slice(0, 40);
+    const rows = list.map((w, i) => `<label class="ws-row"><input type="radio" name="pcth" data-wsf="pick" value="${w.id}" ${i === 0 ? 'checked' : ''}> ${esc(w.title)}</label>`).join('');
+    const c = await Workspaces.box('Keep the capture in a thread', `<div class="pc-threads">${rows || '<div class="muted">No threads yet.</div>'}</div>`, [['cancel', 'Cancel'], ['ok', '🧵 Add to the thread', 'primary']]);
+    if (!c?.pick) return;
+    const title = list.find(w => w.id === c.pick)?.title || 'the thread';
+    try { await api('POST', `/api/pcap/${this.id}/thread`, { thread: c.pick }); toast(`🧵 The capture is in “${title}”`); }
+    catch (err) { toast(err.message, true); }
+  },
   stopPoll() { clearTimeout(this.timer); this.timer = null; this.running = false; },
   async poll() {
     if (!this.id) return;
@@ -69,7 +85,7 @@ const Pcap = {
     if (id !== this.id) return;
     if (r.packets.length) { this.rows.push(...r.packets); this.last = r.packets.at(-1).n; if (this.rows.length > 5000) this.rows = this.rows.slice(-5000); this.draw(); }
     const errs = (r.errors || []).join(' · ');
-    this.status(errs ? '✕ ' + errs : `${r.running ? '● ' + (r.info || 'capturing…') : '■ Stopped'} — ${r.total} packet${r.total === 1 ? '' : 's'}${r.bytes ? ' · ' + fmtSize(r.bytes) : ''}${r.truncated ? ' (the .pcap stopped growing at 200 MB)' : ''}`, !!errs);
+    this.status(errs ? '✕ ' + errs : `${r.running ? '● ' + (r.info || 'capturing…') : '■ ' + (r.stopped ? r.stopped[0].toUpperCase() + r.stopped.slice(1) : 'Stopped')} — ${r.total} packet${r.total === 1 ? '' : 's'}${r.bytes ? ' · ' + fmtSize(r.bytes) : ''}${r.truncated ? ' (the .pcap stopped growing at 200 MB)' : ''}`, !!errs);
     this.running = r.running; this.ui(r.total > 0);
     if (r.running) this.timer = setTimeout(() => this.poll(), 700);
   },
@@ -78,7 +94,8 @@ const Pcap = {
     d.querySelector('[data-pc=start]').hidden = this.running;
     d.querySelector('[data-pc=stop]').hidden = !this.running;
     d.querySelector('[data-pc=save]').disabled = !this.id || !(has ?? this.rows.length);
-    for (const k of ['iface', 'filter', 'sudo', 'hidessh']) d.querySelector(`[data-pc=${k}]`).disabled = this.running;
+    d.querySelector('[data-pc=thread]').disabled = !this.id || this.running || !(has ?? this.rows.length);
+    for (const k of ['iface', 'filter', 'sudo', 'hidessh', 'maxp', 'maxm']) d.querySelector(`[data-pc=${k}]`).disabled = this.running;
   },
   status(t, bad) { const s = $('#pcapDlg .pc-status'); if (s) { s.textContent = t; s.classList.toggle('pc-bad', !!bad); } },
   draw(all) {

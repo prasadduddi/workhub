@@ -169,6 +169,19 @@ const HELP_TOPICS = [
     'Confluence pages and Jira issues that match are listed together, best first, with the matching sentences in yellow; click one to open it, or 🧵 post its link in a thread.',
     'Set up Confluence in ⚙ Settings → Ask: “Same as my Jira login” on Atlassian Cloud, a token for Server / Data Center, or 🔑 Sign in with browser in WorkHub-Desktop (SSO / MFA — the window hides when you are in).',
     'Optional ✨ AI answers (off by default): add your Anthropic API key and switch them on — the best matches are then sent to Anthropic and you get a short answer with numbered links to its sources. Check your company allows this first.'] },
+  { t: 'Presentation mode (showing WorkHub on a screen)', k: 'presentation present demo screen share blur hide passwords prod meeting teams share', v: '', s: [
+    'View → 🎬 Presentation mode: passwords stay hidden (👁 and Show passwords are blocked), PROD servers are hidden, clipboard capture pauses and nothing pops up, text is a step bigger.',
+    'View → Blur host names and addresses while presenting (on by default) blurs them in trees, cards, lists and tables. Text inside a terminal or a SQL result isn’t blurred — keep those closed while sharing.',
+    'Click 🎬 Presenting at the top (or the menu again) to stop: everything goes back as it was.'] },
+  { t: 'Recycle bin (deleted threads, connections, notes)', k: 'recycle bin trash deleted restore undo undelete 30 days', v: '', s: [
+    'Deleted threads, connections and notes go to File → 🗑 Recycle bin for 30 days.',
+    '↩ Restore puts one back (a thread with its files and pictures); Delete forever / Empty the bin remove them now.'] },
+  { t: 'Notifications', k: 'notification notify alert monitor down jira status reminder windows pop-up toast', v: '', s: [
+    'WorkHub tells you when a monitor goes down or comes back, a Jira issue you track changes status, or a thread reminder is due — a notice with Open, and on Desktop a Windows notification.',
+    '⚙ Settings → General → 🔔 Notifications switches each kind off. The browser version can also show browser notifications (Allow, once).'] },
+  { t: 'Copy a support report', k: 'support report help problem error diagnostics send copy', v: '', s: [
+    'Help → 📋 Copy a support report… shows the version, what’s switched on and the last errors of each feature, with passwords, tokens, addresses, host names, IPs and emails replaced by <…>.',
+    'Check it, press 📋 Copy and paste it where you ask for help.'] },
   { t: 'Workspaces (a demo workspace, separate data)', k: 'workspace workspaces demo test present new open switch close separate data sample client', v: '', s: [
     'File → New workspace…: give it a name (e.g. Demo); tick “Fill it with sample data” for a ready-made demo; choose “Open in this window” or “Open in a new window”.',
     'Each workspace has its own data, key and settings — nothing is shared. A new workspace doesn’t import this PC’s browser bookmarks.',

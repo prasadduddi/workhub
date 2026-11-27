@@ -129,6 +129,7 @@ func main() {
 	boot := func(store *Store) {
 		bootOnce.Do(func() {
 			app.store = store
+			setUpdChannel(store.Settings().UpdateChannel) // Stable or Beta
 			if firstRun {
 				name := ws
 				if name == "" {
@@ -175,6 +176,8 @@ func main() {
 			go app.jiraWatcher()
 			go app.jiraKeepAlive()
 			go app.confIndexLoop() // Ask: the Confluence local index
+			go app.binLoop()       // 🗑 empties what's older than 30 days
+			go app.reminderLoop()  // 🔔 reminders due
 			go app.tunnelKeeper()
 			go app.backupWatcher()
 			go app.monitorLoop()
@@ -697,14 +700,22 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/clipboard/text", a.handleClipboardText)
 	mux.HandleFunc("GET /api/clipboard/html", a.handleClipboardHTML)
 	mux.HandleFunc("GET /api/workspaces", a.handleWorkspaces)
+	mux.HandleFunc("GET /api/support", a.handleSupportReport)
+	mux.HandleFunc("GET /api/notifications", a.handleNotifications)
+	mux.HandleFunc("GET /api/bin", a.handleBinList)
+	mux.HandleFunc("POST /api/bin/{id}/restore", a.handleBinRestore)
+	mux.HandleFunc("DELETE /api/bin/{id}", a.handleBinDelete)
+	mux.HandleFunc("DELETE /api/bin", a.handleBinEmpty)
 	mux.HandleFunc("POST /api/workspaces/open", a.handleWorkspaceOpen)
 	mux.HandleFunc("POST /api/workspaces/close", a.handleWorkspaceClose)
 	mux.HandleFunc("POST /api/workspaces/active", a.handleWorkspaceActive)
+	mux.HandleFunc("POST /api/workspaces/copy", a.handleWorkspaceCopy)
 	mux.HandleFunc("POST /api/pcap/start", a.handlePcapStart)
 	mux.HandleFunc("GET /api/pcap/{id}", a.handlePcapPoll)
 	mux.HandleFunc("POST /api/pcap/{id}/stop", a.handlePcapStop)
 	mux.HandleFunc("GET /api/pcap/{id}/file", a.handlePcapFile)
 	mux.HandleFunc("DELETE /api/pcap/{id}", a.handlePcapClose)
+	mux.HandleFunc("POST /api/pcap/{id}/thread", a.handlePcapToThread)
 	mux.HandleFunc("POST /api/ask", a.handleAsk)
 	mux.HandleFunc("GET /api/ask/config", a.handleAskConfigGet)
 	mux.HandleFunc("PUT /api/ask/config", a.handleAskConfigPut)

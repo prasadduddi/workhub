@@ -92,3 +92,18 @@ Workspaces.load(); setInterval(() => Workspaces.load(), 60000);
   const active = () => { if (document.visibilityState === 'visible' && Date.now() - t > 5000) { t = Date.now(); api('POST', '/api/workspaces/active').catch(() => {}); } };
   window.addEventListener('focus', active); document.addEventListener('visibilitychange', active); setTimeout(active, 1500);
 }
+
+// 📤 Copy connections to another workspace (passwords too; the original stays)
+Workspaces.copyEntries = async function (list) {
+  if (!list.length) return;
+  await this.load();
+  const others = this.others();
+  if (!others.length) return toast('There is no other workspace yet — File → New workspace…', true);
+  const rows = others.map((w, i) => `<label class="ws-row"><input type="radio" name="wspick" data-wsf="pick" value="${esc(w.name)}" ${i === 0 ? 'checked' : ''}> <b>${esc(w.name)}</b> ${w.running ? '<span class="tag">open</span>' : ''}</label>`).join('');
+  const c = await this.box(`Copy ${list.length === 1 ? `“${list[0].name || list[0].host}”` : `${list.length} connections`} to…`,
+    `${rows}<div class="muted tiny">Copies, with their passwords; nothing changes here. The other workspace starts in the background if needed.</div>`, [['cancel', 'Cancel'], ['copy', '📤 Copy', 'primary']]);
+  if (!c?.pick) return;
+  toast('Copying…');
+  try { const r = await api('POST', '/api/workspaces/copy', { to: c.pick, ids: list.map(e => e.id) }); toast(`📤 Copied ${r.copied} to “${r.to}”`); }
+  catch (err) { toast(err.message, true); }
+};

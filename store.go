@@ -100,29 +100,33 @@ type RecentFile struct {
 }
 
 type Settings struct {
-	Workspace     string          `json:"workspace"`
-	Watch         bool            `json:"watch"`
-	CaptureAll    bool            `json:"capture_all"`
-	SSHKeys       bool            `json:"ssh_keys,omitempty"` // the 🔑 SSH keys window may read ~/.ssh (off unless ticked in Settings)
-	Project       string          `json:"project"`
-	OpenTabs      []string        `json:"open_tabs"`
-	NoBrowserSync bool            `json:"no_browser_sync"`
-	Repos         []string        `json:"repos"`
-	Groups        []Group         `json:"groups"`
-	BlockedSites  []string        `json:"blocked_sites"`
-	LinkBrowser   string          `json:"link_browser"` // desktop version: chrome (default), edge or default
-	Mail          MailSettings    `json:"mail"`
-	NameRules     []NameRule      `json:"name_rules,omitempty"` // e.g. -BAT- → Batch (this workspace only)
-	Saved         []SavedQuery    `json:"saved_searches,omitempty"`
-	ActiveThread  string          `json:"active_thread,omitempty"`   // the task thread captures are added to: "" = General, "off" = none
-	SessionLog    bool            `json:"session_log,omitempty"`     // save the text of SSH sessions (sessionlog.go)
-	BackupCopy    string          `json:"backup_copy,omitempty"`     // second folder for backups, e.g. in OneDrive
-	NoShots       bool            `json:"no_shots,omitempty"`        // don't capture copied screenshots
-	Monitor       MonitorSettings `json:"monitor"`                   // server monitoring (monitor.go)
-	NoUpdateFetch bool            `json:"no_update_fetch,omitempty"` // don't download new versions in the background
-	NoUpdateCheck bool            `json:"no_update_check,omitempty"` // don't ask GitHub for new versions by itself (only ⟳ Check for updates)
-	LastSession   *SessionSnap    `json:"last_session,omitempty"`    // reopened after a restart or update
-	NoReopen      bool            `json:"no_reopen,omitempty"`       // don't offer to reopen the last session
+	Workspace        string          `json:"workspace"`
+	Watch            bool            `json:"watch"`
+	CaptureAll       bool            `json:"capture_all"`
+	SSHKeys          bool            `json:"ssh_keys,omitempty"` // the 🔑 SSH keys window may read ~/.ssh (off unless ticked in Settings)
+	Project          string          `json:"project"`
+	OpenTabs         []string        `json:"open_tabs"`
+	NoBrowserSync    bool            `json:"no_browser_sync"`
+	Repos            []string        `json:"repos"`
+	Groups           []Group         `json:"groups"`
+	BlockedSites     []string        `json:"blocked_sites"`
+	LinkBrowser      string          `json:"link_browser"` // desktop version: chrome (default), edge or default
+	Mail             MailSettings    `json:"mail"`
+	NameRules        []NameRule      `json:"name_rules,omitempty"` // e.g. -BAT- → Batch (this workspace only)
+	Saved            []SavedQuery    `json:"saved_searches,omitempty"`
+	ActiveThread     string          `json:"active_thread,omitempty"`      // the task thread captures are added to: "" = General, "off" = none
+	SessionLog       bool            `json:"session_log,omitempty"`        // save the text of SSH sessions (sessionlog.go)
+	BackupCopy       string          `json:"backup_copy,omitempty"`        // second folder for backups, e.g. in OneDrive
+	NoShots          bool            `json:"no_shots,omitempty"`           // don't capture copied screenshots
+	Monitor          MonitorSettings `json:"monitor"`                      // server monitoring (monitor.go)
+	NoUpdateFetch    bool            `json:"no_update_fetch,omitempty"`    // don't download new versions in the background
+	NoUpdateCheck    bool            `json:"no_update_check,omitempty"`    // don't ask GitHub for new versions by itself (only ⟳ Check for updates)
+	NoNotifyMonitor  bool            `json:"no_notify_monitor,omitempty"`  // 🔔 no notification when a monitor goes down / up
+	NoNotifyJira     bool            `json:"no_notify_jira,omitempty"`     // 🔔 … when a tracked Jira issue changes status
+	NoNotifyReminder bool            `json:"no_notify_reminder,omitempty"` // 🔔 … when a thread reminder is due
+	UpdateChannel    string          `json:"update_channel,omitempty"`     // "" Stable, "beta": pre-releases too
+	LastSession      *SessionSnap    `json:"last_session,omitempty"`       // reopened after a restart or update
+	NoReopen         bool            `json:"no_reopen,omitempty"`          // don't offer to reopen the last session
 }
 
 // SessionSnap is what was open: SSH terminals and SQL tabs (connection ids),
@@ -170,6 +174,7 @@ type State struct {
 	Confluence   ConfluenceConfig  `json:"confluence,omitzero"` // Ask: Confluence sign-in (the token never leaves the server)
 	Ask          AskConfig         `json:"ask,omitzero"`
 	ConfIndex    ConfIndexConfig   `json:"conf_index,omitzero"`
+	Bin          []BinItem         `json:"bin,omitempty"`       // 🗑 deleted threads, connections, notes (30 days; bin.go)
 	PickDirs     map[string]string `json:"pick_dirs,omitempty"` // Browse… buttons: the folder each one last chose (pickmemory.go) // Ask: Confluence spaces kept as a local copy (confindex.go)        // Ask: AI answers (off by default) and the Anthropic API key // ⚙ Settings → Teams (Microsoft Graph); the refresh token never leaves the server
 	JiraIssues   []*JiraIssue      `json:"jira_issues,omitempty"`
 	Events       []*Event          `json:"events,omitempty"` // Calendar
@@ -538,6 +543,7 @@ func (s *Store) DeleteEntry(id string) {
 				return
 			}
 			s.st.Entries = append(s.st.Entries[:i], s.st.Entries[i+1:]...)
+			s.toBin(BinItem{Kind: "entry", Title: orDefault(e.Name, orDefault(e.Host, e.URL)), Entry: e}) // 🗑 30 days
 			s.changed()
 			return
 		}
@@ -1120,6 +1126,7 @@ func (s *Store) DeleteNote(id string) {
 	for i, n := range s.st.Notes {
 		if n.ID == id {
 			s.st.Notes = append(s.st.Notes[:i], s.st.Notes[i+1:]...)
+			s.toBin(BinItem{Kind: "note", Title: orDefault(n.Title, "Note"), Note: n}) // 🗑 30 days
 			s.changed()
 			return
 		}
@@ -1157,6 +1164,7 @@ func (s *Store) Settings() Settings {
 func (s *Store) SetSettings(st Settings) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	setUpdChannel(st.UpdateChannel)
 	for _, e := range s.st.Entries {
 		if e.URL != "" && !e.Hidden && blockedURL(e.URL, st.BlockedSites) {
 			e.Hidden = true

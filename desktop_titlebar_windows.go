@@ -7,7 +7,9 @@ package main
 // own colour settings).
 
 import (
+	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -35,4 +37,30 @@ func tintTitleBar(hwnd uintptr) {
 	set(dwmwaCaptionColor, colorRef(0xDB, 0xE6, 0xF8)) // soft blue
 	set(dwmwaTextColor, colorRef(0x1B, 0x2B, 0x4A))    // dark blue-grey text
 	set(dwmwaBorderColor, colorRef(0x8F, 0xB0, 0xEA))  // a slightly bluer border
+}
+
+var (
+	pEnumWindows       = user32.NewProc("EnumWindows")
+	pGetCurrentProcess = kernel32.NewProc("GetCurrentProcessId")
+	tinted             sync.Map // hwnd → done
+)
+
+// tintAllWindows keeps giving every window of this WorkHub the light blue title bar — also the ones the
+// browser engine opens by itself (⧉ pop-out windows), which WorkHub never gets a handle for.
+func tintAllWindows() {
+	pid, _, _ := pGetCurrentProcess.Call()
+	cb := syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
+		var owner uint32
+		pGetWindowThreadPID.Call(hwnd, uintptr(unsafe.Pointer(&owner)))
+		if uintptr(owner) == pid {
+			if _, done := tinted.LoadOrStore(hwnd, true); !done {
+				tintTitleBar(hwnd)
+			}
+		}
+		return 1 // keep going
+	})
+	for {
+		pEnumWindows.Call(cb, 0)
+		time.Sleep(1500 * time.Millisecond)
+	}
 }

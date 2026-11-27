@@ -55,7 +55,10 @@ func runDesktop(url string, openLink func(string, bool)) bool {
 	}
 	defer w.Destroy()
 	hwnd := uintptr(w.Window())
-	tintTitleBar(hwnd) // a light blue title bar: easy to spot and drag
+	tintTitleBar(hwnd)  // a light blue title bar: easy to spot and drag
+	go tintAllWindows() // …and every window it opens (pop-outs) too
+	trayHwnd = hwnd     // 🔔 notifications come from the tray icon of this window
+	systemNotify = trayNotify
 	restoreWindow(hwnd)
 	// Web links open in the normal browser, not inside WorkHub.
 	_ = w.Bind("whOpenExternal", func(u string, newWindow bool) error { openLink(u, newWindow); return nil })

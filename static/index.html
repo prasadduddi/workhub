@@ -79,7 +79,7 @@
     </header>
     <div id="bulkBar" class="bulkbar" hidden><b id="bulkCount"></b>
       <select id="bulkEnv" title="Set the environment of the selected entries"><option value="">Set environment…</option><option>PROD</option><option>UAT</option><option>TEST</option><option>STAGE</option><option>DEV</option><option>DR</option><option value="-">(none)</option></select>
-      <button data-bulk="move">Move to folder…</button><button data-bulk="tag">Add tag…</button><button data-bulk="test">↻ Re-test</button><button data-bulk="key" title="These log in with an SSH key or SSO: stop flagging them for a missing password">🔑 Key login</button><button data-bulk="delete" class="danger">Delete</button><span class="spacer"></span><button data-bulk="clear">✕ Clear selection</button></div>
+      <button data-bulk="move">Move to folder…</button><button data-bulk="toworkspace" title="Copies in another workspace (passwords too)">📤 To workspace…</button><button data-bulk="tag">Add tag…</button><button data-bulk="test">↻ Re-test</button><button data-bulk="key" title="These log in with an SSH key or SSO: stop flagging them for a missing password">🔑 Key login</button><button data-bulk="delete" class="danger">Delete</button><span class="spacer"></span><button data-bulk="clear">✕ Clear selection</button></div>
     <div id="viewChips" class="vchips"></div>
     <div id="today" class="today"></div>
     <div id="stats" class="stats"></div>
@@ -698,6 +698,12 @@
 <script src="vendor/cm.js"></script>
 <script src="vendor/ajv.js"></script>
 <script src="app.js"></script>
+<script src="app-search.js"></script>
+<script src="app-connect.js"></script>
+<script src="app-chat.js"></script>
+<script src="app-sql.js"></script>
+<script src="app-tools.js"></script>
+<script src="app-start.js"></script>
 <script src="groups.js"></script>
 <script src="props.js"></script>
 <script src="work.js"></script>

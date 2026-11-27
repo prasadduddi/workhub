@@ -75,7 +75,11 @@ with sync_playwright() as p:
     ssh_off = lambda: bool(ev("S.sshOff"))
     ssh_keys_off = lambda: bool(ev("S.sshKeysOff"))
     close_dialogs = lambda: ev("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
-    pg.wait_for_timeout(9000)  # What's new opens a few seconds after a first start
+    try:  # What's new opens a moment after a first start: wait for it (not a fixed 9 s), then close it
+        pg.wait_for_function("document.querySelector('#whatsNewDlg')?.open", timeout=4000)
+    except Exception:
+        pass
+    pg.wait_for_timeout(300)
     BEFORE.append(lambda: (close_dialogs(), pg.keyboard.press("Escape")))
     ev("EnvSwitch.set('ALL')")  # most checks use the lab servers (UAT); the default (Others) is checked on its own
 
@@ -1048,7 +1052,7 @@ with sync_playwright() as p:
         ev("show('ask')"); pg.wait_for_timeout(300)
         ev("$('#askInJira').checked = false; localStorage.setItem('askSources', '[\"confluence\"]'); 0")
         pg.fill("#askQ", "restart payment after outage"); pg.press("#askQ", "Enter")
-        pg.wait_for_selector("#askOut .ask-row", timeout=15000)
+        pg.wait_for_function("document.querySelector('#askOut').innerText.includes('local copy')", timeout=15000)  # the new results, not the last search's
         txt = pg.inner_text("#askOut")
         expect("Restarting payment services after an outage" in txt and "local copy" in txt, txt[:300])
         expect(pg.locator("#askOut .ask-src.jira").count() == 0, "Jira searched while only Confluence is ticked")
@@ -1136,6 +1140,17 @@ with sync_playwright() as p:
         expect(head == [0xd4, 0xc3, 0xb2, 0xa1], f"not a pcap: {head}")
         pg.fill("#pcapDlg [data-pc=find]", "nothing-matches-this"); pg.wait_for_timeout(200)
         expect(pg.locator("#pcapDlg tbody tr").count() == 0, "row filter")
+        # 🧵 into a thread
+        tid = ev("Work.list.find(w => w.title.startsWith('PAY-205')).id")
+        pg.click("#pcapDlg [data-pc=thread]"); pg.wait_for_selector(".ws-box[open]")
+        pg.check(f".ws-box input[value='{tid}']"); pg.click(".ws-box [data-ws=ok]"); pg.wait_for_timeout(800)
+        posts = ev(f"api('GET', '/api/work/{tid}').then(w => w.posts.map(p => p.html || ''))")
+        expect(any("Capture on" in p and ".pcap" in p for p in posts), "the capture isn't in the thread")
+        # stop by itself after N packets
+        pg.fill("#pcapDlg [data-pc=find]", "")
+        pg.fill("#pcapDlg [data-pc=maxp]", "7"); pg.fill("#pcapDlg [data-pc=filter]", ""); pg.click("#pcapDlg [data-pc=start]")
+        pg.wait_for_function("!Pcap.running && Pcap.rows.length > 0", timeout=20000)
+        expect(ev("Pcap.rows.length") == 7 and "after 7 packets" in pg.inner_text("#pcapDlg .pc-status"), f"{ev('Pcap.rows.length')} / {pg.inner_text('#pcapDlg .pc-status')}")
         close_dialogs()
 
     @check("🗂 workspaces: File menu; a new workspace with sample data opens separately; listed to switch to")
@@ -1160,7 +1175,80 @@ with sync_playwright() as p:
         names = ev("Workspaces.list.map(w => w.name)")
         expect(wsn in names, f"not listed: {names}")
         expect(any(it[0].startswith(wsn) for it in ev("Workspaces.menuItems()")), "not in Switch workspace")
+        # 📤 copy a connection into that workspace (with its password)
+        src = ev("S.allEntries.find(e => e.port === 2222)")
+        r = ev(f"api('POST', '/api/workspaces/copy', {{ to: '{wsn}', ids: ['{src['id']}'] }})")
+        expect(r.get("copied") == 1, f"copy: {r}")
+        w.evaluate("poll()")
+        w.wait_for_function(f"(S.allEntries || []).some(e => e.port === 2222 && e.host === {json.dumps(src['host'])})", timeout=10000)
+        got = w.evaluate(f"S.allEntries.find(e => e.port === 2222 && e.host === {json.dumps(src['host'])})")
+        expect(got.get("has_password"), f"the copy didn't arrive with its password: {got}")
         w.evaluate("api('POST', '/api/quit').catch(() => {})"); w.close()
+
+    @check("📋 Help → support report: shown first, no secrets or addresses")
+    def _():
+        ev("SupportReport.open()"); pg.wait_for_selector(".support-dlg[open] .support-text")
+        t = pg.inner_text(".support-dlg .support-text")
+        expect("WorkHub support report" in t and "Version:" in t and "Jira:" in t, t[:200])
+        tok = ev("new URLSearchParams(location.search).get('t') || ''")
+        expect("127.0.0.1" not in t and "acme.local" not in t and (not tok or tok not in t), "the report shows an address or the sign-in key")
+        pg.click(".support-dlg [data-sr=close]")
+
+    @check("🗑 recycle bin: a deleted note and connection can be put back; Delete forever; Empty")
+    def _():
+        nid = ev("api('POST', '/api/notes', { title: 'Bin test note', body: 'x' }).then(n => n.id)")
+        ev(f"api('DELETE', '/api/notes/{nid}')")
+        ev("RecycleBin.open()"); pg.wait_for_selector("#binDlg[open] .bin-row")
+        expect("Bin test note" in pg.inner_text("#binDlg .bin-list") and "30 days left" in pg.inner_text("#binDlg .bin-list"), pg.inner_text("#binDlg .bin-list")[:200])
+        pg.locator("#binDlg .bin-row", has_text="Bin test note").locator("[data-bin=restore]").click(); pg.wait_for_timeout(600)
+        expect(ev("api('GET', '/api/notes').then(l => l.some(n => n.title === 'Bin test note'))"), "note not restored")
+        ev(f"api('DELETE', '/api/notes/{nid}')"); ev("RecycleBin.draw()"); pg.wait_for_timeout(400)
+        ev("window.__askManual = false")
+        pg.locator("#binDlg .bin-row", has_text="Bin test note").locator("[data-bin=forever]").click(); pg.wait_for_timeout(700)
+        expect("Bin test note" not in pg.inner_text("#binDlg .bin-list"), "Delete forever")
+        close_dialogs()
+
+    @check("🎬 presentation mode: passwords stay hidden, no PROD, capture paused, blur; off puts it back")
+    def _():
+        ev("EnvSwitch.set('ALL')"); pg.wait_for_timeout(300)
+        prod_before = ev("S.entries.filter(e => (e.env || '').toUpperCase() === 'PROD').length")
+        watch_before = ev("!!S.settings.watch")
+        ev("Presenting.toggle(true)"); pg.wait_for_timeout(700)
+        expect(ev("document.body.classList.contains('presenting')") and pg.is_visible("#presPill"), "not presenting")
+        expect(ev("S.entries.filter(e => (e.env || '').toUpperCase() === 'PROD').length") == 0, "PROD still shown")
+        expect(ev("!S.settings.watch"), "capture not paused")
+        expect(ev("document.body.classList.contains('pres-blur')"), "blur not on")
+        ev("show('dashboard'); Home.set(true)"); pg.wait_for_timeout(500)
+        if ev("!!document.querySelector('#board [data-eye]')"):
+            ev("document.querySelector('#board [data-eye]').click()"); pg.wait_for_timeout(200)
+            expect(ev("[...document.querySelectorAll('#board .pwv')].every(v => v.textContent === PW_MASK)"), "a password was shown")
+        ev("Home.set(false)")
+        pg.click("#presPill"); pg.wait_for_timeout(700)
+        expect(not ev("document.body.classList.contains('presenting')"), "still presenting")
+        expect(ev("S.entries.filter(e => (e.env || '').toUpperCase() === 'PROD').length") == prod_before, "PROD not back")
+        expect(ev("!!S.settings.watch") == watch_before, "capture not as before")
+
+    @check("🔔 notifications: a notice with Open; quiet while presenting; switches in Settings")
+    def _():
+        ev("Notices.last = 0")
+        body = json.dumps({"notices": [{"n": 1, "kind": "monitor", "title": "🔴 Down — App port", "body": "connection refused", "view": "monitor"}], "last": 1, "native": False})
+        pg.route("**/api/notifications*", lambda r: r.fulfill(status=200, content_type="application/json", body=body))
+        ev("Presenting.toggle(true)"); pg.wait_for_timeout(400)
+        ev("Notices.poll()"); pg.wait_for_timeout(500)
+        expect("Down — App port" not in (pg.inner_text("#toast") if pg.is_visible("#toast") else ""), "a notification popped up while presenting")
+        ev("Presenting.toggle(false)"); pg.wait_for_timeout(400)
+        ev("Notices.last = 0; Notices.poll()"); pg.wait_for_timeout(500)
+        expect("Down — App port" in pg.inner_text("#toast"), "no notice")
+        pg.click("#toast button:has-text('Open')"); pg.wait_for_timeout(400)
+        expect(ev("document.querySelector('#view-monitor').classList.contains('active')"), "Open didn't go to Monitor")
+        pg.unroute("**/api/notifications*")
+        pg.click("#settingsTop"); pg.wait_for_timeout(400); pg.click("[data-settab=general]"); pg.wait_for_timeout(300)
+        for k in ("notmon", "notjira", "notrem", "autoupd"):
+            expect(pg.locator(f"#settingsBody [data-set={k}]").count() == 1, f"no switch {k}")
+        pg.click("#settingsBody label:has([data-set=autoupd])"); pg.wait_for_timeout(400)
+        expect(ev("$('#settingsDlg').open"), "the update switch closed Settings (it was the Check-for-updates button)")
+        pg.click("#settingsBody label:has([data-set=autoupd])"); pg.wait_for_timeout(300)
+        close_dialogs()
 
     @check("no page errors during the whole run")
     def _():

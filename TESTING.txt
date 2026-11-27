@@ -171,3 +171,12 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] With two workspaces open: copy text in one's window -> captured only there
   [ ] File -> Close workspace (in Demo): Demo stops, Default opens; next start opens Default
   [ ] Add from Teams: no Allow / Block box (Desktop)
+  [ ] Windows 11: a pop-out window (new-window icon) has the light blue title bar too
+  [ ] View -> Presentation mode: passwords stay hidden, no PROD, capture paused, hosts blurred; 🎬 Presenting -> off: all back
+  [ ] Delete a thread with a picture -> File -> Recycle bin -> Restore: thread and picture back
+  [ ] Windows: a monitor of a stopped service -> a Windows notification "Down"; start it -> "Up again"
+  [ ] Help -> Copy a support report: no addresses / host names / passwords in it
+  [ ] Right-click a connection -> Copy to another workspace -> it's there (with password)
+  [ ] Capture: Stop after 50 packets stops by itself; 🧵 To a thread -> the .pcap in the thread
+  [ ] Settings -> Updates: Beta -> a beta release (v…-beta.N) is offered; Stable doesn't
+  [ ] GitHub Actions: the "windows-tests" job passes

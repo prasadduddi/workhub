@@ -96,6 +96,7 @@ const Menubar = {
         ['🗂 Switch workspace', null, typeof Workspaces !== 'undefined' ? Workspaces.menuItems() : []],
         ['🗂 Close workspace', () => Workspaces.close()],
         '-',
+        ['🗑 Recycle bin…', () => RecycleBin.open()],
         ['⬇ Import', null, [
           ['Connections from DBeaver / PuTTY / FileZilla / SQL Developer…', () => ConnImport.open()],
           '-',
@@ -121,6 +122,9 @@ const Menubar = {
       View: [
         ['Go to', null, PAGE_GROUPS.flatMap(([g, ic, , , vs], i) => [...(i ? ['-'] : []), ...vs.map(v => [`${$('.view.active')?.id === 'view-' + v ? '● ' : ''}${ic} ${this.label(v)}`, go(v)])])],
         ['Pages in the sidebar', null, PAGE_GROUPS.flatMap(([g, ic, , , vs], i) => [...(i ? ['-'] : []), ...vs.map(v => [`${hid.has(v) ? '☐' : '☑'} ${this.label(v)}  — ${ic} ${g}`, () => this.togglePage(v)])])],
+        '-',
+        [`${Presenting.on() ? '☑' : '☐'} 🎬 Presentation mode`, () => Presenting.toggle()],
+        [`${Presenting.blur() ? '☑' : '☐'} Blur host names and addresses while presenting`, () => Presenting.setBlur(!Presenting.blur())],
         '-',
         ['⧉ Open this page in a new window', () => Popout.popPage($('.view.active')?.id.replace('view-', '') || 'dashboard')],
         [`${document.body.classList.contains('side-collapsed') ? 'Show' : 'Hide'} the sidebar\tCtrl+B`, () => toggleSide()],
@@ -154,6 +158,7 @@ const Menubar = {
         ['⌨ Keyboard shortcuts\t?', () => Keys.open()],
         ['💬 Ask the assistant\tCtrl+J', () => Chat.toggle(true)],
         ['✨ What\'s new', click('#whatsNewBtn')],
+        ['📋 Copy a support report…', () => SupportReport.open()],
         '-',
         [Update.ready?.() ? `↻ Restart to finish updating to ${Update.info.latest}` : Update.info?.newer ? `⬆ Install WorkHub ${Update.info.latest}…` : '⟳ Check for updates', () => Update.info?.newer ? Update.show() : Update.check(true)],
         [`About — ${$('#appVersion')?.textContent || 'WorkHub'}`, () => Settings.open()],
