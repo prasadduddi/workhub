@@ -285,6 +285,7 @@ func TestGeneralThreadByDefault(t *testing.T) {
 func TestSlackThreadEngine(t *testing.T) {
 	s, _ := OpenStore(t.TempDir())
 	w := s.SaveWorkItem(WorkItem{Title: "PAY-123 refund limits", Jira: "PAY-123"})
+	time.Sleep(30 * time.Millisecond) // Windows' clock ticks coarsely: the message must come after the thread was read
 	p, _ := s.AddPost(w.ID, Post{Kind: "note", HTML: "<p>first</p>"})
 	if got, _ := s.GetWorkItem(w.ID); got.unread() != 1 {
 		t.Fatalf("unread = %d, want 1", got.unread())

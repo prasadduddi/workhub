@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -17,7 +18,7 @@ func TestSessionSurvivesRestart(t *testing.T) {
 	if k1 == "" || k1 != k2 {
 		t.Fatalf("the key changed between starts: %q %q", k1, k2)
 	}
-	if st, err := os.Stat(filepath.Join(dir, "browser.key")); err != nil || st.Mode().Perm()&0o077 != 0 {
+	if st, err := os.Stat(filepath.Join(dir, "browser.key")); err != nil || runtime.GOOS != "windows" && st.Mode().Perm()&0o077 != 0 { // Windows: no Unix permissions
 		t.Fatalf("browser.key must be private: %v %v", st, err)
 	}
 	if browserKey(t.TempDir()) == k1 {

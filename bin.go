@@ -71,7 +71,8 @@ func (s *Store) BinItems() []BinItem {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]BinItem, 0, len(s.st.Bin))
-	for _, it := range s.st.Bin {
+	for i := len(s.st.Bin) - 1; i >= 0; i-- { // newest first, also when the clock ticks coarsely (Windows)
+		it := s.st.Bin[i]
 		ref := ""
 		switch {
 		case it.Entry != nil:
@@ -83,7 +84,7 @@ func (s *Store) BinItems() []BinItem {
 		}
 		out = append(out, BinItem{ID: it.ID, Kind: it.Kind, Title: it.Title, Ref: ref, Deleted: it.Deleted})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Deleted.After(out[j].Deleted) })
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Deleted.After(out[j].Deleted) })
 	return out
 }
 

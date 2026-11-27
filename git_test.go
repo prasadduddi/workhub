@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -129,9 +130,16 @@ func TestLocalShell(t *testing.T) {
 		break
 	}
 	got.Reset()
-	ws.WriteJSON(map[string]any{"t": "d", "d": "echo work''hub-ok\r"})
+	cmd, want := "echo work''hub-ok\r", "workhub-ok" // the answer differs from what's typed (the shell echoes the typing)
+	if runtime.GOOS == "windows" {
+		cmd, want = "set /a 6*7\r", "42" // cmd prints '' as it is
+		if strings.Contains(strings.ToLower(localShells()[0].ID), "powershell") || strings.Contains(strings.ToLower(localShells()[0].ID), "pwsh") {
+			cmd = "6*7\r"
+		}
+	}
+	ws.WriteJSON(map[string]any{"t": "d", "d": cmd})
 	timeout := time.After(10 * time.Second)
-	for !strings.Contains(got.String(), "workhub-ok") {
+	for !strings.Contains(got.String(), want) {
 		select {
 		case b, ok := <-out:
 			if !ok {

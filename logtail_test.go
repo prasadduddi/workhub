@@ -4,10 +4,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestFindLogsCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the command runs on Linux servers (sh)")
+	}
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "app", "logs"), 0o755)
 	os.WriteFile(filepath.Join(dir, "app", "logs", "pay api.log"), []byte("x\n"), 0o644) // a space in the name

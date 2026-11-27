@@ -112,6 +112,7 @@ func TestWorkDocx(t *testing.T) {
 	if !strings.Contains(rels, "https://corp.atlassian.net/browse/INC-77") || media != 1 {
 		t.Errorf("link relationship or image missing (media=%d)", media)
 	}
+	zr.Close() // Windows can't remove a file that is still open
 	// Renaming replaces the old file; deleting removes it.
 	s.SaveWorkItem(WorkItem{ID: w.ID, Title: "INC-77 renamed"})
 	s.writeWorkDocx(w.ID)
