@@ -177,6 +177,7 @@ func (a *App) handlePcapStart(w http.ResponseWriter, r *http.Request) {
 	if sendPw {
 		_, _ = io.WriteString(stdin, pass+"\n")
 	}
+	a.prodLog(e, "capture", user, "Captured traffic on "+iface+orDefault(map[bool]string{true: " — " + in.Filter}[in.Filter != ""], ""), "") // 🛡
 	f, _ := os.CreateTemp("", "workhub-capture-*.pcap")
 	ps := &pcapSess{ID: randomHex(6), Entry: e.ID, Host: e.Host, Filter: in.Filter, Iface: iface, Started: time.Now(), running: true, client: client, sess: sess,
 		data: map[int][]byte{}, info: "starting tcpdump on " + e.Host + "…", maxPkts: max(in.MaxPkts, 0)}

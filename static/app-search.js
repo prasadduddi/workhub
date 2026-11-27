@@ -546,7 +546,8 @@ function jiraMatches(q) {
 function threadMatches(q) {
   const { words: ws, filters } = parseQuery(q.trim().toLowerCase()), words = ws.filter(w => !w.neg).map(w => w.v);
   if (!words.length || filters.length || typeof Work === 'undefined') return [];
-  return Work.list.filter(w => words.every(x => (w.title.toLowerCase() + ' ' + w.search).includes(x)));
+  // the title here at once; the messages: the server's answer (Everything.thits), a moment later
+  return Work.list.filter(w => words.every(x => w.title.toLowerCase().includes(x)) || !!Everything.thits?.[w.id]);
 }
 // Search words highlighted in HTML that is already escaped (not inside tags).
 function markWords(htmlText, words) {
@@ -564,10 +565,7 @@ function threadResultsHTML(list) {
   const hitHTML = (w, h) => { const [ic, name] = who(h); return `<div class="thit" data-thread="${w.id}" data-tpost="${esc(h.post)}" title="Open the thread at this message">
       <div class="thit-who"><span>${ic}</span><b>${name}</b>${h.from && !['Outlook', 'Email', 'Word'].includes(h.from) ? `<span class="muted tiny">from ${esc(h.from)}</span>` : ''}${h.reply ? '<span class="muted tiny">reply</span>' : ''}<span class="muted tiny">${esc(fmtTime(h.at))}</span></div>
       <div class="thit-text">${markWords(maskedText(h.snip), words)}</div></div>`; };
-  const fallback = w => { // before the server's answer: a few words from the thread
-    const t = w.search.replace(/\s+/g, ' '), i = Math.max(0, ...words.map(x => t.indexOf(x)).filter(i => i >= 0).slice(0, 1));
-    return (i > 80 ? '…' : '') + t.slice(Math.max(0, i - 80), i + 240) + '…';
-  };
+  const fallback = () => 'Looking in the messages…'; // before the server's answer
   return `<div class="group"><div class="group-head"><h3>🧵 Tasks</h3><span class="n">${list.length}</span></div><div class="tresults">${list.map(w => {
     const hits = Everything.thits?.[w.id];
     return `<div class="card tresult"><div class="card-head tres-head" data-thread="${w.id}" title="Open the thread">${threadStatusHTML(w)} <b>${markWords(esc(w.title), words)}</b><span class="spacer"></span><span class="muted tiny">${fmtTime(w.updated)} · ${w.posts || 0} messages</span></div>
@@ -593,7 +591,7 @@ const Everything = {
       if (this.key !== key) return; // typed on meanwhile
       this.notes = (notes || []).filter(n => ws.every(w => `${n.title || ''} ${n.body || ''}`.toLowerCase().includes(w)));
       this.files = files || []; this.tfiles = tfiles || []; this.thits = thits;
-      if ((this.notes.length || this.files.length || this.tfiles.length || Object.keys(thits || {}).length) && $('#view-dashboard').classList.contains('active')) renderBoard();
+      if ($('#view-dashboard').classList.contains('active')) renderBoard(); // also when nothing more was found ("Looking…" goes)
     }, 200);
   },
   clips(q) {
@@ -1102,6 +1100,7 @@ $('#bulkBar').addEventListener('click', async ev => {
   const b = ev.target.closest('[data-bulk]'); if (!b) return;
   switch (b.dataset.bulk) {
     case 'toworkspace': return Workspaces.copyEntries(Bulk.entries());
+    case 'run': return MultiRun.open(Bulk.entries());
     case 'move': { const p = await askText('Move to folder (use / for subfolders):', Bulk.entries()[0]?.project || ''); if (p?.trim()) await Bulk.each('Moved', e => Bulk.save(e, { project: p.trim() })); break; }
     case 'tag': { const t = await askText('Add tag(s), comma separated:'); const add = (t || '').split(',').map(x => x.trim()).filter(Boolean); if (add.length) await Bulk.each('Tagged', e => Bulk.save(e, { tags: [...new Set([...(e.tags || []), ...add])] })); break; }
     case 'test': return retest(Bulk.entries());

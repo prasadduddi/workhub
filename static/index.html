@@ -79,7 +79,7 @@
     </header>
     <div id="bulkBar" class="bulkbar" hidden><b id="bulkCount"></b>
       <select id="bulkEnv" title="Set the environment of the selected entries"><option value="">Set environment…</option><option>PROD</option><option>UAT</option><option>TEST</option><option>STAGE</option><option>DEV</option><option>DR</option><option value="-">(none)</option></select>
-      <button data-bulk="move">Move to folder…</button><button data-bulk="toworkspace" title="Copies in another workspace (passwords too)">📤 To workspace…</button><button data-bulk="tag">Add tag…</button><button data-bulk="test">↻ Re-test</button><button data-bulk="key" title="These log in with an SSH key or SSO: stop flagging them for a missing password">🔑 Key login</button><button data-bulk="delete" class="danger">Delete</button><span class="spacer"></span><button data-bulk="clear">✕ Clear selection</button></div>
+      <button data-bulk="move">Move to folder…</button><button data-bulk="toworkspace" title="Copies in another workspace (passwords too)">📤 To workspace…</button><button data-bulk="tag">Add tag…</button><button data-bulk="test">↻ Re-test</button><button data-bulk="run" title="The same command on each selected SSH server, outputs side by side">▶ Run command…</button><button data-bulk="key" title="These log in with an SSH key or SSO: stop flagging them for a missing password">🔑 Key login</button><button data-bulk="delete" class="danger">Delete</button><span class="spacer"></span><button data-bulk="clear">✕ Clear selection</button></div>
     <div id="viewChips" class="vchips"></div>
     <div id="today" class="today"></div>
     <div id="stats" class="stats"></div>
@@ -244,8 +244,8 @@
   </section>
 
   <!-- API (HTTP requests) -->
-  <section id="view-monitor" class="view">
-    <header class="toolbar">
+  <section id="view-monitor" class="view moncc">
+    <header class="toolbar mon-bar">
       <label class="switch small" title="Check every server below, every interval"><input type="checkbox" id="monOn"><span></span> Monitoring</label>
       <select id="monInterval" title="How often"><option value="30">every 30 s</option><option value="60">every minute</option><option value="300">every 5 min</option><option value="900">every 15 min</option></select>
       <button id="monRun" title="Check everything now">↻ Check now</button>
@@ -253,8 +253,11 @@
       <button id="monCustom" title="Any web address or host:port">+ Custom…</button>
       <span class="spacer"></span><span id="monSum" class="muted tiny"></span>
     </header>
-    <div class="muted tiny mon-note">Tomcat manager / admin pages are fetched (a login prompt still means “up”); Tomcat and Oracle listener ports are checked by connecting. Nothing logs in and nothing is changed. <b>PROD, UAT and DR servers are not checked</b> unless you allow it: <label class="switch small"><input type="checkbox" id="monProd"><span></span> also PROD / UAT</label></div>
-    <div id="monList"></div>
+    <div id="monHero" class="mon-hero"></div>
+    <div class="mon-filters"><div class="seg" id="monSeg"><button data-monf="all" class="active">All</button><button data-monf="problems">⚠ Problems</button><button data-monf="certs">🔒 Certificates</button><button data-monf="Tomcat">🐱 Tomcat</button><button data-monf="Oracle">🛢 Oracle</button><button data-monf="Custom">🔗 Custom</button></div>
+      <input id="monQ" type="search" placeholder="Filter: host, name, address…"></div>
+    <div id="monList" class="mon-grid"></div>
+    <details class="mon-note"><summary>ⓘ How the checks work · PROD / UAT</summary><div class="muted tiny">Tomcat manager / admin pages are fetched (a login prompt still means “up”); Tomcat and Oracle listener ports are checked by connecting. Nothing logs in and nothing is changed. <b>PROD, UAT and DR servers are not checked</b> unless you allow it: <label class="switch small"><input type="checkbox" id="monProd"><span></span> also PROD / UAT</label></div></details>
   </section>
   <section id="view-api" class="view">
     <div class="api-layout">
@@ -354,7 +357,7 @@
     <div class="ask-wrap">
       <h2 class="ask-h">🔎 Ask Confluence &amp; Jira</h2>
       <div class="ask-bar"><input id="askQ" list="askHist" placeholder="Ask in plain words — e.g. how do we restart the batch server? · refund limits per merchant · who approved PAY-201?" autocomplete="off"><datalist id="askHist"></datalist>
-        <span class="ask-in" title="Where to search (at least one)"><label><input type="checkbox" id="askInConf"> 📄 Confluence</label><label><input type="checkbox" id="askInJira"> ◆ Jira</label></span>
+        <span class="ask-in" title="Where to search (at least one)"><label><input type="checkbox" id="askInConf"> 📄 Confluence</label><label><input type="checkbox" id="askInJira"> ◆ Jira</label><label title="Your own threads (every message) and notes, searched on this PC"><input type="checkbox" id="askInMine"> 🧵 My threads &amp; notes</label></span>
         <label id="askAIWrap" class="ask-ai" hidden title="Write a short answer from the best matches (sent to Anthropic — ⚙ Settings → Ask)"><input type="checkbox" id="askAI" checked> ✨ AI answer</label>
         <button id="askGo" class="primary">Ask</button></div>
       <div id="askSetup" class="ask-setup" hidden>Confluence isn't set up yet — Jira is searched if it is. <button id="askSetupBtn">⚙ Set up Confluence</button></div>
@@ -733,6 +736,9 @@
 <script src="ask.js"></script>
 <script src="pcap.js"></script>
 <script src="workspaces.js"></script>
+<script src="prodlog.js"></script>
+<script src="multirun.js"></script>
+<script src="msglog.js"></script>
 <script src="palette.js"></script>
 </body>
 </html>

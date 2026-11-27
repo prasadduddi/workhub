@@ -1208,6 +1208,111 @@ with sync_playwright() as p:
         expect("Bin test note" not in pg.inner_text("#binDlg .bin-list"), "Delete forever")
         close_dialogs()
 
+    @check("🧵 thread list is small (no message text) and finds a thread by a word in a message")
+    def _():
+        wid = ev("api('POST', '/api/work', { title: 'Speed test thread' }).then(w => w.id)")
+        try:
+            ev(f"api('POST', '/api/work/{wid}/posts', {{ kind: 'note', html: '<p>the quokkaline job hung again</p>' }})")
+            expect(ev("api('GET', '/api/work').then(l => l.every(w => !('search' in w)))"), "the list still carries the messages' text")
+            ev("show('tasks'); Work.loadList(); 0"); pg.wait_for_timeout(500)
+            pg.fill("#workSearch", "quokkaline")
+            pg.wait_for_function("[...document.querySelectorAll('[data-work]')].some(e => e.textContent.includes('Speed test thread'))", timeout=5000)
+            expect(ev("document.querySelectorAll('.tli[data-work]').length") == 1, "other threads shown too")
+            pg.fill("#workSearch", "")
+            # the main search: found by the message, with the message shown
+            pg.fill("#search", "quokkaline"); ev("show('dashboard'); 0")
+            pg.wait_for_function("document.querySelector('#view-dashboard').innerText.includes('quokkaline job hung')", timeout=8000)
+            expect("Speed test thread" in pg.inner_text("#view-dashboard"), "not in the main search")
+            pg.fill("#search", "")
+        finally:
+            ev(f"api('DELETE', '/api/work/{wid}').catch(() => 0)"); ev("Work.loadList(); 0")
+
+    @check("🔔 messages: the bottom message stays on hover, opens the list; a notification opens what it's about")
+    def _():
+        ev("window.__mlAct = 0; toast('Saved test-msg-77', false, () => window.__mlAct = 1, 'Open'); 0")
+        pg.hover("#toast"); pg.wait_for_timeout(3000)
+        expect(ev("document.querySelector('#toast').className.includes('show')"), "the message went away while the mouse was on it")
+        pg.click("#toast", position={"x": 8, "y": 8}); pg.wait_for_selector("#msgLogDlg[open]")
+        expect("Saved test-msg-77" in pg.inner_text("#msgLogDlg .msglog-list"), pg.inner_text("#msgLogDlg .msglog-list")[:200])
+        pg.locator("#msgLogDlg .msglog-row", has_text="test-msg-77").click(); pg.wait_for_timeout(300)
+        expect(ev("window.__mlAct") == 1, "clicking it didn't do its action")
+        ev("MsgLog.add({ notice: { n: 990001, kind: 'monitor', title: '🔴 Down — Test check', body: 'refused', view: 'monitor', ref: 'none' } }); show('dashboard'); 0")
+        expect(pg.inner_text("#bellTop .bell-n") == "1", "the bell doesn't count it")
+        pg.click("#bellTop"); pg.wait_for_selector("#msgLogDlg[open]")
+        expect(pg.inner_text("#bellTop .bell-n") == "" and ev("document.querySelector('#bellTop .bell-n').hidden"), "seen: the count stays")
+        pg.locator("#msgLogDlg .msglog-row", has_text="Down — Test check").click(); pg.wait_for_timeout(500)
+        expect(ev("document.querySelector('#view-monitor').classList.contains('active')"), "the notification didn't open Monitor")
+        expect(not ev("document.querySelector('#msgLogDlg').open"), "the list stayed open")
+
+    @check("🔒 Monitor shows a certificate's days left (amber / red)")
+    def _():
+        soon = ev("new Date(Date.now() + 10.5 * 864e5).toISOString()")
+        later = ev("new Date(Date.now() + 200 * 864e5).toISOString()")
+        import json as _json
+        body = _json.dumps({"on": True, "interval": 60, "allow_prod": False, "checks": [
+            {"id": "c1", "name": "Payments console", "kind": "http", "target": "https://pay.example.com/", "host": "pay.example.com", "up": True, "ms": 40, "detail": "200 OK", "at": later, "hist": [True],
+             "cert_expires": soon, "cert_subject": "pay.example.com", "cert_issuer": "Acme CA"},
+            {"id": "c2", "name": "Portal", "kind": "http", "target": "https://portal.example.com/", "host": "portal.example.com", "up": True, "ms": 40, "detail": "200 OK", "at": later, "hist": [True],
+             "cert_expires": later}]})
+        pg.route("**/api/monitor", lambda r: r.fulfill(status=200, content_type="application/json", body=body))
+        try:
+            ev("show('monitor'); Monitor.load(); 0"); pg.wait_for_selector("#monList .cert-chip")
+            chips = ev("[...document.querySelectorAll('#monList .cert-chip')].map(c => c.className + '|' + c.textContent)")
+            expect(any("bad" in c and "10 days" in c for c in chips) and any(" ok" in c for c in chips), str(chips))
+            # control center: the banner, the tiles, the filters
+            expect("Certificates need attention" in pg.inner_text("#monHero .mon-headline"), pg.inner_text("#monHero")[:200])
+            expect(pg.locator("#monHero .mon-kpi").count() == 6, "the number tiles")
+            pg.click("#monHero .mon-kpi.warn[data-monf=certs]"); pg.wait_for_timeout(200)
+            expect(pg.locator("#monList .mon-row").count() == 2, "certificates filter")
+            pg.click("#monSeg [data-monf=problems]"); pg.wait_for_timeout(200)
+            expect(pg.locator("#monList .mon-row").count() == 1 and "Payments console" in pg.inner_text("#monList"), "problems: the expiring certificate")
+            pg.fill("#monQ", "nothing-like-this"); pg.wait_for_timeout(200)
+            expect("Nothing matches" in pg.inner_text("#monList"), "search")
+            pg.fill("#monQ", ""); pg.click("#monSeg [data-monf=all]")
+        finally:
+            pg.unroute("**/api/monitor")
+
+    @check("▶ run a command on several servers (PROD asked) and 🛡 the PROD activity log has it")
+    def _():
+        pid = ev("""api('POST', '/api/entries', { name: 'LAB prod copy', project: 'Lab', host: '127.0.0.1', port: 2222, protocol: 'ssh', env: 'PROD',
+            username: 'deploy', password: 'Demo#2026' }).then(e => e.id)""")
+        try:
+            ev("poll()"); pg.wait_for_function(f"!!byId('{pid}')", timeout=8000)
+            lab = ev("S.allEntries.find(e => e.port === 2222 && e.env === 'UAT').id")
+            ev(f"MultiRun.open([byId('{lab}'), byId('{pid}')])"); pg.wait_for_selector("#multiRunDlg[open]")
+            expect("PROD" in pg.inner_text("#multiRunDlg .mr-servers"), "PROD not marked")
+            pg.fill("#mrCmd", "echo multi-$((6*7))"); pg.click("#multiRunDlg [data-mr=run]")
+            pg.wait_for_function("document.querySelectorAll('#multiRunDlg .mr-card').length === 2", timeout=20000)
+            outs = pg.inner_text("#multiRunDlg .mr-out")
+            expect(outs.count("multi-42") == 2, outs[:300])
+            close_dialogs()
+            ev("ProdLog.open()"); pg.wait_for_selector("#prodLogDlg[open] table.prodlog")
+            txt = pg.inner_text("#prodLogDlg .prodlog-list")
+            expect("echo multi-$((6*7))" in txt and "LAB prod copy" in txt and "on several servers" in txt, txt[:300])
+            pg.fill("#prodLogQ", "nothing-like-this-xyz"); pg.wait_for_timeout(700)
+            expect("Nothing matches" in pg.inner_text("#prodLogDlg .prodlog-list"), "search")
+            close_dialogs()
+        finally:
+            ev(f"api('DELETE', '/api/entries/{pid}').catch(() => 0)")
+            ev("poll()"); pg.wait_for_function(f"!byId('{pid}')", timeout=8000)  # gone from the page too (later checks count PROD)
+
+    @check("🔎 Ask: My threads & notes finds a note and opens it")
+    def _():
+        nid = ev("api('POST', '/api/notes', { title: 'Zebrafrost runbook', body: 'restart the zebrafrost batch after the lock clears' }).then(n => n.id)")
+        try:
+            show_view = "show('ask')"
+            ev(show_view)
+            ev("$('#askInConf').checked = false; $('#askInJira').checked = false; $('#askInMine').checked = true; 0")
+            ev("Ask.run('zebrafrost batch'); 0")
+            pg.wait_for_function("document.querySelector('#askOut')?.innerText.includes('Zebrafrost runbook')", timeout=10000)
+            out = pg.inner_text("#askOut")
+            expect("📝 Note" in out and "My threads & notes" in out, out[:300])
+            pg.click("#askOut .ask-title"); pg.wait_for_timeout(800)
+            expect(ev("document.querySelector('#view-notes').classList.contains('active')"), "the note didn't open")
+        finally:
+            ev("$('#askInConf').checked = true; $('#askInMine').checked = false; localStorage.setItem('askSources', '[\"confluence\"]'); 0")
+            ev(f"api('DELETE', '/api/notes/{nid}').catch(() => 0)")
+
     @check("🎬 presentation mode: passwords stay hidden, no PROD, capture paused, blur; off puts it back")
     def _():
         ev("EnvSwitch.set('ALL')"); pg.wait_for_timeout(300)

@@ -325,6 +325,11 @@ type queryer interface {
 
 // handleDBExec runs one statement. With auto-commit off, the first data
 // change opens a transaction that stays open until Commit/Rollback.
+var (
+	reReadOnlySQL = regexp.MustCompile(`(?i)^\s*(select|with|explain|show|desc|describe)\b`)
+	reSQLWrites   = regexp.MustCompile(`(?i)\b(insert|update|delete|merge|truncate|drop|alter|create|grant|revoke)\b`)
+)
+
 func (a *App) handleDBExec(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		SID        string `json:"sid"`
@@ -357,6 +362,13 @@ func (a *App) handleDBExec(w http.ResponseWriter, r *http.Request) {
 	maxRows := in.MaxRows
 	if maxRows <= 0 {
 		maxRows = 1000
+	}
+	if !reReadOnlySQL.MatchString(head) || reSQLWrites.MatchString(head) { // 🛡 PROD activity log: what changes data
+		note := "in a transaction (commit needed)"
+		if in.AutoCommit {
+			note = "auto-commit"
+		}
+		a.prodLog(s.entry, "sql", "", stmt, note)
 	}
 
 	s.mu.Lock()
@@ -570,6 +582,7 @@ func (a *App) handleDBTx(w http.ResponseWriter, r *http.Request) {
 	if in.Action != "commit" {
 		msg = "Rolled back"
 	}
+	a.prodLog(s.entry, map[bool]string{true: "commit", false: "rollback"}[in.Action == "commit"], "", msg, "")
 	writeJSON(w, map[string]any{"message": msg, "in_tx": false})
 }
 

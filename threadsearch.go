@@ -72,12 +72,11 @@ func (s *Store) SearchThreads(words []string) map[string][]threadHit {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, w := range s.st.WorkItems {
-		all := strings.ToLower(w.Title + " " + w.Jira + " " + strings.Join(w.Tags, " "))
+		all := workSearchText(w)
 		var hits []threadHit
 		for _, p := range w.Posts {
 			t := postPlain(p)
 			low := strings.ToLower(t)
-			all += " " + low
 			n := 0
 			for _, x := range words {
 				if strings.Contains(low, x) {

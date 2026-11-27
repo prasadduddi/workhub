@@ -4,6 +4,15 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.19.0', title: 'Message history, certificate warnings, PROD activity log, Ask your own threads, run on several servers', items: [
+    ['🔔', 'Message history', 'Missed a message at the bottom? Click it, or the 🔔 at the top: every message and notification is kept there — click one to open what it’s about. A message also stays while the mouse is on it.', ''],
+    ['⚡', 'Faster with lots of threads', 'The thread list no longer downloads every message to show the titles (40× smaller with many threads) and appears at once; searching threads asks WorkHub instead.', ''],
+    ['📡', 'Monitor: a control center', 'Monitor is now a control center: one status line (all normal / what’s down), number tiles (up, down, certificates, response time, uptime — click to filter), problems first, and a response-time line for every check.', ''],
+    ['🔒', 'Certificate expiry warnings', 'Monitor now shows how many days the certificate of each HTTPS check has left (amber under 30, red under 14) and tells you 30, 14 and 3 days before it expires.', ''],
+    ['🛡', 'PROD activity log', 'Tools → PROD activity log: what you did on PROD through WorkHub — terminals, lines typed or pasted, SQL that changes data, commits, captures. Search it, export it as CSV for a change review. Passwords are never kept.', ''],
+    ['🧵', 'Ask your own threads and notes', 'Ask → tick “My threads & notes” to search everything you wrote in WorkHub, next to Confluence and Jira (on this PC).', ''],
+    ['▶', 'Run a command on several servers', 'Select servers in SSH → ▶ Run command…: type it once, see each server’s output side by side. PROD asks first.', ''],
+  ] },
   { v: '1.18.0', title: 'Presentation mode, recycle bin, notifications, support report, and more', items: [
     ['🎬', 'Presentation mode', 'View → Presentation mode: passwords stay hidden, PROD is hidden, clipboard capture pauses, text is a step bigger — and host names can be blurred. Click 🎬 Presenting at the top to stop; everything goes back as it was.', ''],
     ['🗑', 'Recycle bin', 'Deleted threads, connections and notes stay in File → Recycle bin for 30 days — Restore puts them back (with their files).', ''],

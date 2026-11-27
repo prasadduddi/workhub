@@ -225,6 +225,15 @@ func (a *App) handleTerm(w http.ResponseWriter, r *http.Request) {
 			show([]byte("\x1b[90m[saving this session's text — ⚙ Settings › Session logs]\x1b[0m\r\n"))
 		}
 	}
+	var rec *lineRecorder
+	if isProdEntry(e) { // 🛡 PROD activity log
+		a.prodLog(e, "terminal", user, "Opened a terminal", "")
+		rec = &lineRecorder{onLine: func(l string, pasted bool) {
+			a.prodLog(e, map[bool]string{true: "pasted", false: "typed"}[pasted], user, l, "")
+		}}
+		show := send
+		send = func(b []byte) { rec.output(b); show(b) }
+	}
 	cols, rows := max(start.Cols, 20), max(start.Rows, 5)
 	t := &termSession{app: a, client: client, entryID: e.ID, send: send, cols: cols, rows: rows}
 	go t.run(e.LastDir, conn)
@@ -241,6 +250,9 @@ func (a *App) handleTerm(w http.ResponseWriter, r *http.Request) {
 		}
 		switch m.T {
 		case "d":
+			if rec != nil {
+				rec.input(m.D)
+			}
 			t.write([]byte(m.D))
 		case "r":
 			if m.Cols > 0 && m.Rows > 0 {

@@ -175,6 +175,7 @@ type State struct {
 	Ask          AskConfig         `json:"ask,omitzero"`
 	ConfIndex    ConfIndexConfig   `json:"conf_index,omitzero"`
 	Bin          []BinItem         `json:"bin,omitempty"`       // 🗑 deleted threads, connections, notes (30 days; bin.go)
+	ProdLog      []ProdEvent       `json:"prod_log,omitempty"`  // 🛡 what was done on PROD (a year; prodlog.go)
 	PickDirs     map[string]string `json:"pick_dirs,omitempty"` // Browse… buttons: the folder each one last chose (pickmemory.go) // Ask: Confluence spaces kept as a local copy (confindex.go)        // Ask: AI answers (off by default) and the Anthropic API key // ⚙ Settings → Teams (Microsoft Graph); the refresh token never leaves the server
 	JiraIssues   []*JiraIssue      `json:"jira_issues,omitempty"`
 	Events       []*Event          `json:"events,omitempty"` // Calendar

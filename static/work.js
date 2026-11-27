@@ -119,7 +119,7 @@ const Work = {
   renderList() {
     const q = ($('#workSearch')?.value || '').trim().toLowerCase();
     const archived = this.list.filter(w => w.archived).length;
-    const items = [...this.list].sort((a, b) => (b.general && !b.archived) - (a.general && !a.archived) || new Date(b.updated) - new Date(a.updated)).filter(w => (this.showArchived || !w.archived || w.id === this.current?.id) && (!q || q.split(/\s+/).every(t => w.search.includes(t) || w.title.toLowerCase().includes(t))));
+    const items = [...this.list].sort((a, b) => (b.general && !b.archived) - (a.general && !a.archived) || new Date(b.updated) - new Date(a.updated)).filter(w => (this.showArchived || !w.archived || w.id === this.current?.id) && (!q || q.split(/\s+/).every(t => w.title.toLowerCase().includes(t)) || (this.found?.q === q && !!this.found.ids[w.id])));
     const item = (w, lvl = 0, kids = 0) => `<div class="li tli ${this.current?.id === w.id ? 'active' : ''} ${w.unread ? 'unread' : ''} ${lvl ? 'sub' : ''}" data-work="${w.id}" draggable="true" style="--lvl:${lvl}" title="Drag onto another thread to put it under that one">
       <div class="tli-top">${kids ? `<button class="tli-fold" data-fold="${w.id}" title="${this.folded.has(w.id) ? 'Show' : 'Hide'} its ${kids} sub-thread${kids > 1 ? 's' : ''}">${this.folded.has(w.id) ? '▸' : '▾'}</button>` : ''}${threadStatusHTML(w)}${w.archived ? '<span class="tarch">🗄 Archived</span>' : ''}${w.general ? '<span class="tgen" title="Copied text goes here when no other thread has 📥 Capture here on">default</span>' : ''}<span class="spacer"></span>${w.unread ? `<span class="tunread" title="New since you last looked">${w.unread}</span>` : ''}<button class="tli-star ${w.starred ? 'on' : ''}" data-star="${w.id}" title="${w.starred ? 'Unstar' : 'Star'}">${w.starred ? '★' : '☆'}</button></div>
       <b>${esc(w.title)}</b>${kids && this.folded.has(w.id) ? `<span class="tkids">+${kids} sub-thread${kids > 1 ? 's' : ''}</span>` : ''}<small>${w.jira && !w.title.toUpperCase().includes(w.jira) ? `◆ ${esc(w.jira)} · ` : ''}${fmtTime(w.updated)}${w.posts ? ` · ${w.posts} message${w.posts > 1 ? 's' : ''}` : ''}${w.images ? ` · ${w.images} 🖼` : ''}</small></div>`;
@@ -641,7 +641,7 @@ function insertAtCaret(html, box = $('#tbox')) {
 const linkHTML = u => { const label = linkLabel(u); return `${label ? `<b>${esc(label)}:</b> ` : ''}<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>&nbsp;`; };
 
 // Loaded at start too, so the main search finds threads; kept fresh.
-setTimeout(() => Work.loadList().then(() => { if ($('#search').value.trim()) renderBoard(); }), 600);
+setTimeout(() => Work.loadList().then(() => { if ($('#search').value.trim()) renderBoard(); }), 0); // small now: at once
 setInterval(() => Work.loadList(), 5 * 60 * 1000);
 
 // Word documents → threads (one each); the first one opens.
@@ -686,7 +686,19 @@ const side = $('.tasks-side');
 side.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); side.classList.add('dragover'); } });
 side.addEventListener('dragleave', e => { if (e.target === side) side.classList.remove('dragover'); });
 side.addEventListener('drop', e => { if (!e.dataTransfer.files.length) return; e.preventDefault(); side.classList.remove('dragover'); Work.importWord(e.dataTransfer.files); });
-$('#workSearch').addEventListener('input', () => Work.renderList());
+// the filter: titles at once, then threads whose messages match (asked from the server)
+{
+  let t;
+  $('#workSearch').addEventListener('input', () => {
+    Work.renderList();
+    clearTimeout(t);
+    const q = $('#workSearch').value.trim().toLowerCase(); if (!q) return;
+    t = setTimeout(async () => {
+      const ids = await api('GET', '/api/work/search?q=' + encodeURIComponent(q)).catch(() => null);
+      if (ids && $('#workSearch').value.trim().toLowerCase() === q) { Work.found = { q, ids }; Work.renderList(); }
+    }, 150);
+  });
+}
 $('#workList').addEventListener('click', e => {
   if (e.target.closest('[data-toggle-archived]')) { e.preventDefault(); Work.showArchived = !Work.showArchived; return Work.renderList(); }
   const st = e.target.closest('[data-star]'); if (st) { const x = Work.list.find(w => w.id === st.dataset.star); return x && Work.star(x, !x.starred); }

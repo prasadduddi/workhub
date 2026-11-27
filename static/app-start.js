@@ -224,10 +224,14 @@ const Notices = {
     if (typeof Presenting !== 'undefined' && Presenting.on()) return; // 🎬 nothing pops up while presenting
     let r; try { r = await api('GET', `/api/notifications?since=${Math.max(this.last, 0)}`); } catch { return; }
     this.native = r.native;
-    if (this.last < 0) { this.last = r.last; return; } // only what happens from now on
+    if (this.last < 0) { // only what happens from now on pops up; earlier ones go in 🔔 Messages
+      for (const n of [...r.notices].reverse()) if (typeof MsgLog !== 'undefined') MsgLog.items.push({ at: new Date(n.at || Date.now()), notice: n });
+      if (typeof MsgLog !== 'undefined') MsgLog.items.sort((a, b) => b.at - a.at);
+      this.last = r.last; return;
+    }
     for (const n of r.notices) {
       this.last = Math.max(this.last, n.n);
-      toast(`${n.title}${n.body ? ' — ' + n.body : ''}`, false, () => this.open(n), 'Open');
+      toast(`${n.title}${n.body ? ' — ' + n.body : ''}`, false, () => this.open(n), 'Open', { notice: n });
       if (!this.native && 'Notification' in window && Notification.permission === 'granted') {
         try { const w = new Notification(n.title, { body: n.body || '', tag: 'wh-' + n.n }); w.onclick = () => { window.focus(); this.open(n); }; } catch { /* not allowed */ }
       }
@@ -237,6 +241,10 @@ const Notices = {
     if (n.kind === 'reminder' && n.ref) { const [t, p] = n.ref.split('/'); return Work.open(t, p); }
     if (n.kind === 'jira' && n.ref) { show('jira'); Jira.sel = 'i:' + n.ref; return Jira.render(); }
     show(n.view || 'dashboard');
+    if (n.view === 'monitor' && n.ref) setTimeout(() => { // the check it's about: in view, briefly marked
+      const row = document.querySelector(`#monList [data-mon="${CSS.escape(n.ref)}"]`);
+      if (row) { row.scrollIntoView({ block: 'center' }); row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 2500); }
+    }, 300);
   },
 };
 setTimeout(() => Notices.poll(), 3000); setInterval(() => Notices.poll(), 15000);

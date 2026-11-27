@@ -32,6 +32,9 @@ copied text, and more. One Go program serves a local web UI.
 - `tools/demolab/` — the demo: `run-demo.sh` builds and starts WorkHub with made-up data (`seed.py`), two SSH
   servers (`main.go`, ports 2222/2223, a pretend `tcpdump`), a pretend Jira + Confluence (`fake_jira.py`, :47990).
 - `tools/uitest/` — the browser smoke test (Playwright, Python): `smoke.py`, run with `run.sh`.
+- `tools/perf/startup.py` — start-up speed with a lot of made-up data (3,000 connections, 300 threads × 100 messages,
+  1,000 notes in `dist/perf/data`): server, page usable / quiet, slowest requests. Run it after changing what the
+  page loads at start; keep lists small (no full texts) and search on the server.
 - `REQUIREMENTS.txt` — the owner's TODO list (local only, see below). `TESTING.txt` — manual checks for Windows.
 
 ## Tools and commands

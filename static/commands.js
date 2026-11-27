@@ -549,7 +549,7 @@ async function runCommand(text) {
       case 'workOpen': {
         await Work.loadList();
         const q = a.q.toLowerCase();
-        const w = Work.list.find(x => x.title.toLowerCase() === q) || Work.list.find(x => x.title.toLowerCase().includes(q)) || Work.list.find(x => x.search.includes(q));
+        const w = Work.list.find(x => x.title.toLowerCase() === q) || Work.list.find(x => x.title.toLowerCase().includes(q));
         if (!w) { said.push(`No task thread matching "${esc(a.q)}".`); break; }
         await Work.open(w.id); said.push(`Opened the thread <b>${esc(w.title)}</b>.`); break;
       }

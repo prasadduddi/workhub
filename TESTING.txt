@@ -180,3 +180,9 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] Capture: Stop after 50 packets stops by itself; 🧵 To a thread -> the .pcap in the thread
   [ ] Settings -> Updates: Beta -> a beta release (v…-beta.N) is offered; Stable doesn't
   [ ] GitHub Actions: the "windows-tests" job passes
+  [ ] Monitor: an HTTPS check on a real server -> 🔒 N days matches the certificate's date
+  [ ] PROD terminal: type a command, sudo with a password -> Tools -> PROD activity log has the command, not the password
+  [ ] PROD SQL: an UPDATE + Commit -> both in the PROD activity log; Export CSV opens in Excel
+  [ ] Ask -> My threads & notes: finds a thread message
+  [ ] SSH: select 3 real servers -> Run command "df -h" -> three outputs; one PROD -> asked first
+  [ ] Windows work laptop: WorkHub opens quickly; thread filter finds a thread by a word in a message

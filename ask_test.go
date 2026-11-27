@@ -131,3 +131,25 @@ func TestAskConfluenceAndJira(t *testing.T) {
 		t.Fatalf("config: %s", w.Body.String())
 	}
 }
+
+func TestAskMyThreadsAndNotes(t *testing.T) {
+	s, _ := OpenStore(t.TempDir())
+	a := &App{store: s}
+	w := s.SaveWorkItem(WorkItem{Title: "Batch hung on app01"})
+	s.AddPost(w.ID, Post{Kind: "note", HTML: "<p>Restarted the <b>settlement batch</b> after killing the stuck job</p>"})
+	s.SaveWorkItem(WorkItem{Title: "Unrelated"})
+	s.mu.Lock()
+	s.st.Notes = append(s.st.Notes, &Note{ID: "n1", Title: "Runbook", Body: "settlement batch: check the lock table first"})
+	s.mu.Unlock()
+	rep := a.askSearch("what to do when the settlement batch hangs", false, false, true)
+	if len(rep.Errors) != 0 || len(rep.Results) != 2 {
+		t.Fatalf("results: %+v errors %v", rep.Results, rep.Errors)
+	}
+	kinds := rep.Results[0].Kind + "," + rep.Results[1].Kind
+	if !strings.Contains(kinds, "thread") || !strings.Contains(kinds, "note") || !strings.Contains(rep.Results[0].Snip+rep.Results[1].Snip, "settlement batch") {
+		t.Fatalf("results: %+v", rep.Results)
+	}
+	if rep := a.askSearch("settlement", true, false, true); len(rep.Results) != 2 || len(rep.Errors) != 1 {
+		t.Fatalf("Confluence not set up: still the threads and notes, and a note: %+v %v", rep.Results, rep.Errors)
+	}
+}

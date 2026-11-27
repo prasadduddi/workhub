@@ -169,13 +169,31 @@ const HELP_TOPICS = [
     'Confluence pages and Jira issues that match are listed together, best first, with the matching sentences in yellow; click one to open it, or 🧵 post its link in a thread.',
     'Set up Confluence in ⚙ Settings → Ask: “Same as my Jira login” on Atlassian Cloud, a token for Server / Data Center, or 🔑 Sign in with browser in WorkHub-Desktop (SSO / MFA — the window hides when you are in).',
     'Optional ✨ AI answers (off by default): add your Anthropic API key and switch them on — the best matches are then sent to Anthropic and you get a short answer with numbered links to its sources. Check your company allows this first.'] },
+  { t: 'PROD activity log', k: 'prod activity log audit history change review commands sql commit export csv', v: '', s: [
+    'Tools → 🛡 PROD activity log lists what was done on PROD servers through WorkHub: terminals opened, lines typed or pasted, SQL that changes data, commits and rollbacks, captures, commands run on several servers.',
+    'Search by server, command or date (2026-11-27); ⬇ Export CSV saves what’s shown (opens in Excel). Kept for a year, on this PC only.',
+    'A line typed after a password prompt isn’t kept, and passwords in SQL are hidden. Typed lines are kept as typed — after arrow keys or Tab, what ran may differ.'] },
+  { t: 'Run a command on several servers', k: 'run command several servers many multiple all batch parallel df disk', v: '', s: [
+    'In SSH, tick the servers (or select a folder’s servers) → ▶ Run command… in the bar at the top.',
+    'Type the command and press Enter: it runs on each server at the same time; each output shows in its own box (red: failed or a non-zero exit). 📋 Copy all copies every output.',
+    'PROD servers are asked about first, and the run goes to the PROD activity log. A command stops after 60 seconds.'] },
+  { t: 'Certificate expiry (Monitor)', k: 'certificate cert ssl tls expiry expires expired https renew', v: '', s: [
+    'Every HTTPS check in Monitor (and checks on ports like 443, 8443, 636, 2484) shows 🔒 and the days its certificate has left: amber under 30 days, red under 14 or expired.',
+    'You get a notification 30, 14 and 3 days before, and when it has expired. Point at 🔒 to see who issued it and the date.'] },
   { t: 'Presentation mode (showing WorkHub on a screen)', k: 'presentation present demo screen share blur hide passwords prod meeting teams share', v: '', s: [
     'View → 🎬 Presentation mode: passwords stay hidden (👁 and Show passwords are blocked), PROD servers are hidden, clipboard capture pauses and nothing pops up, text is a step bigger.',
     'View → Blur host names and addresses while presenting (on by default) blurs them in trees, cards, lists and tables. Text inside a terminal or a SQL result isn’t blurred — keep those closed while sharing.',
     'Click 🎬 Presenting at the top (or the menu again) to stop: everything goes back as it was.'] },
+  { t: 'Ask: search your own threads and notes', k: 'ask my threads notes own search workhub history what did we do', v: '', s: [
+    'On the Ask page, tick 🧵 My threads & notes: every message in your threads and your notes is searched (on this PC), next to Confluence and Jira — or on its own.',
+    'Click a result to open the thread or note. With ✨ AI answers on, the best matches (yours too) are sent to the AI to write the answer.'] },
   { t: 'Recycle bin (deleted threads, connections, notes)', k: 'recycle bin trash deleted restore undo undelete 30 days', v: '', s: [
     'Deleted threads, connections and notes go to File → 🗑 Recycle bin for 30 days.',
     '↩ Restore puts one back (a thread with its files and pictures); Delete forever / Empty the bin remove them now.'] },
+  { t: 'Messages (🔔 at the top)', k: 'message messages history missed toast bottom bell notification list disappeared', v: '', s: [
+    'Messages at the bottom stay while the mouse is on them. Click one — or the 🔔 at the top — to see all recent messages and notifications (the red number: new ones you haven’t seen).',
+    'Click a message to open what it’s about: the monitor check, the Jira issue, the thread message — or its Undo / Open.',
+    'Clear empties the list. Messages from before WorkHub restarted are kept as text.'] },
   { t: 'Notifications', k: 'notification notify alert monitor down jira status reminder windows pop-up toast', v: '', s: [
     'WorkHub tells you when a monitor goes down or comes back, a Jira issue you track changes status, or a thread reminder is due — a notice with Open, and on Desktop a Windows notification.',
     '⚙ Settings → General → 🔔 Notifications switches each kind off. The browser version can also show browser notifications (Allow, once).'] },

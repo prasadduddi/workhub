@@ -711,6 +711,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/workspaces/active", a.handleWorkspaceActive)
 	mux.HandleFunc("POST /api/workspaces/copy", a.handleWorkspaceCopy)
 	mux.HandleFunc("POST /api/pcap/start", a.handlePcapStart)
+	mux.HandleFunc("GET /api/prodlog", a.handleProdLog)    // 🛡 PROD activity log (prodlog.go)
+	mux.HandleFunc("POST /api/multirun", a.handleMultiRun) // ▶ a command on several servers (multirun.go)
 	mux.HandleFunc("GET /api/pcap/{id}", a.handlePcapPoll)
 	mux.HandleFunc("POST /api/pcap/{id}/stop", a.handlePcapStop)
 	mux.HandleFunc("GET /api/pcap/{id}/file", a.handlePcapFile)

@@ -265,37 +265,48 @@ func (s *Store) workAttachment(aid string) *Attachment {
 
 func (a *App) handleWorkList(w http.ResponseWriter, r *http.Request) {
 	a.store.EnsureGeneral()
+	// The list is small: titles and counts. Searching the messages asks the server
+	// (/api/work/search) — sending every message's text made the list megabytes.
 	out := []map[string]any{}
 	for _, wi := range a.store.WorkItems() {
 		n := map[string]int{}
-		var sb strings.Builder
-		sb.WriteString(strings.ToLower(wi.Title + " " + strings.Join(wi.Tags, " ") + " " + wi.Jira))
-		doc := strings.ToLower(wi.Doc)
-		n["image"] += strings.Count(doc, "<img")
-		n["link"] += strings.Count(doc, "<a ")
+		n["image"] += strings.Count(wi.Doc, "<img")
+		n["link"] += strings.Count(wi.Doc, "<a ")
 		if strings.TrimSpace(tagRe.ReplaceAllString(wi.Doc, "")) != "" {
 			n["text"]++
 		}
-		sb.WriteString(" " + strings.ToLower(html.UnescapeString(tagRe.ReplaceAllString(strings.ReplaceAll(wi.Doc, "<", " <"), " "))))
-		for _, m := range hrefRe.FindAllStringSubmatch(wi.Doc, -1) {
-			sb.WriteString(" " + strings.ToLower(m[1]))
-		}
 		for _, p := range wi.Posts {
 			n["post"]++
-			sb.WriteString(" " + strings.ToLower(html.UnescapeString(tagRe.ReplaceAllString(strings.ReplaceAll(p.HTML, "<", " <"), " "))+" "+p.Text))
 			n["image"] += strings.Count(p.HTML, "<img")
 		}
 		for _, b := range wi.Blocks {
 			n[b.Kind]++
-			sb.WriteString(" " + strings.ToLower(b.Text+" "+b.URL+" "+b.Title))
-			if b.File != nil {
-				sb.WriteString(" " + strings.ToLower(b.File.Name))
-			}
 		}
 		out = append(out, map[string]any{"id": wi.ID, "title": wi.Title, "status": wi.Status, "tags": wi.Tags, "jira": wi.Jira, "updated": wi.Updated, "archived": wi.Archived, "general": wi.General, "starred": wi.Starred, "unread": wi.unread(), "parent": wi.Parent,
-			"notes": n["text"], "links": n["link"], "images": n["image"], "files": n["file"], "posts": n["post"], "search": sb.String()})
+			"notes": n["text"], "links": n["link"], "images": n["image"], "files": n["file"], "posts": n["post"]})
 	}
 	writeJSON(w, out)
+}
+
+// workSearchText: everything a thread can be found by, lower case — title, tags, Jira key,
+// its document (text and link addresses), every message, blocks and file names.
+func workSearchText(wi *WorkItem) string {
+	var sb strings.Builder
+	sb.WriteString(strings.ToLower(wi.Title + " " + strings.Join(wi.Tags, " ") + " " + wi.Jira))
+	sb.WriteString(" " + strings.ToLower(html.UnescapeString(tagRe.ReplaceAllString(strings.ReplaceAll(wi.Doc, "<", " <"), " "))))
+	for _, m := range hrefRe.FindAllStringSubmatch(wi.Doc, -1) {
+		sb.WriteString(" " + strings.ToLower(m[1]))
+	}
+	for _, p := range wi.Posts {
+		sb.WriteString(" " + strings.ToLower(html.UnescapeString(tagRe.ReplaceAllString(strings.ReplaceAll(p.HTML, "<", " <"), " "))+" "+p.Text))
+	}
+	for _, b := range wi.Blocks {
+		sb.WriteString(" " + strings.ToLower(b.Text+" "+b.URL+" "+b.Title))
+		if b.File != nil {
+			sb.WriteString(" " + strings.ToLower(b.File.Name))
+		}
+	}
+	return sb.String()
 }
 
 func (a *App) handleWorkGet(w http.ResponseWriter, r *http.Request) {

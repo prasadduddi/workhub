@@ -12,7 +12,7 @@ const Ask = {
     return this.cfg;
   },
   // where to search: the two checkboxes (Confluence by default), remembered
-  sources() { const s = []; if ($('#askInConf').checked) s.push('confluence'); if ($('#askInJira').checked) s.push('jira'); return s.length ? s : ['confluence']; },
+  sources() { const s = []; if ($('#askInConf').checked) s.push('confluence'); if ($('#askInJira').checked) s.push('jira'); if ($('#askInMine').checked) s.push('workhub'); return s.length ? s : ['confluence']; },
   ready() { const c = this.conf?.config || {}; return !!(c.base_url || c.mode === 'jira') || !!(typeof Jira !== 'undefined' && Jira.cfg?.base_url); },
 
   async show() {
@@ -26,7 +26,8 @@ const Ask = {
   async run(q) {
     q = (q ?? $('#askQ').value).trim(); if (!q) return;
     const ai = !$('#askAIWrap').hidden && $('#askAI').checked;
-    $('#askOut').innerHTML = `<div class="muted ask-wait">🔎 Searching Confluence and Jira${ai ? ' — then ✨ writing an answer' : ''}…</div>`;
+    const where = { confluence: 'Confluence', jira: 'Jira', workhub: 'your threads and notes' }, srcs = this.sources().map(s => where[s]);
+    $('#askOut').innerHTML = `<div class="muted ask-wait">🔎 Searching ${srcs.length > 1 ? srcs.slice(0, -1).join(', ') + ' and ' + srcs.at(-1) : srcs[0]}${ai ? ' — then ✨ writing an answer' : ''}…</div>`;
     $('#askGo').disabled = true;
     let r;
     try { r = await api('POST', '/api/ask', { q, ai, sources: this.sources() }); } catch (err) { $('#askGo').disabled = false; $('#askOut').innerHTML = `<div class="ask-err">${esc(err.message)}</div>`; return; }
@@ -36,8 +37,15 @@ const Ask = {
     this.render(q, r);
   },
 
+  // a thread or note of yours: open it here
+  async openMine(x) {
+    const [kind, id] = x.id.split(':');
+    if (kind === 'thread') return Work.open(id); // shows Tasks itself
+    show('notes'); return Notes.open('note:' + id);
+  },
   render(q, r) {
-    const ico = s => s.source === 'confluence' ? '<span class="ask-src conf" title="Confluence">📄 Confluence</span>' : '<span class="ask-src jira" title="Jira">◆ Jira</span>';
+    const ico = s => s.source === 'confluence' ? '<span class="ask-src conf" title="Confluence">📄 Confluence</span>'
+      : s.source === 'workhub' ? `<span class="ask-src mine" title="Yours, in WorkHub">${s.kind === 'note' ? '📝 Note' : '🧵 Thread'}</span>` : '<span class="ask-src jira" title="Jira">◆ Jira</span>';
     const out = [];
     out.push(`<div class="muted tiny ask-srcs">Searched: ${r.sources?.length ? r.sources.map(esc).join(' · ') : 'nothing yet'}</div>`);
     if (r.errors?.length) out.push(`<div class="ask-err">${r.errors.map(esc).join('<br>')}${r.errors.some(e => e.startsWith('Confluence')) ? ' — <a href="#" data-askset>set up Confluence in ⚙ Settings → Ask</a>' : ''}</div>`);
@@ -167,7 +175,7 @@ $('#askQ').addEventListener('focus', () => {
 $('#askOut').addEventListener('click', async e => {
   if (e.target.closest('[data-askset]')) { e.preventDefault(); return openSettingsAt('ask'); }
   const r = Ask.last?.r; if (!r) return;
-  const cp = e.target.closest('[data-askcopy]'); if (cp) { const x = r.results[+cp.dataset.askcopy]; return copyText(`${x.source === 'jira' ? x.id + ' ' : ''}${x.title}\n${x.url}`, 'Link copied'); }
+  const cp = e.target.closest('[data-askcopy]'); if (cp) { const x = r.results[+cp.dataset.askcopy]; if (x.source === 'workhub') return copyText(x.title, 'Copied'); return copyText(`${x.source === 'jira' ? x.id + ' ' : ''}${x.title}\n${x.url}`, 'Link copied'); }
   const th = e.target.closest('[data-askthread]');
   if (th) {
     const x = r.results[+th.dataset.askthread];
@@ -175,7 +183,7 @@ $('#askOut').addEventListener('click', async e => {
     return Work.pick(e, async id => { await api('POST', `/api/work/${id}/posts`, { kind: 'note', html: `<p>${x.source === 'jira' ? '◆' : '📄'} <a href="${esc(x.url)}">${esc((x.source === 'jira' ? x.id + ' ' : '') + x.title)}</a></p>${x.snip ? `<blockquote>${esc(x.snip)}</blockquote>` : ''}` }); toast('Posted in the thread'); });
   }
   const o = e.target.closest('[data-askopen]');
-  if (o && !e.target.closest('button')) { e.preventDefault(); const x = r.results[+o.dataset.askopen]; if (x) (typeof openExternal === 'function' ? openExternal : u => window.open(u, '_blank'))(x.url); }
+  if (o && !e.target.closest('button')) { e.preventDefault(); const x = r.results[+o.dataset.askopen]; if (x?.source === 'workhub') return Ask.openMine(x); if (x) (typeof openExternal === 'function' ? openExternal : u => window.open(u, '_blank'))(x.url); }
 });
 $('#askSetupBtn').onclick = () => openSettingsAt('ask');
 function openSettingsAt(tab) { Settings.tab = tab; Settings.open ? Settings.open() : $('#settingsTop')?.click(); }
@@ -229,8 +237,9 @@ $('#settingsBody').addEventListener('click', async e => {
   let saved = ['confluence']; try { saved = JSON.parse(localStorage.getItem('askSources') || '["confluence"]'); } catch { /* default */ }
   $('#askInConf').checked = saved.includes('confluence'); $('#askInJira').checked = saved.includes('jira');
   if (!$('#askInConf').checked && !$('#askInJira').checked) $('#askInConf').checked = true;
-  for (const id of ['#askInConf', '#askInJira']) $(id).addEventListener('change', e => {
-    if (!$('#askInConf').checked && !$('#askInJira').checked) { e.target.checked = true; return toast('Search at least one: Confluence or Jira', true); }
+  $('#askInMine').checked = saved.includes('workhub');
+  for (const id of ['#askInConf', '#askInJira', '#askInMine']) $(id).addEventListener('change', e => {
+    if (!$('#askInConf').checked && !$('#askInJira').checked && !$('#askInMine').checked) { e.target.checked = true; return toast('Search at least one: Confluence, Jira or your threads and notes', true); }
     try { localStorage.setItem('askSources', JSON.stringify(Ask.sources())); } catch { /* ignore */ }
     if ($('#askQ').value.trim() && Ask.last) Ask.run(); // search again with the new choice
   });

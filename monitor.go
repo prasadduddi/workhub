@@ -48,6 +48,7 @@ type monStatus struct {
 	At     time.Time `json:"at,omitzero"`
 	Since  time.Time `json:"since,omitzero"` // up or down since
 	Hist   []bool    `json:"hist"`           // last results, oldest first
+	MsHist []int     `json:"ms_hist"`        // their response times (ms; -1 = down)
 }
 
 type monitor struct {
@@ -155,6 +156,9 @@ func (a *App) runChecks(s MonitorSettings) {
 		go func(c MonitorCheck) {
 			defer func() { <-sem; wg.Done() }()
 			up, took, detail := probe(c)
+			if up {
+				a.checkCert(c) // 🔒 its certificate (every 6 h)
+			}
 			a.mon.mu.Lock()
 			st := a.mon.status[c.ID]
 			if st == nil {
@@ -173,8 +177,16 @@ func (a *App) runChecks(s MonitorSettings) {
 			}
 			st.Up, st.Ms, st.Detail, st.At = &up, int(took.Milliseconds()), detail, time.Now()
 			st.Hist = append(st.Hist, up)
+			ms := int(took.Milliseconds())
+			if !up {
+				ms = -1
+			}
+			st.MsHist = append(st.MsHist, ms)
 			if len(st.Hist) > 60 {
 				st.Hist = st.Hist[len(st.Hist)-60:]
+			}
+			if len(st.MsHist) > 60 {
+				st.MsHist = st.MsHist[len(st.MsHist)-60:]
 			}
 			a.mon.mu.Unlock()
 		}(c)
@@ -264,6 +276,7 @@ func (a *App) handleMonitorGet(w http.ResponseWriter, r *http.Request) {
 	type row struct {
 		MonitorCheck
 		monStatus
+		certInfo
 		Blocked bool `json:"blocked"`
 	}
 	rows := []row{}
@@ -274,6 +287,10 @@ func (a *App) handleMonitorGet(w http.ResponseWriter, r *http.Request) {
 		if st := a.mon.status[c.ID]; st != nil {
 			x.monStatus = *st
 			x.Hist = append([]bool(nil), st.Hist...)
+			x.MsHist = append([]int(nil), st.MsHist...)
+		}
+		if ci := certOf(c.ID); ci != nil {
+			x.certInfo = *ci
 		}
 		rows = append(rows, x)
 	}

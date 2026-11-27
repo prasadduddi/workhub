@@ -147,6 +147,7 @@ const Menubar = {
         ['🔍 Review a pull request…', () => Review.open()],
         ['📜 Tail a log', null, [...this.recentConns(canSSH).map(e => [this.connName(e), () => LogView.open(e)]), ...(this.recentConns(canSSH).length ? ['-'] : []), ['Choose a server in SSH…', go('terminal')]]],
         ['🌐 API requests', go('api')],
+        ['🛡 PROD activity log…', () => ProdLog.open()],
         ['📧 Outlook monitoring…', () => { show('inbox'); const m = $('#mailPanel'); m.open = true; m.scrollIntoView({ block: 'start' }); }],
         ...(S.sshKeysOff ? [] : [['🔑 My SSH keys (copy for GitHub)…', () => SSHKeys.open()]]),
         '-',
