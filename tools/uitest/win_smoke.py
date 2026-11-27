@@ -8,6 +8,7 @@ import json, sys
 from playwright.sync_api import sync_playwright
 
 URL = sys.argv[1]
+sys.stdout.reconfigure(encoding="utf-8")  # Windows' console code page can't print ✓ / ✗
 failed = []
 
 def check(name, ok, detail=""):
