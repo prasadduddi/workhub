@@ -22,13 +22,14 @@ import (
 type extTool struct {
 	Key, Name, Exe string
 	Rel            []string // usual places under the base folders
+	Mac            string   // the program inside its macOS app, under /Applications ("" = none on a Mac)
 }
 
 var extTools = []extTool{
-	{"putty", "PuTTY", "putty.exe", []string{`PuTTY\putty.exe`, `putty\putty.exe`}},
-	{"dbeaver", "DBeaver", "dbeaver.exe", []string{`DBeaver\dbeaver.exe`, `dbeaver\dbeaver.exe`}},
-	{"filezilla", "FileZilla", "filezilla.exe", []string{`FileZilla FTP Client\filezilla.exe`, `FileZilla\filezilla.exe`}},
-	{"sqldev", "SQL Developer", "sqldeveloper.exe", []string{`sqldeveloper\sqldeveloper.exe`}},
+	{"putty", "PuTTY", "putty.exe", []string{`PuTTY\putty.exe`, `putty\putty.exe`}, ""}, // a Mac uses Terminal (macterm.go)
+	{"dbeaver", "DBeaver", "dbeaver.exe", []string{`DBeaver\dbeaver.exe`, `dbeaver\dbeaver.exe`}, "DBeaver.app/Contents/MacOS/dbeaver"},
+	{"filezilla", "FileZilla", "filezilla.exe", []string{`FileZilla FTP Client\filezilla.exe`, `FileZilla\filezilla.exe`}, "FileZilla.app/Contents/MacOS/filezilla"},
+	{"sqldev", "SQL Developer", "sqldeveloper.exe", []string{`sqldeveloper\sqldeveloper.exe`}, "SQLDeveloper.app/Contents/MacOS/sqldeveloper.sh"},
 }
 
 func extToolByKey(k string) (extTool, bool) {
@@ -56,6 +57,9 @@ func toolPaths() map[string]string {
 // folders (per-user installs and unzipped portable copies need no admin).
 func findTool(t extTool) string {
 	if p := toolPaths()[t.Key]; p != "" && fileExists(p) {
+		return p
+	}
+	if p := macApp(t); p != "" {
 		return p
 	}
 	if p := runningExe(t.Exe); p != "" {
@@ -103,6 +107,22 @@ func findTool(t extTool) string {
 	}
 	return ""
 }
+
+// macApp: on a Mac, the program inside its app in /Applications or ~/Applications.
+func macApp(t extTool) string {
+	if runtime.GOOS != "darwin" || t.Mac == "" {
+		return ""
+	}
+	home, _ := os.UserHomeDir()
+	for _, d := range []string{macAppsDir, filepath.Join(home, "Applications")} {
+		if p := filepath.Join(d, t.Mac); fileExists(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+var macAppsDir = "/Applications" // tests point it elsewhere
 
 // puttyArgs: putty.exe -ssh -P port -l user -pw pass [-i key.ppk] [-L …] host
 func puttyArgs(e Entry) []string {
@@ -196,7 +216,14 @@ func (a *App) handleExternalList(w http.ResponseWriter, r *http.Request) {
 	saved := toolPaths()
 	out := []map[string]string{}
 	for _, t := range extTools {
-		out = append(out, map[string]string{"key": t.Key, "name": t.Name, "exe": t.Exe, "set": saved[t.Key], "found": findTool(t)})
+		exe := t.Exe
+		if runtime.GOOS == "darwin" {
+			if t.Mac == "" {
+				continue // PuTTY: a Mac opens Terminal instead
+			}
+			exe = strings.SplitN(t.Mac, "/", 2)[0]
+		}
+		out = append(out, map[string]string{"key": t.Key, "name": t.Name, "exe": exe, "set": saved[t.Key], "found": findTool(t)})
 	}
 	writeJSON(w, out)
 }
@@ -242,6 +269,15 @@ func (a *App) handleExternalOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e, ok := a.store.Entry(in.ID)
+	if ok && in.Tool == "terminal" { // macOS: Terminal + ssh instead of PuTTY
+		if err := openInMacTerminal(e); err != nil {
+			writeErr(w, 500, err)
+			return
+		}
+		a.store.Touch(e.ID)
+		writeJSON(w, map[string]string{"program": "Terminal"})
+		return
+	}
 	t, ok2 := extToolByKey(in.Tool)
 	if !ok || !ok2 {
 		writeErr(w, 404, errors.New("not found"))
@@ -249,7 +285,11 @@ func (a *App) handleExternalOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	exe := findTool(t)
 	if exe == "" {
-		writeErr(w, 404, fmt.Errorf("%s wasn't found on this PC — set where %s is with “Program locations…”", t.Name, t.Exe))
+		where := t.Exe
+		if runtime.GOOS == "darwin" && t.Mac != "" {
+			where = strings.SplitN(t.Mac, "/", 2)[0] + " (install it in Applications)"
+		}
+		writeErr(w, 404, fmt.Errorf("%s wasn't found on this computer — set where %s is with “Program locations…”", t.Name, where))
 		return
 	}
 	var args []string
@@ -283,10 +323,26 @@ func (a *App) handleExternalOpen(w http.ResponseWriter, r *http.Request) {
 	cmd := exec.Command(exe, args...)
 	cmd.Dir = filepath.Dir(exe) // SQL Developer looks for its files next to the exe
 	if err := cmd.Start(); err != nil {
-		writeErr(w, 500, err)
+		writeErr(w, 500, startErr(t.Name, err))
 		return
 	}
 	go cmd.Wait()
 	a.store.Touch(e.ID)
 	writeJSON(w, map[string]string{"program": t.Name, "path": exe, "note": note})
+}
+
+// startErr says in plain words why a program didn't start: a Mac app built for
+// Apple Silicon can't run on an Intel Mac (and the other way round).
+func startErr(name string, err error) error {
+	if strings.Contains(err.Error(), "bad CPU type") {
+		return fmt.Errorf("%s is installed for a different kind of Mac (Apple Silicon or Intel) — download the version for this Mac (%s) and install it again", name, macKind())
+	}
+	return err
+}
+
+func macKind() string {
+	if runtime.GOARCH == "arm64" {
+		return "Apple Silicon"
+	}
+	return "Intel"
 }

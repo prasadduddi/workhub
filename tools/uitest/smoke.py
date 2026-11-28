@@ -123,6 +123,21 @@ with sync_playwright() as p:
         pg.fill("#palIn", "go sql"); pg.keyboard.press("Enter"); pg.wait_for_timeout(300)
         expect(ev("document.querySelector('.view.active').id") == "view-sql", "palette did not open SQL")
 
+    @check("Open in ↗: Terminal on a Mac, PuTTY on Windows (the right OS)")
+    def _():
+        pg.wait_for_function("!!S.os", timeout=5000)
+        labels = ev("External.items(S.entries.find(e => e.port === 2222)).map(x => x[0])")
+        mac = ev("S.os") == "darwin"
+        expect(any("Terminal" in l for l in labels) == mac and any("PuTTY" in l for l in labels) == (not mac), f"menu on {ev('S.os')}: {labels}")
+        if mac:  # click it without really opening Terminal: catch the request
+            ev("""window._realApi = api; window._ext = null; api = (m, u, b) => u === '/api/external/open' ? (window._ext = b, Promise.resolve({ program: 'Terminal' })) : _realApi(m, u, b); 0""")
+            try:
+                ev("External.items(S.entries.find(e => e.port === 2222)).find(x => /Terminal/.test(x[0]))[1](); 0")
+                pg.wait_for_function("!!window._ext", timeout=5000)
+                expect(ev("_ext.tool") == "terminal", f"sent {ev('_ext')}")
+            finally:
+                ev("api = _realApi; 0")
+
     @check("SSH: connect to the lab server, then the tree shows it live")
     def _():
         if ssh_off():
@@ -1169,7 +1184,20 @@ with sync_playwright() as p:
         w.wait_for_function("typeof S !== 'undefined' && S.settings && S.entries.length > 0", timeout=20000)
         w.evaluate("EnvSwitch.set('ALL')"); w.wait_for_timeout(800)  # sample servers are mostly UAT / PROD
         expect(w.evaluate("S.settings.workspace") == wsn and w.evaluate("S.entries.length") >= 12, f"not the sample workspace: {w.evaluate('S.settings.workspace')} / {w.evaluate('S.entries.length')}")
-        expect(w.evaluate("S.entries.every(e => !e.host || e.host.endsWith('.example.com'))"), "sample data isn't made up")
+        expect(w.evaluate("S.entries.every(e => !e.host || e.host.endsWith('.example.com') || ['127.0.0.1', 'localhost'].includes(e.host))"), "sample data isn't made up")
+        # its pretend servers work: a terminal on pay-app-01, SQL on the payments DB, the FTP folder
+        w.evaluate("show('terminal'); Term.open(S.allEntries.find(e => e.name === 'Payments app 1'))")
+        termText = "Term.tabs.map(t => { const b = t.term.buffer.active; let s = ''; for (let i = 0; i < b.length; i++) s += b.getLine(i).translateToString(true) + '\\n'; return s; }).join('')"
+        w.wait_for_function(f"/deploy@pay-app-01/.test({termText})", timeout=20000)
+        w.keyboard.type("cd /opt/payments && ls\n"); w.wait_for_function(f"/releases/.test({termText})", timeout=10000)
+        w.evaluate("show('sql'); SQL.open(S.allEntries.find(e => e.name === 'Payments DB'))")
+        w.wait_for_function("SQL.active && SQL.active.sid", timeout=20000)
+        w.evaluate("SQL.cm.setValue('SELECT status, count(*) FROM payments GROUP BY status ORDER BY 2 DESC'); SQL.run(false)")
+        w.wait_for_function("/SETTLED/.test(document.querySelector('#sqlRes').textContent)", timeout=15000)
+        expect(w.evaluate("getComputedStyle(document.querySelector('#sqlRes table.grid')).display") == "table", "the results' rows are drawn beside the headings")
+        expect(w.evaluate("S.entries.some(e => e.name === 'Payments DB')"), "the demo database is hidden until UAT is picked")
+        w.evaluate("Remote.connect(S.allEntries.find(e => e.name === 'Legacy reports (FTP)'))")
+        w.wait_for_function("Remote.items && Remote.items.some(i => i.name === 'reports')", timeout=15000)
         expect(not ev("S.entries.some(e => (e.host || '').endsWith('.acme.example.com'))"), "data leaked into this workspace")
         ev("Workspaces.load()"); pg.wait_for_timeout(500)
         names = ev("Workspaces.list.map(w => w.name)")

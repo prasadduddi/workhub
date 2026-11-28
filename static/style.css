@@ -245,7 +245,7 @@ body.rdragging, body.rdragging * { cursor: row-resize !important; user-select: n
 .sql-pane { flex: 1; overflow: auto; margin: 0; min-height: 0; }
 #sqlOut { font: calc(var(--fs-sql) - 0.5px)/1.45 var(--mono); padding: 8px 10px; white-space: pre; }
 #sqlOut .ok { color: var(--ok); } #sqlOut .err { color: var(--danger); } #sqlOut .cmd { color: var(--accent); font-weight: 600; } #sqlOut .dbms { color: #b07a00; }
-table.grid { border-collapse: collapse; font: calc(var(--fs-sql) - 0.5px) var(--mono); }
+table.grid { display: table; border-collapse: collapse; /* not the dialog .grid layout below */ font: calc(var(--fs-sql) - 0.5px) var(--mono); }
 .grid th, .grid td { border: 1px solid var(--border); padding: 3px 8px; white-space: pre; max-width: 420px; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .grid th { position: sticky; top: 0; background: var(--panel2); font-family: "Segoe UI", system-ui, sans-serif; font-size: calc(12px * var(--ui-scale)); z-index: 1; }
 .grid th small { display: block; color: var(--muted); font-weight: 400; font-size: calc(12px * var(--ui-scale)); }

@@ -757,7 +757,7 @@ function svcHTML(e) {
     canFiles(e) && `<button class="icon" data-act="sftp" data-id="${e.id}">${isFTP(e) ? 'FTP' : 'SFTP'}</button>`,
     canDB(e) && `<button class="icon" data-act="sql" data-id="${e.id}">SQL</button>`,
     e.url && `<button class="icon" data-act="open" data-id="${e.id}">Open</button>`,
-    External.items(e).length && `<button class="icon sec" data-act="ext" data-id="${e.id}" title="Open in the real PuTTY / SQL Developer / DBeaver">Open in ↗</button>`,
+    External.items(e).length && `<button class="icon sec" data-act="ext" data-id="${e.id}" title="Open in the real PuTTY (Terminal on a Mac) / SQL Developer / DBeaver">Open in ↗</button>`,
     `<button class="icon sec" data-act="details" data-id="${e.id}">Details</button>`,
     `<button class="icon sec" data-act="edit" data-id="${e.id}">Edit</button>`,
     `<button class="icon more" data-act="more" data-id="${e.id}" title="More: copy, duplicate, move, delete…">⋯</button>`,
@@ -866,7 +866,8 @@ const External = {
   // Menu items for an entry: [label, fn]; databases offer SQL Developer first for Oracle, DBeaver for PostgreSQL.
   items(e) {
     const out = [];
-    if (canSSH(e)) out.push(['Open in PuTTY (the real one) ↗', () => this.open(e, 'putty')]);
+    // PuTTY is Windows-only: a Mac opens its own Terminal app with ssh.
+    if (canSSH(e)) out.push(S.os === 'darwin' ? ['Open in Terminal ↗', () => this.open(e, 'terminal')] : ['Open in PuTTY (the real one) ↗', () => this.open(e, 'putty')]);
     if (canFiles(e)) out.push(['Open in FileZilla (the real one) ↗', () => this.open(e, 'filezilla')]);
     if (canDB(e)) {
       const sd = ['Open in SQL Developer ↗', () => this.open(e, 'sqldev')], db = ['Open in DBeaver ↗', () => this.open(e, 'dbeaver')];
@@ -875,13 +876,14 @@ const External = {
     return out;
   },
   async open(e, tool) {
-    if (tool === 'sqldev' && e.password) await copyText(e.password, 'Password copied');
+    if ((tool === 'sqldev' || tool === 'terminal') && e.password) await copyText(e.password, 'Password copied'); // neither can be given it on start
     try {
       const r = await api('POST', '/api/external/open', { id: e.id, tool });
       if (tool === 'sqldev') {
         const svc = dbService(e);
         toast(`SQL Developer opening. ${r.note} Host ${e.host} · port ${e.port || 1521} · ${svc?.sid ? 'SID' : 'service'} ${svc?.name || '?'} · user ${e.username || '?'}`);
-      } else toast(`${r.program} opening… ${r.note || ''}`);
+      } else if (tool === 'terminal') toast(`Terminal opening…${e.password ? ' The password is copied — paste it (⌘V) when ssh asks.' : ''}`);
+      else toast(`${r.program} opening… ${r.note || ''}`);
     } catch (err) {
       toast(err.message, true);
       if (/wasn't found/.test(err.message)) this.settings();

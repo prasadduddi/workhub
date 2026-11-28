@@ -186,3 +186,12 @@ Word documents into a thread, search, UAT/PROD, capture switch
   [ ] Ask -> My threads & notes: finds a thread message
   [ ] SSH: select 3 real servers -> Run command "df -h" -> three outputs; one PROD -> asked first
   [ ] Windows work laptop: WorkHub opens quickly; thread filter finds a thread by a word in a message
+  [ ] Mac: right-click a real server -> Open in Terminal -> Terminal opens, ssh connects (paste the password with ⌘V); tunnels work
+  [ ] Mac: FileZilla installed in Applications -> Open in FileZilla connects; SQL Developer / DBeaver open from Applications
+  [ ] Windows: the menu still says Open in PuTTY (no Terminal)
+  [ ] Windows: File -> New workspace -> sample data: Payments app 1 terminal works, tail -f shows new lines, Capture traffic shows packets
+  [ ] Windows: demo workspace -> Payments DB: SQL runs, Commit / Rollback; PROD (read-only) refuses a DELETE
+  [ ] Windows: demo workspace -> FTP and SFTP pages: browse, upload, download, rename, delete
+  [ ] Windows: demo workspace -> Jira page has the issues, Calendar has CM windows + Outlook meetings, Ask finds the runbook, Settings -> Email -> Check now captures emails
+  [ ] Windows: demo workspace -> Monitor all up except "Reporting service (stopped)"; HTTPS shows 12 days left (red)
+  [ ] Windows Defender / firewall doesn't ask about the demo servers (127.0.0.1 only)

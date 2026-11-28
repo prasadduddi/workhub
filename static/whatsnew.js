@@ -4,6 +4,12 @@
 // top of RELEASES for every new version (the window shows the latest 5).
 
 const RELEASES = [
+  { v: '1.20.0', title: 'A demo workspace where everything works; on a Mac: Open in Terminal', items: [
+    ['🎬', 'A demo workspace that really works', 'File → New workspace → “Fill it with sample data” now comes with pretend servers that run inside WorkHub while that workspace is open: SSH servers (UAT and PROD), an SFTP and an FTP server with files, a PostgreSQL payments database, Jira, Confluence, a payments API and a mailbox. Connect, tail logs, run SQL, capture traffic, check email, search Ask — all with made-up data, on this PC only.', ''],
+    ['🗄', 'SQL results drawn properly', 'Query results show as a normal table again (the rows were drawn beside the column headings).', ''],
+    ['🖥', 'Open in Terminal (Mac)', 'PuTTY is only for Windows, so on a Mac right-click a server → Open in Terminal ↗: the Mac’s Terminal opens and connects with ssh (port, user, key and tunnels from the connection). The password is copied — paste it (⌘V) when asked.', ''],
+    ['📂', 'Programs found on a Mac', 'Open in FileZilla, DBeaver and SQL Developer now find these programs in Applications on a Mac.', ''],
+  ] },
   { v: '1.19.0', title: 'Message history, certificate warnings, PROD activity log, Ask your own threads, run on several servers', items: [
     ['🔔', 'Message history', 'Missed a message at the bottom? Click it, or the 🔔 at the top: every message and notification is kept there — click one to open what it’s about. A message also stays while the mouse is on it.', ''],
     ['⚡', 'Faster with lots of threads', 'The thread list no longer downloads every message to show the titles (40× smaller with many threads) and appears at once; searching threads asks WorkHub instead.', ''],

@@ -205,6 +205,8 @@ const HELP_TOPICS = [
     'Each workspace has its own data, key and settings — nothing is shared. A new workspace doesn’t import this PC’s browser bookmarks.',
     'File → Switch workspace ▸ lists them (● = this one); File → Open workspace… also opens a workspace’s data folder from elsewhere.',
     'WorkHub reopens the last workspace you used. File → Close workspace stops it (its data stays) and Default takes over.',
+    'A workspace with sample data has pretend servers that run inside WorkHub (on this PC only, made-up data) while it is open: Payments app 1 / 2 / PROD and the Batch server (SSH), the Partner file drop (SFTP), Legacy reports (FTP), the Payments DB (PostgreSQL — also through the jump server, and a read-only PROD login), Jira, Confluence, a payments API (API page, Monitor) and a mailbox for ⚙ Settings → Email.',
+    'Passwords are in each connection. Try ls, cd, tail -f, grep, systemctl status pay-api or ./bin/restart.sh in a terminal; any SQL on the payments tables (merchants, payments, refunds, settlements, batch_runs).',
     'Only the workspace whose window you are using captures what you copy.'] },
   { t: 'Capture network traffic on a server (like Wireshark)', k: 'capture traffic tcpdump wireshark packets pcap network sniff port filter', v: 'terminal', s: [
     'Right-click a server in the SSH tree (or ⋯ on its card) → 📡 Capture traffic….',
@@ -296,9 +298,10 @@ const HELP_TOPICS = [
     'Type SQL and press Ctrl+Enter (or ▶ Run); F5 runs everything as a script.',
     'Auto-commit is off: Commit or Rollback when you change data.',
     'A database needs Type oracle/postgres and the service name / database in Edit; the port alone usually fills the type.'] },
-  { t: 'Open in the real PuTTY, FileZilla, SQL Developer or DBeaver', k: 'open in putty filezilla dbeaver sql developer external program real', v: 'dashboard', s: [
+  { t: 'Open in the real PuTTY, FileZilla, SQL Developer or DBeaver', k: 'open in putty terminal mac ssh filezilla dbeaver sql developer external program real', v: 'dashboard', s: [
     'Right-click a server (tree or search result) → Open in PuTTY / FileZilla / SQL Developer / DBeaver ↗, or use the buttons in Edit.',
-    'If a program isn’t found, ⚙ Settings (top right) → Programs for “Open in” lets you point to it.'] },
+    'If a program isn’t found, ⚙ Settings (top right) → Programs for “Open in” lets you point to it.',
+    'On a Mac there is no PuTTY: Open in Terminal ↗ connects in the Mac’s Terminal with ssh. The password is copied — paste it (⌘V) when asked. FileZilla, DBeaver and SQL Developer are found in Applications.'] },
 
   // ---- Tasks ----
   { t: 'Start a task thread', k: 'task tasks thread threads new start create work item ticket change notes', v: 'tasks', s: [

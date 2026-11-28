@@ -139,8 +139,10 @@ func TestSampleData(t *testing.T) {
 	if n := len(s.WorkItems()); n < 4 {
 		t.Fatalf("threads: %d", n)
 	}
+	roles := s.Settings().Demo.Roles
 	for _, e := range s.Entries() {
-		if e.Host != "" && !strings.HasSuffix(e.Host, ".example.com") {
+		local := (e.Host == "127.0.0.1" || e.Host == "localhost") && roles[e.ID] != "" // a pretend server inside WorkHub (demolab.go)
+		if e.Host != "" && !strings.HasSuffix(e.Host, ".example.com") && !local {
 			t.Fatalf("sample data must be made up: %s", e.Host)
 		}
 	}

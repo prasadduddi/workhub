@@ -126,7 +126,14 @@ func (a *App) checkMail() {
 		since = time.Now().AddDate(0, 0, -max(ms.Lookback, 1))
 	}
 	started := time.Now()
-	items, top, err := fetchMail(ms.Folder, since)
+	var items []mailItem
+	var top *mailItem
+	var err error
+	if l := a.demo.Load(); l != nil { // a demo workspace: its pretend mailbox instead of Outlook
+		items, top, err = l.fetchMail(since)
+	} else {
+		items, top, err = fetchMail(ms.Folder, since)
+	}
 	matched, captured := 0, 0
 	newest := since
 	var lastMatch *mailSummary
@@ -177,7 +184,7 @@ func (a *App) handleMailStatus(w http.ResponseWriter, r *http.Request) {
 	a.mail.mu.Lock()
 	defer a.mail.mu.Unlock()
 	writeJSON(w, map[string]any{"last_check": a.mail.LastCheck, "last_error": a.mail.LastError, "matched": a.mail.Matched,
-		"captured": a.mail.Captured, "running": a.mail.Running, "supported": mailSupported,
+		"captured": a.mail.Captured, "running": a.mail.Running, "supported": mailSupported || a.demo.Load() != nil,
 		"newest": a.mail.Newest, "last_match": a.mail.LastMatch, "folder": orDefault(a.store.Settings().Mail.Folder, "Inbox")})
 }
 

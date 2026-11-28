@@ -138,7 +138,13 @@ func (a *App) handleOutlookEvents(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, errors.New("from/to: YYYY-MM-DD, at most 100 days"))
 		return
 	}
-	list, err := outlookEvents(from, to.Add(24*time.Hour))
+	var list []OutlookEvent
+	var err error
+	if l := a.demo.Load(); l != nil { // a demo workspace: pretend Outlook meetings
+		list = l.meetings(from, to.Add(24*time.Hour))
+	} else {
+		list, err = outlookEvents(from, to.Add(24*time.Hour))
+	}
 	if err != nil {
 		writeJSON(w, map[string]any{"events": []OutlookEvent{}, "error": err.Error()})
 		return

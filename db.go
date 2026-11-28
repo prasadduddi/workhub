@@ -201,6 +201,9 @@ func (a *App) handleDBOpen(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cfg.OnNotice = func(_ *pgconn.PgConn, n *pgconn.Notice) { s.addOutput(n.Severity + ": " + n.Message) }
+		if l := a.demo.Load(); l != nil && l.isDemoDB(e) {
+			cfg.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol // the demo workspace's pretend database
+		}
 		db = stdlib.OpenDB(*cfg)
 	} else if db, err = sql.Open(driver, dsn); err != nil {
 		writeErr(w, 400, err)

@@ -57,6 +57,8 @@ type App struct {
 	shots shotLog // screenshots posted (clipboard and Screenshots folder)
 
 	restarted atomic.Bool // started by WorkHub itself (update, install): the page reopens the last session
+
+	demo atomic.Pointer[demoLab] // a demo workspace's pretend servers (demolab.go); nil elsewhere
 }
 
 func main() {
@@ -180,6 +182,7 @@ func main() {
 			go app.reminderLoop()  // 🔔 reminders due
 			go app.tunnelKeeper()
 			go app.backupWatcher()
+			app.startDemoLab() // a demo workspace only: pretend servers on 127.0.0.1
 			go app.monitorLoop()
 			removeOldCopy() // after "Install for easy access"
 			go func() { time.Sleep(15 * time.Second); cleanOldExe(); app.pruneSessionLogs() }()

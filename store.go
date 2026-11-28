@@ -127,6 +127,7 @@ type Settings struct {
 	UpdateChannel    string          `json:"update_channel,omitempty"`     // "" Stable, "beta": pre-releases too
 	LastSession      *SessionSnap    `json:"last_session,omitempty"`       // reopened after a restart or update
 	NoReopen         bool            `json:"no_reopen,omitempty"`          // don't offer to reopen the last session
+	Demo             *DemoSettings   `json:"demo,omitempty"`               // a demo workspace: its pretend servers (demolab.go)
 }
 
 // SessionSnap is what was open: SSH terminals and SQL tabs (connection ids),

@@ -589,7 +589,8 @@ async function redrawAll() {
 
 async function poll() {
   try {
-    const { v, data_dir, app_version, restarted, ssh_off, ssh_keys_off } = await api('GET', '/api/version');
+    const { v, data_dir, app_version, restarted, ssh_off, ssh_keys_off, os } = await api('GET', '/api/version');
+    S.os = os; // 'darwin' on a Mac: Open in Terminal instead of PuTTY
     if (S.sshKeysOff !== !!ssh_keys_off) { S.sshKeysOff = !!ssh_keys_off; $$('[data-tool=sshkeys]').forEach(b => { b.hidden = S.sshKeysOff; }); }
     if (S.sshOff !== !!ssh_off) { S.sshOff = !!ssh_off; sshOffNotes(); }
     if (restarted) S.restarted = true; // WorkHub restarted itself (update / install): reopen the last session
